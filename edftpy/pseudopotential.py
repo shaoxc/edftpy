@@ -1,0 +1,11 @@
+import os
+import numpy as np
+from scipy.interpolate import interp1d, splrep, splev
+import scipy.special as sp
+from dftpy.pseudo import LocalPseudo
+
+
+class LocalPP(LocalPseudo):
+    def __new__(cls, grid=None, ions=None, PP_list=None, PME=True, **kwargs):
+        obj = super().__new__(cls, grid = grid, ions = ions, PP_list = PP_list, PME = PME, **kwargs)
+        return obj

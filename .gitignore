@@ -1,0 +1,12 @@
+__pycache__/
+.cache/
+.coverage
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+dftpy.egg-info
+dev/
+examples/
+doc/build/
+.ipynb_checkpoints/
