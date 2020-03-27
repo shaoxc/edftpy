@@ -8,9 +8,8 @@ class Hartree(AbsFunctional):
         pass
 
     def __call__(self, density, calcType=["E","V"], **kwargs):
-        return self.getFunctional(density, calcType=calcType, **kwargs)
+        return self.compute(density, calcType=calcType, **kwargs)
 
-    @classmethod
-    def getFunctional(cls, density, calcType=["E","V"], **kwargs):
+    def compute(self, density, calcType=["E","V"], **kwargs):
         functional = HartreeFunctional(density, calcType=calcType)
         return functional

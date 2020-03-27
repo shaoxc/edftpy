@@ -1,7 +1,8 @@
 import numpy as np
+from .utils.common import AbsFunctional
 
 
-class Embed(object):
+class Embed(AbsFunctional):
     def __init__(self, **kwargs):
         self.args = kwargs
 
