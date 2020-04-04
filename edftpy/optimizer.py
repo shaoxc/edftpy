@@ -40,9 +40,32 @@ class Optimization(object):
                 energy += func.energy
         return energy
 
-    def update_density(self, denlist = None, prev_denlist = None, **kwargs):
+    def update_density(self, denlist = None, prev_denlist = None, mu = None, **kwargs):
         for i, rho_in in enumerate(prev_denlist):
-            denlist[i] = self.mixer(rho_in, denlist[i])
+            coef = [0.1]
+            # coef[0] = 0.1-0.1*self.iter/100.0 + 1E-5
+            # coef = [0.5]
+            denlist[i] = self.mixer(rho_in, denlist[i], coef = coef)
+
+        if mu is not None :
+            print('mu', mu)
+            scale = 0.1
+            mu = np.array(mu)
+            mu_av = np.mean(mu)
+            d_mu = mu - mu_av
+
+            Ni = np.zeros_like(mu)
+            for i, rho_in in enumerate(denlist):
+                Ni[i] = rho_in.integral()
+            d_Ni = d_mu / mu * Ni
+            d_Ni -= np.sum(d_Ni)/len(d_Ni)
+            print('Ni', Ni)
+            print('d_Ni', d_Ni)
+            if np.max(d_Ni) > 1E-2 :
+                Ni_new = Ni + d_Ni * scale
+                print('Ni_new', Ni_new)
+                for i, rho_in in enumerate(denlist):
+                    rho_in *= Ni_new[i]/Ni[i]
 
         totalrho = None
         for rho in denlist :
@@ -60,10 +83,12 @@ class Optimization(object):
         for item in prev_denlist[1:] :
             totalrho += item
 
+        mu_list = []
         func_list = []
         for i, driver in enumerate(self.opt_drivers):
             driver(density = prev_denlist[i], rest_rho = totalrho - prev_denlist[i], calcType = ['E'])
             func_list.append(driver.functional)
+            mu_list.append([])
 
         denlist = copy.deepcopy(prev_denlist)
 
@@ -86,13 +111,18 @@ class Optimization(object):
         print(seq +'\n' + fmt +'\n' + seq)
 
         for it in range(self.options['maxiter']):
+            self.iter = it
             prev_denlist, denlist = denlist, prev_denlist
             for i, driver in enumerate(self.opt_drivers):
                 driver(density = prev_denlist[i], rest_rho = totalrho - prev_denlist[i], calcType = ['O', 'E'])
                 denlist[i] = driver.density
                 func_list[i] = driver.functional
+                mu_list[i] = driver.mu
             #-----------------------------------------------------------------------
-            totalrho, denlist = self.update_density(denlist, prev_denlist)
+            if it > 0 :
+                totalrho, denlist = self.update_density(denlist, prev_denlist, mu = mu_list)
+            else :
+                totalrho, denlist = self.update_density(denlist, prev_denlist, mu = None)
             totalfunc = self.total_evaluator(totalrho)
             func_list[i + 1] = totalfunc
             energy = self.get_energy(func_list)
@@ -109,4 +139,5 @@ class Optimization(object):
                         break
         self.energy = energy
         self.density = totalrho
+        self.subdens = denlist
         return

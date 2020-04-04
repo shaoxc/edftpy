@@ -1,5 +1,4 @@
-from ..utils.common import Field
-from ..utils.common import AbsOptDriver,AbsFunctional
+from ..utils.common import AbsOptDriver
 
 from dftpy.external_potential import ExternalPotential
 from dftpy.functionals import FunctionalClass, TotalEnergyAndPotential
@@ -33,12 +32,10 @@ class EnergyEvaluatorMix(object):
         if self._rest_rho is not None:
             return self._rest_rho
         else:
-            raise AttributeError("Must specify restRho for EnergyEvaluatorMix")
+            raise AttributeError("Must specify rest_rho for EnergyEvaluatorMix")
 
     @rest_rho.setter
     def rest_rho(self, value):
-        # if not isinstance(value, Field):
-            # raise TypeError("restRho must be Field")
         self._rest_rho = value
 
     def __call__(self, rho, calcType=["E","V"], **kwargs):
@@ -130,6 +127,10 @@ class DFTpyOptDriver(AbsOptDriver):
             optimizer = Optimization(EnergyEvaluator=self.energy_evaluator, guess_rho=rho_ini, optimization_options=self.options)
             optimizer.optimize_rho()
             self.density = optimizer.rho
+            # mu = (optimize.potential * self.density).integral() / self.density.N
+            self.mu = optimizer.mu
+        else :
+            self.density = rho_ini
 
         if 'E' in calcType or 'V' in calcType :
             func = self.get_sub_energy(self.rho, calcType)
