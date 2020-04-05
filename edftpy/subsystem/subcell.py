@@ -50,13 +50,14 @@ class SubCell(object):
             if cellcut[i] > 1E-6 :
                 cell_size[i] += cellcut[i] * 2.0
                 origin[i] -= cellcut[i]
-                shift[i] = int(origin[i]/spacings[i]) * spacings[i]
+                shift[i] = int(origin[i]/spacings[i])
                 origin[i] = shift[i] * spacings[i]
                 nr[i] = int(cell_size[i]/spacings[i])
                 latp = np.linalg.norm(lattice_sub[:, i])
                 lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
             else :
                 origin[i] = 0.0
+        pos -= origin
 
         ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = lattice_sub, basis = 'Cartesian', origin = origin)
         grid_sub = Grid(lattice=lattice_sub, nr=nr, full=False, direct = True, origin = origin)
@@ -106,14 +107,23 @@ class GlobalCell(object):
         indl = subrho.grid.shift
         nr_sub = subrho.grid.nr
         indr = indl + nr_sub
+        # print('nnn', indl, indr)
         if restart :
-            self._density[:] = 0.0
-        else :
-            self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
+            # self._density[:] = 0.0
+            self._density[:] = 1E-30
+        self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
+        return self._density
 
-    def rest_density(self, subrho, restart = False):
+    def sub_value(self, total, subrho):
         indl = subrho.grid.shift
         nr_sub = subrho.grid.nr
         indr = indl + nr_sub
-        rest_density = self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] - subrho
-        return rest_density
+        value = total[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]]
+        return value 
+
+    def set_density(self, subrho, restart = False):
+        indl = subrho.grid.shift
+        nr_sub = subrho.grid.nr
+        indr = indl + nr_sub
+        self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] = subrho
+        return self._density

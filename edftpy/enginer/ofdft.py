@@ -17,7 +17,7 @@ class EnergyEvaluatorMix(object):
         self.total_evaluator = total_evaluator
         self.embed_evaluator = embed_evaluator
         self.sub_evaluator = self.get_sub_evaluator(sub_functionals)
-        self._rest_rho = None
+        self._gsystem = None
 
     def get_sub_evaluator(self, sub_functionals, **kwargs):
         funcdicts = {}
@@ -26,6 +26,17 @@ class EnergyEvaluatorMix(object):
             funcdicts[item['type']] = func
         sub_evaluator = TotalEnergyAndPotential(**funcdicts)
         return sub_evaluator
+
+    @property
+    def gsystem(self):
+        if self._gsystem is not None:
+            return self._gsystem
+        else:
+            raise AttributeError("Must specify gsystem for EnergyEvaluatorMix")
+
+    @gsystem.setter
+    def gsystem(self, value):
+        self._gsystem = value
 
     @property
     def rest_rho(self):
@@ -42,10 +53,15 @@ class EnergyEvaluatorMix(object):
         return self.compute(rho, calcType, **kwargs)
 
     def compute(self, rho, calcType=["E","V"]):
-        total_rho = self.rest_rho + rho
-        obj = self.total_evaluator(total_rho, calcType = calcType)
-        obj += self.sub_evaluator(rho, calcType = calcType)
+        self.gsystem.set_density(rho + self.rest_rho)
+        total_rho = self.gsystem.density
+        obj = self.sub_evaluator(rho, calcType = calcType)
         obj -= self.embed_evaluator(rho, calcType = calcType)
+        obj_global = self.total_evaluator(total_rho, calcType = calcType)
+        if 'E' in calcType :
+            obj.potential += self.gsystem.sub_value(obj_global.potential, rho)
+        if 'V' in calcType :
+            obj.energy += obj_global.energy
         return obj
 
 class DFTpyOptDriver(AbsOptDriver):
@@ -106,19 +122,20 @@ class DFTpyOptDriver(AbsOptDriver):
         obj -= self.energy_evaluator.embed_evaluator(density, calcType)
         return obj
 
-    def __call__(self, density = None, rest_rho = None, calcType = ['O', 'E', 'V'], ext_pot = None):
-        return self.compute(density, rest_rho, calcType, ext_pot)
+    def __call__(self, density = None, gsystem = None, calcType = ['O', 'E', 'V'], ext_pot = None):
+        return self.compute(density, gsystem, calcType, ext_pot)
 
-    def compute(self, density = None, rest_rho = None, calcType = ['O', 'E', 'V'], ext_pot = None):
+    def compute(self, density = None, gsystem = None, calcType = ['O', 'E', 'V'], ext_pot = None):
         #-----------------------------------------------------------------------
         if density is None and self.rho is None:
             raise AttributeError("Must provide a guess density")
         elif density is not None :
             self.rho = density
 
-        self.energy_evaluator.rest_rho = rest_rho
-        #-----------------------------------------------------------------------
+        self.energy_evaluator.gsystem = gsystem
         rho_ini = self.input_format(self.rho)
+        self.energy_evaluator.rest_rho = gsystem.sub_value(gsystem.density, rho_ini) - rho_ini
+        #-----------------------------------------------------------------------
         if ext_pot is not None :
             ext = ExternalPotential(ext_pot)
             self.EnergyEvaluator.UpdateFunctional(newFuncDict={'EXT': ext})

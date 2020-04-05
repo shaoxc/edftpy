@@ -117,7 +117,7 @@ class AtomicDensity(object):
                 px = atomp - ipoint
                 l123A = np.mod(ipoint.astype(np.int32) - ixyzA, nr[:, None])
 
-                positions = (ixyzA - px) * dnr
+                positions = (ixyzA + px) * dnr
                 positions = np.einsum("j...,kj->k...", positions, grid.lattice)
                 dists = LA.norm(positions, axis = 0).reshape(prho.shape)
                 index = np.logical_and(dists < rcut, dists > rtol)

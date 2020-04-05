@@ -67,26 +67,33 @@ class Optimization(object):
                 for i, rho_in in enumerate(denlist):
                     rho_in *= Ni_new[i]/Ni[i]
 
-        totalrho = None
-        for rho in denlist :
-            if totalrho is None :
-                totalrho = rho.copy()
+        for i, item in enumerate(denlist):
+            if i == 0 :
+                self.gsystem.update_density(item, restart = True)
             else :
-                totalrho += rho
+                self.gsystem.update_density(item, restart = False)
+        totalrho = self.gsystem.density
         return totalrho, denlist
 
-    def optimize(self, guess_rho = None, **kwargs):
+    def optimize(self, gsystem, guess_rho = None, **kwargs):
+        #-----------------------------------------------------------------------
+        self.gsystem = gsystem
+        #-----------------------------------------------------------------------
         energy_history = []
 
         prev_denlist = copy.deepcopy(guess_rho)
-        totalrho = prev_denlist[0].copy()
-        for item in prev_denlist[1:] :
-            totalrho += item
+        for i, item in enumerate(prev_denlist):
+            if i == 0 :
+                gsystem.update_density(item, restart = True)
+            else :
+                gsystem.update_density(item, restart = False)
+        totalrho = gsystem.density.copy()
 
         mu_list = []
         func_list = []
         for i, driver in enumerate(self.opt_drivers):
-            driver(density = prev_denlist[i], rest_rho = totalrho - prev_denlist[i], calcType = ['E'])
+            gsystem.density[:] = totalrho
+            driver(density = prev_denlist[i], gsystem = gsystem, calcType = ['E'])
             func_list.append(driver.functional)
             mu_list.append([])
 
@@ -114,7 +121,8 @@ class Optimization(object):
             self.iter = it
             prev_denlist, denlist = denlist, prev_denlist
             for i, driver in enumerate(self.opt_drivers):
-                driver(density = prev_denlist[i], rest_rho = totalrho - prev_denlist[i], calcType = ['O', 'E'])
+                gsystem.density[:] = totalrho
+                driver(density = prev_denlist[i], gsystem = gsystem, calcType = ['O', 'E'])
                 denlist[i] = driver.density
                 func_list[i] = driver.functional
                 mu_list[i] = driver.mu
