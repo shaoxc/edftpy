@@ -9,7 +9,7 @@ class AtomicDensity(object):
     This is a template class and should never be touched.
     """
 
-    def __init__(self, files =None, grid=None, ions=None, **kwargs):
+    def __init__(self, files =None, grid=None, ions=None, ftypes = None, **kwargs):
 
         if files is not None:
             self.files = files
@@ -24,10 +24,32 @@ class AtomicDensity(object):
             if not os.path.isfile(infile):
                 raise Exception("Density file " + infile + " for atom type " + str(key) + " not found")
             else:
+                if ftypes is not None :
+                    ftype = ftypes[key]
+                else :
+                    if infile[-3:].lower() == "xml" :
+                        ftype = "xml"
+                    if infile[-6:].lower() == "recpot":
+                        ftype = "recpot"
+                    elif infile[-3:].lower() == "upf":
+                        ftype = "upf"
+                    elif infile[-3:].lower() == "psp" or infile[-4:].lower() == "psp8":
+                        ftype = "psp"
+                        raise Exception("density file not supported")
+                    else :
+                        ftype = "list"
+
+            if ftype == 'psp' :
+                self._r[key], self._arho[key], self._info[key] = self.read_density_psp(infile)
+            elif ftype == 'xml' :
+                self._r[key], self._arho[key], self._info[key] = self.read_density_xml(infile)
+            elif ftype == 'list' :
                 try :
-                    self._r[key], self._arho[key], self._info[key] = self.read_density_psp(infile)
-                except Exception :
                     self._r[key], self._arho[key], self._info[key] = self.read_density_list(infile)
+                except Exception :
+                    raise Exception("density file have some problems")
+            else :
+                    raise Exception("density file not supported")
 
     def read_density_psp(self, infile):
         with open(infile, "r") as fr:
@@ -68,6 +90,12 @@ class AtomicDensity(object):
         # print('r, v', r, v)
         return r, v, info
 
+    def read_density_xml(self, infile):
+        from edftpy.io.pp_xml import PPXml
+        pp = PPXml(infile)
+        r, v, info = pp.get_pseudo_valence_density()
+        return r, v/np.sqrt(4*np.pi), info
+
     def read_density_list(self, infile):
         with open(infile, "r") as fr:
             lines = []
@@ -84,13 +112,16 @@ class AtomicDensity(object):
         v = data[:, 1]
         return r, v, info
 
-    def guess_rho(self, ions, grid, ncharge = None, ndens = 2, **kwargs):
+    def guess_rho(self, ions, grid, ncharge = None, rho = None, ndens = 2, **kwargs):
         """
         """
         nr = grid.nr
         dnr = (1.0/nr).reshape((3, 1))
-        dtol = 1E-8 # for safe, replace the zero density as a value
-        rho = np.ones(nr) * dtol
+        dtol = 1E-10 # for safe, replace the zero density as a value
+        if rho is None :
+            rho = np.ones(nr) * dtol
+        else :
+            rho[:] = np.ones(nr) * dtol
         lattice = grid.lattice
         metric = np.dot(lattice.T, lattice)
         latp = np.zeros(3)
@@ -129,6 +160,7 @@ class AtomicDensity(object):
                 ncharge += ions.Zval[ions.labels[i]]
         print('Guess density : ', np.sum(rho) * grid.dV)
         rho[:] *= ncharge / (np.sum(rho) * grid.dV)
+        # rho[:] = ncharge / (np.size(rho) * grid.dV)
         return rho
 
     def guess_rho_all(self, ions, grid, pbc = [1, 1, 1], **kwargs):

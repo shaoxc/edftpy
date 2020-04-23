@@ -24,17 +24,17 @@ class LinearMixer(AbstractMixer):
         self.predcond = predcond
         self.predcoef = predcoef
 
-    def __call__(self, rhoin, rhoout, coef = [0.5]):
+    def __call__(self, prev, now, coef = [0.5]):
         if self.predcond is None :
             a1 = coef[0]
             a2 = 1.0 - coef[0]
-            results = rhoin * a1 + rhoout * a2
+            results = prev * a1 + now * a2
         elif self.predcond == 'kerker' :
             A = self.predcoef[0]
             q0 = self.predcoef[1] ** 2
-            rhoinG = rhoin.fft()
-            rhooutG = rhoout.fft()
-            gg = rhoin.grid.get_reciprocal().gg
+            rhoinG = prev.fft()
+            rhooutG = now.fft()
+            gg = prev.grid.get_reciprocal().gg
             results = rhoinG + A * gg/(gg+q0)*rhooutG
             results = results.ifft(force_real=True)
         return results

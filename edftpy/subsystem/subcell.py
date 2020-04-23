@@ -6,12 +6,12 @@ from edftpy.utils.common import Field, Grid, Atoms
 
 
 class SubCell(object):
-    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], spacing = None):
+    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, **kwargs):
         self._grid = None
         self._ions = None
         self._density = None
 
-        self._gen_cell(ions, grid, index = index, cellcut = cellcut, spacing = spacing)
+        self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, **kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
 
     @property
@@ -36,8 +36,10 @@ class SubCell(object):
     def shift(self):
         return self._shift
 
-    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], spacing = None):
+    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False):
         lattice_sub = ions.pos.cell.lattice.copy()
+        if index is None :
+            index = np.ones(ions.nat, dtype = 'bool')
         pos = ions.pos.to_cart()[index].copy()
         spacings = grid.spacings.copy()
         shift = np.zeros(3, dtype = 'int32')
@@ -47,17 +49,21 @@ class SubCell(object):
         cell_size = np.max(pos, axis = 0)-origin
 
         for i in range(3):
-            if cellcut[i] > 1E-6 :
+            latp = np.linalg.norm(lattice_sub[:, i])
+            if cellcut[i] > 1E-6 and latp > cellcut[i]:
                 cell_size[i] += cellcut[i] * 2.0
                 origin[i] -= cellcut[i]
                 shift[i] = int(origin[i]/spacings[i])
                 origin[i] = shift[i] * spacings[i]
                 nr[i] = int(cell_size[i]/spacings[i])
-                latp = np.linalg.norm(lattice_sub[:, i])
+                #-----------------------------------------------------------------------
+                if optfft :
+                    nr[i] = bestFFTsize(nr[i])
                 lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
             else :
                 origin[i] = 0.0
         pos -= origin
+        print('subcell grid', nr)
 
         ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = lattice_sub, basis = 'Cartesian', origin = origin)
         grid_sub = Grid(lattice=lattice_sub, nr=nr, full=False, direct = True, origin = origin)
@@ -92,6 +98,16 @@ class GlobalCell(object):
     def density(self, value):
         self._density[:] = value
 
+    @property
+    def total_evaluator(self):
+        if self._total_evaluator is None:
+            raise AttributeError("Must given total_evaluator")
+        return self._total_evaluator
+
+    @total_evaluator.setter
+    def total_evaluator(self, value):
+        self._total_evaluator = value
+
     def _gen_grid(self, spacing = None, full = False, optfft = True, **kwargs):
         lattice = self.ions.pos.cell.lattice
         metric = np.dot(lattice.T, lattice)
@@ -107,7 +123,6 @@ class GlobalCell(object):
         indl = subrho.grid.shift
         nr_sub = subrho.grid.nr
         indr = indl + nr_sub
-        # print('nnn', indl, indr)
         if restart :
             # self._density[:] = 0.0
             self._density[:] = 1E-30

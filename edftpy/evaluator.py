@@ -1,4 +1,6 @@
+from .utils.common import Functional
 from .utils.common import AbsFunctional
+from dftpy.functionals import FunctionalClass
 
 
 class Evaluator(AbsFunctional):
@@ -16,10 +18,13 @@ class Evaluator(AbsFunctional):
         results = None
         for key, evalfunctional in self.funcdicts.items():
             obj = evalfunctional(density, calcType)
+            print(key, obj.energy * 27.21138)
             if results is None :
                 results = obj
             else :
                 results += obj
+        if results is None :
+            results = Functional(name = 'NONE')
         return results
 
 
@@ -97,3 +102,59 @@ class TotalEvaluatorAll(object):
         if 'E' in calcType :
             results['TOTAL'].energy = energy
         return results
+
+
+class EnergyEvaluatorMix(AbsFunctional):
+    def __init__(self, embed_evaluator = None, sub_evaluator = None, sub_functionals = None, **kwargs):
+        """
+        sub_functionals : [dict{'type', 'name', 'options'}]
+        """
+        self.embed_evaluator = embed_evaluator
+        self.sub_evaluator = sub_evaluator
+        # self.sub_evaluator = self.get_sub_evaluator(sub_functionals)
+        self._gsystem = None
+
+    def get_sub_evaluator(self, sub_functionals, **kwargs):
+        funcdicts = {}
+        for item in sub_functionals :
+            func = FunctionalClass(type=item['type'], name = item['name'], **item['options'])
+            funcdicts[item['type']] = func
+        sub_evaluator = Evaluator(**funcdicts)
+        return sub_evaluator
+
+    @property
+    def gsystem(self):
+        if self._gsystem is not None:
+            return self._gsystem
+        else:
+            raise AttributeError("Must specify gsystem for EnergyEvaluatorMix")
+
+    @gsystem.setter
+    def gsystem(self, value):
+        self._gsystem = value
+
+    @property
+    def rest_rho(self):
+        if self._rest_rho is not None:
+            return self._rest_rho
+        else:
+            raise AttributeError("Must specify rest_rho for EnergyEvaluatorMix")
+
+    @rest_rho.setter
+    def rest_rho(self, value):
+        self._rest_rho = value
+
+    def __call__(self, rho, calcType=["E","V"], **kwargs):
+        return self.compute(rho, calcType, **kwargs)
+
+    def compute(self, rho, calcType=["E","V"], with_global = True):
+        obj = self.sub_evaluator(rho, calcType = calcType)
+        obj -= self.embed_evaluator(rho, calcType = calcType)
+        if with_global :
+            self.gsystem.set_density(rho + self.rest_rho)
+            obj_global = self.gsystem.total_evaluator(self.gsystem.density, calcType = calcType)
+            if 'E' in calcType :
+                obj.potential += self.gsystem.sub_value(obj_global.potential, rho)
+            if 'V' in calcType :
+                obj.energy += obj_global.energy
+        return obj

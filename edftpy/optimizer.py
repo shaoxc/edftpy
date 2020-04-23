@@ -2,23 +2,17 @@ import numpy as np
 import time
 import copy
 
-# from .utils import math as dftmath
-from .mixer import LinearMixer
-
 
 class Optimization(object):
 
-    def __init__(self, opt_drivers=None, total_evaluator = None, options=None):
+    def __init__(self, opt_drivers=None, gsystem = None, options=None):
 
         if opt_drivers is None:
             raise AttributeError("Must provide optimization driver (list)")
         else:
             self.opt_drivers = opt_drivers
 
-        if total_evaluator is None:
-            raise AttributeError("Must provide total density evaluater")
-        else:
-            self.total_evaluator = total_evaluator
+        self.gsystem = gsystem
 
         default_options = {
             "maxfun": 50,
@@ -29,9 +23,6 @@ class Optimization(object):
 
         self.options = default_options
         self.options.update(options)
-        #-----------------------------------------------------------------------
-        self.mixer = LinearMixer()
-        #-----------------------------------------------------------------------
 
     def get_energy(self, func_list = None, **kwargs):
         energy = 0.0
@@ -41,13 +32,9 @@ class Optimization(object):
         return energy
 
     def update_density(self, denlist = None, prev_denlist = None, mu = None, **kwargs):
-        for i, rho_in in enumerate(prev_denlist):
-            coef = [0.1]
-            # coef[0] = 0.1-0.1*self.iter/100.0 + 1E-5
-            # coef = [0.5]
-            denlist[i] = self.mixer(rho_in, denlist[i], coef = coef)
 
-        if mu is not None :
+        # if mu is not None :
+        if 0 :
             print('mu', mu)
             scale = 0.1
             mu = np.array(mu)
@@ -75,9 +62,13 @@ class Optimization(object):
         totalrho = self.gsystem.density
         return totalrho, denlist
 
-    def optimize(self, gsystem, guess_rho = None, **kwargs):
+    def optimize(self, gsystem = None, guess_rho = None, **kwargs):
         #-----------------------------------------------------------------------
-        self.gsystem = gsystem
+        if gsystem is None:
+            if self.gsystem is None :
+                raise AttributeError("Must provide global system")
+        else:
+            self.gsystem = gsystem
         #-----------------------------------------------------------------------
         energy_history = []
 
@@ -99,7 +90,7 @@ class Optimization(object):
 
         denlist = copy.deepcopy(prev_denlist)
 
-        totalfunc = self.total_evaluator(totalrho)
+        totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
         func_list.append(totalfunc)
         energy = self.get_energy(func_list)
         energy_history.append(energy)
@@ -121,6 +112,7 @@ class Optimization(object):
             self.iter = it
             prev_denlist, denlist = denlist, prev_denlist
             for i, driver in enumerate(self.opt_drivers):
+                # prev_denlist[i] = denlist[i].copy()
                 gsystem.density[:] = totalrho
                 driver(density = prev_denlist[i], gsystem = gsystem, calcType = ['O', 'E'])
                 denlist[i] = driver.density
@@ -131,7 +123,7 @@ class Optimization(object):
                 totalrho, denlist = self.update_density(denlist, prev_denlist, mu = mu_list)
             else :
                 totalrho, denlist = self.update_density(denlist, prev_denlist, mu = None)
-            totalfunc = self.total_evaluator(totalrho)
+            totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
             func_list[i + 1] = totalfunc
             energy = self.get_energy(func_list)
             #-----------------------------------------------------------------------

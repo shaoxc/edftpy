@@ -62,3 +62,29 @@ class AbsOptDriver(ABC):
     @abstractmethod
     def compute(self, calcType = ['O', 'E', 'V'], **kwargs):
         pass
+
+
+class AbsDFT(ABC):
+    @abstractmethod
+    def __init__(self):
+        pass
+
+    @abstractmethod
+    def get_density(self, **kwargs):
+        pass
+
+    @abstractmethod
+    def get_energy(self, **kwargs):
+        pass
+
+    @abstractmethod
+    def update_density(self, **kwargs):
+        pass
+
+    @abstractmethod
+    def get_energy_potential(self, **kwargs):
+        pass
+
+    @abstractmethod
+    def get_fermi_level(self, **kwargs):
+        pass
