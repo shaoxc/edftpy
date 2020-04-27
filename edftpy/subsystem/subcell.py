@@ -1,6 +1,6 @@
 import numpy as np
 import copy
-from dftpy.math_utils import bestFFTsize
+from dftpy.math_utils import bestFFTsize, ecut2spacing
 
 from edftpy.utils.common import Field, Grid, Atoms
 
@@ -36,7 +36,7 @@ class SubCell(object):
     def shift(self):
         return self._shift
 
-    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False):
+    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = True, full = False):
         lattice_sub = ions.pos.cell.lattice.copy()
         if index is None :
             index = np.ones(ions.nat, dtype = 'bool')
@@ -48,9 +48,11 @@ class SubCell(object):
         origin = np.min(pos, axis = 0)
         cell_size = np.max(pos, axis = 0)-origin
 
+        pbc = np.ones(3, dtype = 'int32')
         for i in range(3):
             latp = np.linalg.norm(lattice_sub[:, i])
-            if cellcut[i] > 1E-6 and latp > cellcut[i]:
+            if cellcut[i] > 1E-6 and latp > 2.0 * cellcut[i]:
+                pbc[i] = False
                 cell_size[i] += cellcut[i] * 2.0
                 origin[i] -= cellcut[i]
                 shift[i] = int(origin[i]/spacings[i])
@@ -66,7 +68,7 @@ class SubCell(object):
         print('subcell grid', nr)
 
         ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = lattice_sub, basis = 'Cartesian', origin = origin)
-        grid_sub = Grid(lattice=lattice_sub, nr=nr, full=False, direct = True, origin = origin)
+        grid_sub = Grid(lattice=lattice_sub, nr=nr, full=False, direct = True, origin = origin, pbc = pbc)
         grid_sub.shift = shift
         self._grid = grid_sub
         self._ions = ions_sub
@@ -74,12 +76,12 @@ class SubCell(object):
 
 
 class GlobalCell(object):
-    def __init__(self, ions, grid = None, spacing = 0.4, full = False, optfft = True, **kwargs):
+    def __init__(self, ions, grid = None, ecut = 22, spacing = None, full = False, optfft = True, **kwargs):
         self._ions = ions
         self._grid = grid
 
         if self._grid is None :
-            self._gen_grid(spacing = spacing, full = full, optfft = optfft, **kwargs)
+            self._gen_grid(ecut = ecut, spacing = spacing, full = full, optfft = optfft, **kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
 
     @property
@@ -108,15 +110,17 @@ class GlobalCell(object):
     def total_evaluator(self, value):
         self._total_evaluator = value
 
-    def _gen_grid(self, spacing = None, full = False, optfft = True, **kwargs):
+    def _gen_grid(self, ecut = 22, spacing = None, full = False, optfft = True, **kwargs):
         lattice = self.ions.pos.cell.lattice
+        if spacing is None :
+            spacing = ecut2spacing(ecut)
         metric = np.dot(lattice.T, lattice)
         nr = np.zeros(3, dtype = 'int32')
         for i in range(3):
             nr[i] = int(np.sqrt(metric[i, i])/spacing)
             if optfft :
                 nr[i] = bestFFTsize(nr[i])
-        grid = Grid(lattice=lattice, nr=nr, full=full, direct = True)
+        grid = Grid(lattice=lattice, nr=nr, full=full, direct = True, **kwargs)
         self._grid = grid
 
     def update_density(self, subrho, restart = False):

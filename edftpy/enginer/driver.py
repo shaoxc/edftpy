@@ -10,10 +10,10 @@ class OptDriver:
         if options is not None :
             self.options.update(options)
 
-        if sub_evaluator is None:
-            raise AttributeError("Must provide an subsystem functionals")
-        else:
-            self.sub_evaluator = sub_evaluator
+        # if sub_evaluator is None:
+            # raise AttributeError("Must provide an subsystem functionals")
+        # else:
+            # self.sub_evaluator = sub_evaluator
 
         self.energy_evaluator = None
         self.get_energy_evaluator(embed_evaluator, sub_evaluator, **kwargs)

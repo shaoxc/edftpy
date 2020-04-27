@@ -1,11 +1,11 @@
-# Collection of Kinetic Energy Density Functionals
 import numpy as np
-from dftpy.kedf import KEDFunctional, KEDFStress
+# from dftpy.kedf import KEDFunctional, KEDFStress
+from dftpy.kedf import KEDF
 
 from ..utils.common import AbsFunctional
 
 
-class KEDF(AbsFunctional):
+class KEDFbak(AbsFunctional):
     def __init__(self, name = "WT", **kwargs):
         self.name = name
         self.kwargs = kwargs

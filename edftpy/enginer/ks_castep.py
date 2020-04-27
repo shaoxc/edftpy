@@ -1,5 +1,6 @@
 from ..utils.common import AbsDFT
 import numpy as np
+from scipy import signal
 import copy
 
 import caspytep
@@ -7,7 +8,7 @@ import caspytep
 
 class CastepKS(AbsDFT):
     """description"""
-    def __init__(self, evaluator = None, prefix = 'castep_in', ions = None, params = None, grid = None, rho_ini = None, exttype = 2, **kwargs):
+    def __init__(self, evaluator = None, prefix = 'castep_in', ions = None, params = None, grid = None, rho_ini = None, exttype = 3, **kwargs):
         '''
         exttype :
                     2 : only hartree
@@ -31,6 +32,7 @@ class CastepKS(AbsDFT):
         # self.prev_density = None
         self.prev_density = copy.deepcopy(self.mdl.den)
         self.iter = 0
+        self._filter = None
 
     def _castep_initialise(self, rho_ini = None, **kwargs):
         caspytep.cell.cell_read(self.prefix)
@@ -70,6 +72,15 @@ class CastepKS(AbsDFT):
         current_params.max_scf_cycles = 1
         self.mdl = mdl
 
+    def _write_cell(self, outfile, ions, pbc = None, params = None, **kwargs):
+        from dftpy.formats import ase_io
+        ase_io.ase_write(outfile, ions, format='castep-cell', pbc=None, positions_frac = True, **kwargs)
+        if params is not None :
+            with open(outfile, 'a') as fw:
+                for line in params :
+                    fw.write(line + '\n')
+        return
+
     def _format_density(self, density, dv = None, sym = True, **kwargs):
         if dv is None :
             dv = density.grid.dV
@@ -89,11 +100,49 @@ class CastepKS(AbsDFT):
 
     def _get_extpot(self, charge, grid, **kwargs):
         rho = self._format_density_invert(charge, grid, **kwargs)
-        rho[rho < 1E-30] = 1E-30
         func = self.evaluator(rho)
+        #-----------------------------------------------------------------------
+        # potential = func.potential
+        # outfile = 'den.dat'
+        # with open(outfile, "w") as fw:
+            # fw.write("{0[0]:10d} {0[1]:10d} {0[2]:10d}\n".format(potential.grid.nr))
+            # size = np.size(potential)
+            # nl = size // 3
+            # outrho = potential.ravel(order="F")
+            # for line in outrho[: nl * 3].reshape(-1, 3):
+                # fw.write("{0[0]:22.15E} {0[1]:22.15E} {0[2]:22.15E}\n".format(line))
+            # for line in outrho[nl * 3 :]:
+                # fw.write("{0:22.15E}".format(line))
+        # stop
+        pot = func.potential
+        np.savetxt('kkk', np.c_[rho.ravel(), pot.ravel()])
+        # input('pause')
+        # stop
+        #-----------------------------------------------------------------------
+        # func.potential *= self.filter
+        #-----------------------------------------------------------------------
         extpot = func.potential.ravel(order = 'F')
         extene = func.energy
         return extpot, extene
+
+    def _windows_function(self, grid, alpha = 0.5, bd = [5, 5, 5], **kwargs):
+        wf = []
+        for i in range(3):
+            if grid.pbc[i] :
+                wind = np.ones(grid.nr[i])
+            else :
+                wind = np.zeros(grid.nr[i])
+                n = grid.nr[i] - 2 * bd[i]
+                wind[bd[i]:n+bd[i]] = signal.tukey(n, alpha)
+            wf.append(wind)
+        array = np.einsum("i, j, k -> ijk", wf[0], wf[1], wf[2])
+        return array
+
+    @property
+    def filter(self):
+        if self._filter is None :
+            self._filter = self._windows_function(self.grid)
+        return self._filter
 
     def get_density(self, density, vext = None, **kwargs):
         '''
@@ -161,12 +210,3 @@ class CastepKS(AbsDFT):
     def get_fermi_level(self, **kwargs):
         results = self.mdl.fermi_energy
         return results
-
-    def _write_cell(self, outfile, ions, pbc = None, params = None, **kwargs):
-        from dftpy.formats import ase_io
-        ase_io.ase_write(outfile, ions, format='castep-cell', pbc=None, positions_frac = True, **kwargs)
-        if params is not None :
-            with open(outfile, 'a') as fw:
-                for line in params :
-                    fw.write(line + '\n')
-        return
