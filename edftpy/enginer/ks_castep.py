@@ -2,13 +2,17 @@ from ..utils.common import AbsDFT
 import numpy as np
 from scipy import signal
 import copy
+from dftpy.formats.ase_io import ions2ase
+import ase.io.castep as ase_io_castep
+import ase.calculators.castep as ase_calc_castep
 
 import caspytep
 
 
 class CastepKS(AbsDFT):
     """description"""
-    def __init__(self, evaluator = None, prefix = 'castep_in', ions = None, params = None, grid = None, rho_ini = None, exttype = 3, **kwargs):
+    def __init__(self, evaluator = None, prefix = 'castep_in_sub', ions = None, params = None, cell_params = None, 
+            grid = None, rho_ini = None, exttype = 3, castep_in_file = 'castep_in', **kwargs):
         '''
         exttype :
                     2 : only hartree
@@ -26,13 +30,51 @@ class CastepKS(AbsDFT):
         self.perform_mix = False
         self.mdl = None
         self.density = None
-        if ions is not None :
-            self._write_cell(self.prefix + '.cell', ions, params = params)
+        self._build_ase_atoms(ions, params, cell_params, castep_in_file)
+        #-----------------------------------------------------------------------
+        print(self.ase_atoms.calc.param)
+        print(self.ase_atoms.calc.cell)
+        #-----------------------------------------------------------------------
+        self._write_cell(self.prefix + '.cell', ions, params = cell_params)
+        self._write_params(self.prefix + '.param', params = params)
+
         self._castep_initialise(rho_ini = rho_ini, **kwargs)
-        # self.prev_density = None
         self.prev_density = copy.deepcopy(self.mdl.den)
         self.iter = 0
         self._filter = None
+
+    def _build_ase_atoms(self, ions, params = None, cell_params = None, castep_in_file = None):
+        ase_atoms = ions2ase(ions)
+        ase_atoms.set_calculator(ase_calc_castep.Castep())
+        self.ase_atoms = ase_atoms
+        ase_cell = self.ase_atoms.calc.cell
+        if cell_params is not None :
+            for k1, v1 in cell_params.items() :
+                if isinstance(v1, dict):
+                    value = []
+                    for k2, v2 in v1.items() :
+                        value.append((k2, v2))
+                    ase_cell.__setattr__(k1, value)
+            else :
+                ase_cell.__setattr__(k1, v1)
+
+        if castep_in_file is not None :
+            calc = ase_io_castep.read_param(castep_in_file)
+            self.ase_atoms.calc.param = calc.param
+            print('sssssssssss', calc.param)
+            print('sssssssssss', self.ase_atoms.calc.param)
+
+        castep_params = self.ase_atoms.calc.param
+
+        if params is not None :
+            for k1, v1 in params.items() :
+                if isinstance(v1, dict):
+                    value = []
+                    for k2, v2 in v1.items() :
+                        value.append((k2, v2))
+                    castep_params.__setattr__(k1, value)
+            else :
+                castep_params.__setattr__(k1, v1)
 
     def _castep_initialise(self, rho_ini = None, **kwargs):
         caspytep.cell.cell_read(self.prefix)
@@ -73,12 +115,13 @@ class CastepKS(AbsDFT):
         self.mdl = mdl
 
     def _write_cell(self, outfile, ions, pbc = None, params = None, **kwargs):
-        from dftpy.formats import ase_io
-        ase_io.ase_write(outfile, ions, format='castep-cell', pbc=None, positions_frac = True, **kwargs)
-        if params is not None :
-            with open(outfile, 'a') as fw:
-                for line in params :
-                    fw.write(line + '\n')
+        ase_atoms = self.ase_atoms
+        ase_io_castep.write_cell(outfile, ase_atoms)
+        return
+
+    def _write_params(self, outfile, params = None, **kwargs):
+        castep_params = self.ase_atoms.calc.param
+        ase_io_castep.write_param(outfile, castep_params, force_write = True)
         return
 
     def _format_density(self, density, dv = None, sym = True, **kwargs):
@@ -101,23 +144,6 @@ class CastepKS(AbsDFT):
     def _get_extpot(self, charge, grid, **kwargs):
         rho = self._format_density_invert(charge, grid, **kwargs)
         func = self.evaluator(rho)
-        #-----------------------------------------------------------------------
-        # potential = func.potential
-        # outfile = 'den.dat'
-        # with open(outfile, "w") as fw:
-            # fw.write("{0[0]:10d} {0[1]:10d} {0[2]:10d}\n".format(potential.grid.nr))
-            # size = np.size(potential)
-            # nl = size // 3
-            # outrho = potential.ravel(order="F")
-            # for line in outrho[: nl * 3].reshape(-1, 3):
-                # fw.write("{0[0]:22.15E} {0[1]:22.15E} {0[2]:22.15E}\n".format(line))
-            # for line in outrho[nl * 3 :]:
-                # fw.write("{0:22.15E}".format(line))
-        # stop
-        pot = func.potential
-        np.savetxt('kkk', np.c_[rho.ravel(), pot.ravel()])
-        # input('pause')
-        # stop
         #-----------------------------------------------------------------------
         # func.potential *= self.filter
         #-----------------------------------------------------------------------
