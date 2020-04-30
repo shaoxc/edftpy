@@ -23,7 +23,7 @@ class Evaluator(AbsFunctional):
         #-----------------------------------------------------------------------
         for key, evalfunctional in self.funcdicts.items():
             obj = evalfunctional(density, calcType)
-            # print(key, obj.energy * 27.21138)
+            print(key, obj.energy * 27.21138)
             if results is None :
                 results = obj
             else :

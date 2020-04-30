@@ -64,3 +64,5 @@ class OptDriver:
 
         if 'V' in calcType :
             self.potential = func.potential
+
+        return

@@ -14,6 +14,8 @@ class AtomicDensity(object):
         if files is not None:
             self.files = files
         else:
+            self.files = files
+            # return
             raise AttributeError("Must specify files for atomic density")
 
         self._r = {}
@@ -113,6 +115,27 @@ class AtomicDensity(object):
         return r, v, info
 
     def guess_rho(self, ions, grid, ncharge = None, rho = None, ndens = 2, **kwargs):
+        if self.files is None :
+            rho = self.guess_rho_heg(ions, grid, ncharge, rho, **kwargs)
+        else :
+            rho = self.guess_rho_atom(ions, grid, ncharge, rho, ndens, **kwargs)
+        return rho
+
+    def guess_rho_heg(self, ions, grid, ncharge = None, rho = None, ndens = 2, **kwargs):
+        """
+        """
+        nr = grid.nr
+        if rho is None :
+            rho = np.zeros(nr)
+
+        if ncharge is None :
+            ncharge = 0.0
+            for i in range(ions.nat) :
+                ncharge += ions.Zval[ions.labels[i]]
+        rho[:] = ncharge / (np.size(rho) * grid.dV)
+        return rho
+
+    def guess_rho_atom(self, ions, grid, ncharge = None, rho = None, ndens = 2, **kwargs):
         """
         """
         nr = grid.nr
@@ -160,7 +183,6 @@ class AtomicDensity(object):
                 ncharge += ions.Zval[ions.labels[i]]
         print('Guess density : ', np.sum(rho) * grid.dV)
         rho[:] *= ncharge / (np.sum(rho) * grid.dV)
-        # rho[:] = ncharge / (np.size(rho) * grid.dV)
         return rho
 
     def guess_rho_all(self, ions, grid, pbc = [1, 1, 1], **kwargs):

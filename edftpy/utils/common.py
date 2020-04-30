@@ -23,7 +23,7 @@ def Field(grid, memo="", rank=1, data = None, direct = True, order = 'C', cplx =
         if direct :
             obj = DirectField(grid, **kwargs)
         else :
-            obj = ReciprocalGrid(grid, **kwargs)
+            obj = ReciprocalField(grid, **kwargs)
         return obj
 
 def Atoms(labels, zvals=None, pos=None, cell=None, basis="Cartesian", origin = [0.0, 0.0, 0.0], **kwargs):

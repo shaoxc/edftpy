@@ -80,33 +80,33 @@ class Optimization(object):
                 gsystem.update_density(item, restart = False)
         totalrho = gsystem.density.copy()
 
-        mu_list = []
-        func_list = []
-        for i, driver in enumerate(self.opt_drivers):
-            gsystem.density[:] = totalrho
-            driver(density = prev_denlist[i], gsystem = gsystem, calcType = ['E'])
-            func_list.append(driver.functional)
-            mu_list.append([])
-
+        mu_list = [[] for _ in range(len(self.opt_drivers))]
+        func_list = [[] for _ in range(len(self.opt_drivers) + 1)]
         denlist = copy.deepcopy(prev_denlist)
+        energy_history = [0.0]
+        # for i, driver in enumerate(self.opt_drivers):
+            # gsystem.density[:] = totalrho
+            # driver(density = prev_denlist[i], gsystem = gsystem, calcType = ['E'])
+            # func_list.append(driver.functional)
+            # mu_list.append([])
 
-        totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
-        func_list.append(totalfunc)
-        energy = self.get_energy(func_list)
-        energy_history.append(energy)
+        # totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
+        # func_list.append(totalfunc)
+        # energy = self.get_energy(func_list)
+        # energy_history.append(energy)
 
         #-----------------------------------------------------------------------
         fmt = "           {:8s}{:24s}{:16s}{:16s}{:8s}{:16s}".format("Step", "Energy(a.u.)", "dE", "dP", "Nls", "Time(s)")
         resN = 9999
         #-----------------------------------------------------------------------
         print(fmt)
+        seq = "-" * 100
         time_begin = time.time()
         timecost = time.time()
         # resN = np.einsum("..., ...->", residual, residual, optimize = 'optimal') * rho.grid.dV
-        dE = energy
-        seq = "-" * 100
-        fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(0, energy, dE, resN, 1, timecost - time_begin)
-        print(seq +'\n' + fmt +'\n' + seq)
+        # dE = energy
+        # fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(0, energy, dE, resN, 1, timecost - time_begin)
+        # print(seq +'\n' + fmt +'\n' + seq)
 
         for it in range(self.options['maxiter']):
             self.iter = it

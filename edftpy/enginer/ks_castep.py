@@ -1,4 +1,3 @@
-from ..utils.common import AbsDFT
 import numpy as np
 from scipy import signal
 import copy
@@ -8,11 +7,13 @@ import ase.calculators.castep as ase_calc_castep
 
 import caspytep
 
+from ..mixer import * 
+from ..utils.common import AbsDFT
 
 class CastepKS(AbsDFT):
     """description"""
     def __init__(self, evaluator = None, prefix = 'castep_in_sub', ions = None, params = None, cell_params = None, 
-            grid = None, rho_ini = None, exttype = 3, castep_in_file = 'castep_in', **kwargs):
+            grid = None, rho_ini = None, exttype = 3, castep_in_file = None, **kwargs):
         '''
         exttype :
                     2 : only hartree
@@ -31,17 +32,16 @@ class CastepKS(AbsDFT):
         self.mdl = None
         self.density = None
         self._build_ase_atoms(ions, params, cell_params, castep_in_file)
-        #-----------------------------------------------------------------------
-        print(self.ase_atoms.calc.param)
-        print(self.ase_atoms.calc.cell)
-        #-----------------------------------------------------------------------
         self._write_cell(self.prefix + '.cell', ions, params = cell_params)
         self._write_params(self.prefix + '.param', params = params)
 
         self._castep_initialise(rho_ini = rho_ini, **kwargs)
         self.prev_density = copy.deepcopy(self.mdl.den)
-        self.iter = 0
+        self._iter = 0
         self._filter = None
+        # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [1.0])
+        # self.mixer = PulayMixer(predtype =None, predcoef = [0.2], maxm = 5, coef = [0.2])
+        self.mixer = LinearMixer(predtype =None, predcoef = [0.2], delay = 0, coef = [0.6])
 
     def _build_ase_atoms(self, ions, params = None, cell_params = None, castep_in_file = None):
         ase_atoms = ions2ase(ions)
@@ -61,8 +61,6 @@ class CastepKS(AbsDFT):
         if castep_in_file is not None :
             calc = ase_io_castep.read_param(castep_in_file)
             self.ase_atoms.calc.param = calc.param
-            print('sssssssssss', calc.param)
-            print('sssssssssss', self.ase_atoms.calc.param)
 
         castep_params = self.ase_atoms.calc.param
 
@@ -116,7 +114,7 @@ class CastepKS(AbsDFT):
 
     def _write_cell(self, outfile, ions, pbc = None, params = None, **kwargs):
         ase_atoms = self.ase_atoms
-        ase_io_castep.write_cell(outfile, ase_atoms)
+        ase_io_castep.write_cell(outfile, ase_atoms, force_write = True)
         return
 
     def _write_params(self, outfile, params = None, **kwargs):
@@ -177,25 +175,28 @@ class CastepKS(AbsDFT):
         if self.grid is None :
             self.grid = density.grid
 
-        # self.prev_density = copy.deepcopy(self.mdl.den)
         #-----------------------------------------------------------------------
-        if self.iter < 2 :
-            sym = False
+        # if self._iter < 2 :
+            # sym = False
+        # else :
+            # sym = True
+        sym = True
+        self._iter += 1
+        if self._iter == 1 :
+            caspytep.parameters.get_current_params().max_scf_cycles = 3
         else :
-            sym = True
-        # if self.iter > 0 :
-            # self.perform_mix = True
-        self.iter += 1
+            caspytep.parameters.get_current_params().max_scf_cycles = 2
         self._format_density(density, sym = sym)
         self.prev_density = copy.deepcopy(self.mdl.den)
         #-----------------------------------------------------------------------
         extpot, extene = self._get_extpot(self.mdl.den, density.grid)
         self.mdl.converged = caspytep.electronic.electronic_minimisation_edft_ext(
                 self.mdl, extpot, extene, self.exttype, self.perform_mix)
+        # self.mdl.converged = caspytep.electronic.electronic_minimisation(self.mdl)
         caspytep.density.density_calculate_soft(self.mdl.wvfn,self.mdl.occ, self.mdl.den)
-        # if sym :
-            # caspytep.density.density_symmetrise(self.mdl.den)
-            # caspytep.density.density_augment(self.mdl.wvfn,self.mdl.occ,self.mdl.den)
+        if sym :
+            caspytep.density.density_symmetrise(self.mdl.den)
+            caspytep.density.density_augment(self.mdl.wvfn,self.mdl.occ,self.mdl.den)
         rho = self._format_density_invert(self.mdl.den, density.grid)
         return rho
 
@@ -229,8 +230,14 @@ class CastepKS(AbsDFT):
         return func
 
     def update_density(self, **kwargs):
-        caspytep.dm.dm_mix_density(self.prev_density, self.mdl.den)
+        mixed, residual_norm = caspytep.dm.dm_mix_density(self.prev_density, self.mdl.den)
+        print('residual_norm', residual_norm)
         rho = self._format_density_invert(self.mdl.den, self.grid)
+        #-----------------------------------------------------------------------
+        # prev_density = self._format_density_invert(self.prev_density, self.grid)
+        # density = self._format_density_invert(self.mdl.den, self.grid)
+        # rho = self.mixer(prev_density, density)
+        #-----------------------------------------------------------------------
         return rho
 
     def get_fermi_level(self, **kwargs):
