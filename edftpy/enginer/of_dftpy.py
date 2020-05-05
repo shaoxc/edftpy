@@ -7,7 +7,7 @@ from dftpy.optimization import Optimization
 
 class DFTpyOF(AbsDFT):
     """description"""
-    def __init__(self, evaluator = None, grid = None, rho_ini = None, options = None, **kwargs):
+    def __init__(self, evaluator = None, grid = None, rho_ini = None, options = None, mixer = None, **kwargs):
         default_options = {
             "method" :'CG-HS',
             "maxcor": 6,
@@ -33,15 +33,26 @@ class DFTpyOF(AbsDFT):
         self.density = None
         self.prev_density = None
         self.calc = None
+        self._iter = 0
         #-----------------------------------------------------------------------
-        # self.mixer = LinearMixer(predtype = 'inverse_kerker', predcoef = [0.8, 0.5], maxm = 5, coef = [0.5])
-        # self.mixer = LinearMixer(predtype = None, predcoef = [0.8, 1.0], maxm = 5, coef = [0.5])
-        # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 5, coef = [1.0])
-        self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [1.0])
-        # self.mixer = PulayMixer(predtype = None, predcoef = [0.8], maxm = 7, coef = [1.0])
+        self.mixer = mixer
+        if self.mixer is None :
+            self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = None, delay = 1)
+            # self.mixer = LinearMixer(predtype = None, coef = [0.7], predecut = None, delay = 1)
+            # self.mixer = LinearMixer(predtype = 'inverse_kerker', predcoef = [0.8, 0.5], maxm = 5, coef = [0.5])
+            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [1.0], predecut = 20.0, delay = 1)
+            # self.mixer = PulayMixer(predtype = None, predcoef = [0.8], maxm = 7, coef = [0.6], predecut = 20.0, delay = 5)
+            # self.mixer = BroydenMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [1.0])
+            # self.mixer = BroydenMixer(predtype =None, predcoef = [0.2], maxm = 7, coef = [1.0])
         #-----------------------------------------------------------------------
 
     def get_density(self, density, vext = None, **kwargs):
+        self._iter += 1
+        if self._iter == 1 :
+            self.options['maxiter'] += 60
+        elif self._iter == 2 :
+            self.options['maxiter'] -= 60
+
         self.calc = Optimization(EnergyEvaluator=self.evaluator, guess_rho=density, optimization_options=self.options)
         self.calc.optimize_rho()
         self.prev_density = copy.deepcopy(density)
@@ -61,7 +72,7 @@ class DFTpyOF(AbsDFT):
         return func
 
     def update_density(self, **kwargs):
-        self.density = self.mixer(self.prev_density, self.calc.rho)
+        self.density = self.mixer(self.prev_density, self.calc.rho, **kwargs)
         return self.density
 
     def get_fermi_level(self, **kwargs):

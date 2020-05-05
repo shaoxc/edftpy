@@ -21,9 +21,14 @@ class Evaluator(AbsFunctional):
         density[density < 1E-30] = 1E-30
         density *= nc/np.sum(density)
         #-----------------------------------------------------------------------
+        # mask = density < 1E-30
+        # saved = density[mask].copy()
+        # print('density', density[density < 1E-30])
+        # density[mask] = 1E-30
+        #-----------------------------------------------------------------------
         for key, evalfunctional in self.funcdicts.items():
             obj = evalfunctional(density, calcType)
-            print(key, obj.energy * 27.21138)
+            # print(key, obj.energy * 27.21138)
             if results is None :
                 results = obj
             else :
@@ -39,7 +44,16 @@ class Evaluator(AbsFunctional):
             else :
                 potential = None
             results = Functional(name = 'ZERO', energy=energy, potential=potential)
+        #-----------------------------------------------------------------------
+        # density[mask] = saved
+        #-----------------------------------------------------------------------
         return results
+
+    def update_functional(self, remove = [], add = {}):
+        for key in remove :
+            if key in self.funcdicts :
+                del self.funcdicts[key]
+        self.funcdicts.update(add)
 
 
 class SubEvaluator(AbsFunctional):
@@ -177,6 +191,9 @@ class EnergyEvaluatorMix(AbsFunctional):
                     obj.potential += self.gsystem.sub_value(obj_global.potential, rho)
                 else :
                     obj.potential = self.gsystem.sub_value(obj_global.potential, rho)
+                    #-----------------------------------------------------------------------
+                    # obj.potential += self.gsystem.sub_value(self.gsystem.rest_rho, rho) * 1E-1
+                    #-----------------------------------------------------------------------
             if 'E' in calcType :
                 if hasattr(obj, 'energy'):
                     obj.energy += obj_global.energy

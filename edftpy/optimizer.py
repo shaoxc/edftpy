@@ -32,7 +32,10 @@ class Optimization(object):
         return energy
 
     def update_density(self, denlist = None, prev_denlist = None, mu = None, **kwargs):
-
+        #-----------------------------------------------------------------------
+        for i, driver in enumerate(self.opt_drivers):
+            denlist[i] = driver.update_density()
+        #-----------------------------------------------------------------------
         # if mu is not None :
         if 0 :
             print('mu', mu)
@@ -59,7 +62,7 @@ class Optimization(object):
                 self.gsystem.update_density(item, restart = True)
             else :
                 self.gsystem.update_density(item, restart = False)
-        totalrho = self.gsystem.density
+        totalrho = self.gsystem.density.copy()
         return totalrho, denlist
 
     def optimize(self, gsystem = None, guess_rho = None, **kwargs):
@@ -113,6 +116,8 @@ class Optimization(object):
             prev_denlist, denlist = denlist, prev_denlist
             for i, driver in enumerate(self.opt_drivers):
                 # prev_denlist[i] = denlist[i].copy()
+                # if it % 10 > 0 and i == 1: continue
+                # if it > 0 and i == 1: continue
                 gsystem.density[:] = totalrho
                 driver(density = prev_denlist[i], gsystem = gsystem, calcType = ['O', 'E'])
                 denlist[i] = driver.density
@@ -131,6 +136,7 @@ class Optimization(object):
             timecost = time.time()
             dE = energy_history[-1] - energy_history[-2]
             fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(it, energy, dE, resN, 1, timecost - time_begin)
+            fmt += "\n    Total: {:<8d}{:<24.12E}".format(it, totalfunc.energy)
             print(seq +'\n' + fmt +'\n' + seq)
             if abs(dE) < self.options["econv"]:
                 if len(energy_history) > 2:

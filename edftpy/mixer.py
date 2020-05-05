@@ -5,21 +5,23 @@ from abc import ABC, abstractmethod
 
 from .utils.common import Field
 
-__all__ = ["LinearMixer", "PulayMixer"]
+__all__ = ["LinearMixer", "PulayMixer", "BroydenMixer"]
 
 class SpecialPrecondition :
-    def __init__(self, predtype = 'kerker', predcoef = [0.8, 1.0], grid = None):
+    def __init__(self, predtype = 'inverse_kerker', predcoef = [0.8, 1.0], grid = None, predecut = None, **kwargs):
         self.predtype = predtype
         self.predcoef = predcoef
+        self._ecut = predecut
         self._grid = grid
         self._matrix = None
         self._direct = False
+        self._mask = False
 
     @property
     def matrix(self):
         if self._matrix is None :
             if self.predtype is None :
-                self._matrix = 1.0
+                self._matrix = np.ones(self.grid.nrG)
             elif self.predtype == 'kerker' :
                 self._matrix = self.kerker()
             elif self.predtype == 'inverse_kerker' :
@@ -34,6 +36,16 @@ class SpecialPrecondition :
     def grid(self, value):
         self._grid = value
         self._matrix = None
+        self._mask = None
+
+    @property
+    def mask(self):
+        if self._mask is None :
+            gg = self.grid.get_reciprocal().gg
+            self._mask = np.zeros(self.grid.nrG, dtype = 'bool')
+            if self._ecut is not None :
+                self._mask[gg > 2.0 * self._ecut] = True
+        return self._mask
 
     def kerker(self):
         a0 = self.predcoef[0]
@@ -43,7 +55,6 @@ class SpecialPrecondition :
         preg = a0 * gg/(gg+q0)
         preg = Field(recip_grid, data=preg, direct=False)
         matrix = preg
-        # matrix = preg.ifft(force_real=True)
         return matrix
 
     def inverse_kerker(self):
@@ -56,14 +67,29 @@ class SpecialPrecondition :
         preg[0, 0, 0] = 0.0
         preg = Field(recip_grid, data=preg, direct=False)
         matrix = preg
-        # matrix = preg.ifft(force_real=True)
         return matrix
 
-    def __call__(self, density, residual = None, grid = None):
-        results = self.compute(density, residual, grid)
+    def __call__(self, nin, nout, drho = None, residual = None):
+        results = self.compute(nin, nout, drho, residual)
         return results
 
-    def compute(self, density, residual = None, grid = None):
+    def compute(self, nin, nout, drho = None, residual = None):
+        if self.grid is None :
+            self.grid = nin.grid
+        nin_g = nin.fft()
+        results = nin_g.copy()
+        if drho is not None :
+            dr = Field(self.grid, data=drho, direct=True)
+            results += dr.fft()
+        if residual is not None :
+            res = Field(self.grid, data=residual, direct=True)
+            results += res.fft()*self.matrix
+        # results[self.mask] = nout.fft()[self.mask]
+        # results[self.mask] = nin_g[self.mask] + 0.5 * nout.fft()[self.mask]
+
+        return results.ifft(force_real=True)
+
+    def add(self, density, residual = None, grid = None):
         if grid is not None :
             self.grid = grid
         if not self._direct :
@@ -100,10 +126,10 @@ class AbstractMixer(ABC):
 
 
 class LinearMixer(AbstractMixer):
-    def __init__(self, predtype = None, predcoef = [0.8, 1.0], coef = [0.5], delay = 3, **kwargs):
+    def __init__(self, predtype = None, predcoef = [0.8, 1.0], coef = [0.5], delay = 3, predecut = None, **kwargs):
         # if predtype is None :
             # self.pred = None
-        self.pred = SpecialPrecondition(predtype, predcoef)
+        self.pred = SpecialPrecondition(predtype, predcoef, predecut=predecut)
         self.coef = coef
         self._delay = delay
         self._iter = 0
@@ -117,9 +143,9 @@ class LinearMixer(AbstractMixer):
         if coef is None :
             coef = self.coef
         if self._iter > self._delay :
-            res = self.residual(nin, nout)
+            res = nout - nin
             res *= coef[0]
-            results = self.pred(nin, res, nin.grid)
+            results = self.pred(nin, nout, residual=res)
         else :
             results = nout.copy()
 
@@ -132,6 +158,92 @@ class LinearMixer(AbstractMixer):
 
 
 class PulayMixer(AbstractMixer):
+    def __init__(self, predtype = None, predcoef = [0.8, 0.1], maxm = 5, coef = [1.0], delay = 3, predecut = None, **kwargs):
+        self.pred = SpecialPrecondition(predtype, predcoef, predecut=predecut)
+        self._iter = 0
+        self._delay = delay
+        self.maxm = maxm
+        self.dr_mat = None
+        self.dn_mat = None
+        self.coef = coef
+        self.prev_density = None
+        self.prev_residual = None
+
+    def __call__(self, nin, nout, coef = None):
+        results = self.compute(nin, nout, coef)
+        return results
+
+    def residual(self, nin, nout):
+        res = nout - nin
+        return res
+
+    def compute(self, nin, nout, coef = None):
+        """
+        Ref : G. Kresse and J. Furthmuller, Comput. Mat. Sci. 6, 15-50 (1996).
+        """
+        if coef is None :
+            coef = self.coef
+        self._iter += 1
+
+        r = nout - nin
+        print('mixxxxx', np.max(r), np.min(r), np.max(abs(r)), np.sum(r * r))
+        if self._iter > self._delay :
+            dn = nin - self.prev_density
+            dr = r - self.prev_residual
+            if self.dr_mat is None :
+                self.dr_mat = dr.reshape((-1, *dr.shape))
+                self.dn_mat = dn.reshape((-1, *dn.shape))
+            elif len(self.dr_mat) < self.maxm :
+                self.dr_mat = np.concatenate((self.dr_mat, dr.reshape((-1, *r.shape))))
+                self.dn_mat = np.concatenate((self.dn_mat, dn.reshape((-1, *r.shape))))
+            else :
+                self.dr_mat = np.roll(self.dr_mat,-1,axis=0)
+                self.dr_mat[-1] = dr
+                self.dn_mat = np.roll(self.dn_mat,-1,axis=0)
+                self.dn_mat[-1] = dn
+
+            ns = len(self.dr_mat)
+            amat = np.empty((ns, ns))
+            b = np.empty((ns))
+            for i in range(ns):
+                for j in range(i + 1):
+                    amat[i, j] = np.sum(self.dr_mat[i] * self.dr_mat[j])
+                    amat[j, i] = amat[i, j]
+                b[i] = -np.sum(self.dr_mat[i] * r)
+
+            try:
+                x = linalg.solve(amat, b, assume_a = 'sym')
+                print('x', x)
+                for i in range(ns):
+                    if i == 0 :
+                        drho = nin + x[i] * self.dn_mat[i]
+                        res = r + x[i] * self.dr_mat[i]
+                    else :
+                        drho += x[i] * self.dn_mat[i]
+                        res += x[i] * self.dr_mat[i]
+                res *= coef[0]
+                drho *= coef[0]
+                results = self.pred(nin, nout, drho, res)
+            except Exception :
+                res = r * coef[0]
+                print('!WARN : Change to linear mixer')
+                print('amat', amat)
+                results = self.pred(nin, nout, residual=res)
+        else :
+            results = nout.copy()
+        #-----------------------------------------------------------------------
+        results = self.format_density(results, nin)
+        #-----------------------------------------------------------------------
+        self.prev_density = nin.copy()
+        self.prev_residual = r.copy()
+
+        return results
+
+
+class BroydenMixer(AbstractMixer):
+    """
+    Not finished !!! 
+    """
     def __init__(self, predtype = None, predcoef = [0.8, 0.1], maxm = 5, coef = [1.0], delay = 3):
         self.pred = SpecialPrecondition(predtype, predcoef)
         self._iter = 0
@@ -139,6 +251,7 @@ class PulayMixer(AbstractMixer):
         self.maxm = maxm
         self.dr_mat = None
         self.dn_mat = None
+        self.jr_mat = None
         self.coef = coef
         self.prev_density = None
         self.prev_residual = None
@@ -166,36 +279,39 @@ class PulayMixer(AbstractMixer):
             if self.dr_mat is None :
                 self.dr_mat = dr.reshape((-1, *dr.shape))
                 self.dn_mat = dn.reshape((-1, *dn.shape))
+                self.jr_mat = np.empty_like(self.dr_mat)
             elif len(self.dr_mat) < self.maxm :
                 self.dr_mat = np.concatenate((self.dr_mat, dr.reshape((-1, *r.shape))))
                 self.dn_mat = np.concatenate((self.dn_mat, dn.reshape((-1, *r.shape))))
+                self.jr_mat = np.concatenate((self.jr_mat, np.empty((1, *r.shape))))
             else :
                 self.dr_mat = np.roll(self.dr_mat,-1,axis=0)
                 self.dr_mat[-1] = dr
                 self.dn_mat = np.roll(self.dn_mat,-1,axis=0)
                 self.dn_mat[-1] = dn
+                self.jr_mat = np.roll(self.jr_mat,-1,axis=0)
 
             ns = len(self.dr_mat)
             amat = np.empty((ns, ns))
-            b = np.empty((ns))
+            x = np.empty((ns))
             for i in range(ns):
                 for j in range(i + 1):
                     amat[i, j] = np.sum(self.dr_mat[i] * self.dr_mat[j])
                     amat[j, i] = amat[i, j]
-                b[i] = -np.sum(self.dr_mat[i] * r)
-
-            x = linalg.solve(amat, b, assume_a = 'sym')
-            print('x', x)
+            self.jr_mat[-1] = self.dn_mat[-1].copy()
+            self.jr_mat[-1] = self.pred(self.jr_mat[-1], self.dr_mat[-1]*coef[0], grid=nin.grid)
+            for i in range(ns - 1):
+                self.jr_mat[-1] -= amat[i, -1] * self.jr_mat[-1]
+            self.jr_mat[-1] /= amat[-1, -1]
+            for i in range(ns):
+                x[i] = -np.sum(self.dr_mat[i] * r)
 
             for i in range(ns):
                 if i == 0 :
-                    results = nin + x[i] * self.dn_mat[i]
-                    res = r + x[i] * self.dr_mat[i]
+                    results = nin + x[i] * self.jr_mat[i]
                 else :
-                    results += x[i] * self.dn_mat[i]
-                    res += x[i] * self.dr_mat[i]
-            res *= coef[0]
-            results = self.pred(results, res, nin.grid)
+                    results += x[i] * self.jr_mat[i]
+            results = self.pred(results, r*coef[0], nin.grid)
         else :
             results = nout.copy()
         #-----------------------------------------------------------------------

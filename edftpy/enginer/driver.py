@@ -50,9 +50,9 @@ class OptDriver:
         rho_ini = self.rho
         self.energy_evaluator.rest_rho = gsystem.sub_value(gsystem.density, rho_ini) - rho_ini
         #-----------------------------------------------------------------------
-        # self.density = self.calculator.get_density(rho_ini)
-        self.calculator.get_density(rho_ini)
-        self.density = self.calculator.update_density()
+        self.density = self.calculator.get_density(rho_ini)
+        # self.calculator.get_density(rho_ini)
+        # self.density = self.calculator.update_density()
         self.mu = self.calculator.get_fermi_level()
 
         if 'E' in calcType or 'V' in calcType :
@@ -66,3 +66,6 @@ class OptDriver:
             self.potential = func.potential
 
         return
+
+    def update_density(self):
+        return self.calculator.update_density()

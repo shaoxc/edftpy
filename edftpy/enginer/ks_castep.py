@@ -13,7 +13,7 @@ from ..utils.common import AbsDFT
 class CastepKS(AbsDFT):
     """description"""
     def __init__(self, evaluator = None, prefix = 'castep_in_sub', ions = None, params = None, cell_params = None, 
-            grid = None, rho_ini = None, exttype = 3, castep_in_file = None, **kwargs):
+            grid = None, rho_ini = None, exttype = 3, castep_in_file = None, mixer = None, **kwargs):
         '''
         exttype :
                     2 : only hartree
@@ -39,9 +39,15 @@ class CastepKS(AbsDFT):
         self.prev_density = copy.deepcopy(self.mdl.den)
         self._iter = 0
         self._filter = None
-        # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [1.0])
-        # self.mixer = PulayMixer(predtype =None, predcoef = [0.2], maxm = 5, coef = [0.2])
-        self.mixer = LinearMixer(predtype =None, predcoef = [0.2], delay = 0, coef = [0.6])
+        self.mixer = mixer
+        if self.mixer is None :
+            self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [1.0], predecut = 30.0, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.2, 1.0], maxm = 7, coef = [1.0], predecut = 30.0, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = None, delay = 1)
+            # self.mixer = LinearMixer(predtype =None, delay = 1, coef = [0.7])
+            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [1.0])
+            # self.mixer = PulayMixer(predtype =None, predcoef = [0.2], maxm = 5, coef = [0.2])
+            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [1.0], predecut = 20.0, delay = 1)
 
     def _build_ase_atoms(self, ions, params = None, cell_params = None, castep_in_file = None):
         ase_atoms = ions2ase(ions)
@@ -104,13 +110,12 @@ class CastepKS(AbsDFT):
         caspytep.ion.ion_real_initialise()
 
         mdl = caspytep.model.model_state()
-        #-----------------------------------------------------------------------
-        if rho_ini is not None :
-            charge = rho_ini * (rho_ini.grid.dV*np.size(rho_ini))
-            mdl.den.real_charge = charge.ravel()
-        #-----------------------------------------------------------------------
         current_params.max_scf_cycles = 1
         self.mdl = mdl
+        #-----------------------------------------------------------------------
+        if rho_ini is not None :
+            self._format_density(rho_ini, sym = True)
+        #-----------------------------------------------------------------------
 
     def _write_cell(self, outfile, ions, pbc = None, params = None, **kwargs):
         ase_atoms = self.ase_atoms
@@ -126,7 +131,7 @@ class CastepKS(AbsDFT):
         if dv is None :
             dv = density.grid.dV
         charge = density * (np.size(density) * dv)
-        self.mdl.den.real_charge = charge.ravel(order = 'F')
+        self.mdl.den.real_charge[:] = charge.ravel(order = 'F')
         if sym :
             caspytep.density.density_symmetrise(self.mdl.den)
             caspytep.density.density_augment(self.mdl.wvfn,self.mdl.occ,self.mdl.den)
@@ -135,7 +140,10 @@ class CastepKS(AbsDFT):
     def _format_density_invert(self, charge, grid, **kwargs):
         from edftpy.utils.common import Field
 
-        density = charge.real_charge / (grid.dV*np.size(charge.real_charge))
+        if hasattr(charge, 'real_charge'):
+            density = charge.real_charge / (grid.dV*np.size(charge.real_charge))
+        else :
+            density = charge / (grid.dV*np.size(charge))
         rho = Field(grid=grid, rank=1, direct=True, data = density, order = 'F')
         return rho
 
@@ -174,25 +182,26 @@ class CastepKS(AbsDFT):
         '''
         if self.grid is None :
             self.grid = density.grid
-
         #-----------------------------------------------------------------------
-        # if self._iter < 2 :
-            # sym = False
-        # else :
-            # sym = True
-        sym = True
         self._iter += 1
+        sym = True
         if self._iter == 1 :
             caspytep.parameters.get_current_params().max_scf_cycles = 3
         else :
-            caspytep.parameters.get_current_params().max_scf_cycles = 2
+            caspytep.parameters.get_current_params().max_scf_cycles = 1
+
         self._format_density(density, sym = sym)
-        self.prev_density = copy.deepcopy(self.mdl.den)
+
+        self.prev_density = copy.deepcopy(self.mdl.den.real_charge[:])
         #-----------------------------------------------------------------------
         extpot, extene = self._get_extpot(self.mdl.den, density.grid)
-        self.mdl.converged = caspytep.electronic.electronic_minimisation_edft_ext(
+        if self._iter > 0 :
+            self.mdl.converged = caspytep.electronic.electronic_minimisation_edft_ext(
                 self.mdl, extpot, extene, self.exttype, self.perform_mix)
-        # self.mdl.converged = caspytep.electronic.electronic_minimisation(self.mdl)
+        else :
+            self.mdl.converged = caspytep.electronic.electronic_minimisation(self.mdl)
+        # copy the saved density as previous density
+
         caspytep.density.density_calculate_soft(self.mdl.wvfn,self.mdl.occ, self.mdl.den)
         if sym :
             caspytep.density.density_symmetrise(self.mdl.den)
@@ -230,13 +239,14 @@ class CastepKS(AbsDFT):
         return func
 
     def update_density(self, **kwargs):
-        mixed, residual_norm = caspytep.dm.dm_mix_density(self.prev_density, self.mdl.den)
-        print('residual_norm', residual_norm)
-        rho = self._format_density_invert(self.mdl.den, self.grid)
+        # if self._iter > 0 :
+            # mixed, residual_norm = caspytep.dm.dm_mix_density(self.mdl.den, self.mdl.den)
+            # print('residual_norm', residual_norm)
+        # rho = self._format_density_invert(self.mdl.den, self.grid)
         #-----------------------------------------------------------------------
-        # prev_density = self._format_density_invert(self.prev_density, self.grid)
-        # density = self._format_density_invert(self.mdl.den, self.grid)
-        # rho = self.mixer(prev_density, density)
+        prev_density = self._format_density_invert(self.prev_density, self.grid)
+        density = self._format_density_invert(self.mdl.den, self.grid)
+        rho = self.mixer(prev_density, density, **kwargs)
         #-----------------------------------------------------------------------
         return rho
 
