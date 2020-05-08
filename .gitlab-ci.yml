@@ -1,0 +1,8 @@
+image: registry.gitlab.com/pavanello-research-group/dftpy:latest
+
+Test:
+  script:
+   - python setup.py install
+   - cd examples
+   - EDFTPY_DATA_PATH='./DATA/' pytest --cov-report term-missing --cov=./ ./test/
+  coverage: '/TOTAL\s+\d+\s+\d+\s+(\d+\%)/'
