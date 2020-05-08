@@ -3,16 +3,22 @@ import copy
 from dftpy.math_utils import bestFFTsize, ecut2spacing
 
 from edftpy.utils.common import Field, Grid, Atoms
+from ..utils.math import gaussian
+from numpy import linalg as LA
 
 
 class SubCell(object):
-    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, **kwargs):
+    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, fake_core_options = None, **kwargs):
         self._grid = None
         self._ions = None
         self._density = None
 
         self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, **kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
+        if fake_core_options is None or len(fake_core_options)==0:
+            self._fake_core_density = None
+        else :
+            self._gen_fake_core_density(fake_core_options)
 
     @property
     def grid(self):
@@ -31,6 +37,12 @@ class SubCell(object):
         if self._density is None:
             raise AttributeError("Must set density firstly")
         return self._density
+
+    @property
+    def fake_core_density(self):
+        # if self._fake_core_density is None:
+            # raise AttributeError("Must calculate density firstly")
+        return self._fake_core_density
 
     @property
     def shift(self):
@@ -74,6 +86,33 @@ class SubCell(object):
         self._ions = ions_sub
         self._shift = shift
 
+    def _gen_fake_core_density(self, options={}):
+        nr = self.grid.nr
+        dnr = (1.0/nr).reshape((3, 1))
+        gaps = self.grid.spacings
+        self._fake_core_density = Field(self.grid)
+        for key, option in options.items() :
+            rcut = option.get('rcut', 3.0)
+            sigma = option.get('sigma', 0.5)
+            scale = option.get('scale', 0.5)
+            border = (rcut / gaps).astype(np.int32) + 1
+            ixyzA = np.mgrid[-border[0]:border[0]+1, -border[1]:border[1]+1, -border[2]:border[2]+1].reshape((3, -1))
+            prho = np.zeros((2 * border[0]+1, 2 * border[1]+1, 2 * border[2]+1))
+            for i in range(self.ions.nat):
+                if self.ions.labels[i] != key:
+                    continue
+                posi = self.ions.pos[i].reshape((1, 3))
+                atomp = np.array(posi.to_crys()) * nr
+                atomp = atomp.reshape((3, 1))
+                ipoint = np.floor(atomp) 
+                px = atomp - ipoint
+                l123A = np.mod(ipoint.astype(np.int32) - ixyzA, nr[:, None])
+                positions = (ixyzA + px) * dnr
+                positions = np.einsum("j...,kj->k...", positions, self.grid.lattice)
+                dists = LA.norm(positions, axis = 0).reshape(prho.shape)
+                index = dists < rcut
+                prho[index] = gaussian(dists[index], sigma) * scale
+                self._fake_core_density[l123A[0], l123A[1], l123A[2]] += prho.ravel()
 
 class GlobalCell(object):
     def __init__(self, ions, grid = None, ecut = 22, spacing = None, full = False, optfft = True, **kwargs):

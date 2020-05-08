@@ -2,6 +2,11 @@ import os
 import numpy as np
 from scipy.interpolate import splrep, splev
 from numpy import linalg as LA
+# try:
+    # from edftpy.io.pp_xml import PPXmlGPAW as PPXml
+# except Exception :
+    # from edftpy.io.pp_xml import PPXml
+# from edftpy.io.pp_xml import PPXml
 
 class AtomicDensity(object):
     """
@@ -11,12 +16,11 @@ class AtomicDensity(object):
 
     def __init__(self, files =None, grid=None, ions=None, ftypes = None, **kwargs):
 
-        if files is not None:
-            self.files = files
-        else:
-            self.files = files
-            # return
-            raise AttributeError("Must specify files for atomic density")
+        self.files = files
+        if self.files is None:
+            return
+        # if files None:
+            # raise AttributeError("Must specify files for atomic density")
 
         self._r = {}
         self._arho = {}
@@ -93,6 +97,10 @@ class AtomicDensity(object):
         return r, v, info
 
     def read_density_xml(self, infile):
+        # try:
+            # from edftpy.io.pp_xml import PPXmlGPAW as PPXml
+        # except Exception :
+            # from edftpy.io.pp_xml import PPXml
         from edftpy.io.pp_xml import PPXml
         pp = PPXml(infile)
         r, v, info = pp.get_pseudo_valence_density()

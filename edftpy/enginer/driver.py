@@ -1,4 +1,5 @@
 from ..evaluator import EnergyEvaluatorMix
+from ..hartree import Hartree
 
 
 class OptDriver:
@@ -20,6 +21,11 @@ class OptDriver:
         self.calculator = calculator
         if self.calculator is not None :
             self.calculator.evaluator = self.energy_evaluator
+        self.energy_traj = {
+                'KE': [], 
+                'XC': [], 
+                'HARTREE': []}
+        self.prev_density = None
 
     def get_energy_evaluator(self, embed_evaluator = None, sub_evaluator = None, **kwargs):
         """
@@ -37,17 +43,17 @@ class OptDriver:
 
     def compute(self, density = None, gsystem = None, calcType = ['O', 'E'], ext_pot = None):
         #-----------------------------------------------------------------------
-        if density is None and self.rho is None:
+        if density is None and self.prev_density is None:
             raise AttributeError("Must provide a guess density")
         elif density is not None :
-            self.rho = density
+            self.prev_density = density
 
         if gsystem is None:
             raise AttributeError("Must provide global system")
         else:
             self.energy_evaluator.gsystem = gsystem
 
-        rho_ini = self.rho
+        rho_ini = self.prev_density
         self.energy_evaluator.rest_rho = gsystem.sub_value(gsystem.density, rho_ini) - rho_ini
         #-----------------------------------------------------------------------
         self.density = self.calculator.get_density(rho_ini)
@@ -56,7 +62,7 @@ class OptDriver:
         self.mu = self.calculator.get_fermi_level()
 
         if 'E' in calcType or 'V' in calcType :
-            func = self.get_sub_energy(self.rho, calcType)
+            func = self.get_sub_energy(self.prev_density, calcType)
             self.functional = func
 
         if 'E' in calcType :
@@ -67,5 +73,18 @@ class OptDriver:
 
         return
 
-    def update_density(self):
-        return self.calculator.update_density()
+    def update_density(self, **kwargs):
+        return self.calculator.update_density(**kwargs)
+
+    def get_energy_traj(self, ename = 'HARTREE', density = None):
+        # if ename is not None :
+            # energy = self.calculator.get_energy_part(ename = ename, density = density)
+        if ename == 'HARTREE' :
+            energy = Hartree.compute(density, calcType=['E']).energy
+            print('Hartree energy', energy)
+            self.energy_traj[ename].append(energy)
+        else :
+            raise AttributeError("!ERROR : Not implemented", ename)
+
+        return self.energy_traj[ename]
+

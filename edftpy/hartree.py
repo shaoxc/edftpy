@@ -10,6 +10,7 @@ class Hartree(AbsFunctional):
     def __call__(self, density, calcType=["E","V"], **kwargs):
         return self.compute(density, calcType=calcType, **kwargs)
 
-    def compute(self, density, calcType=["E","V"], **kwargs):
+    @classmethod
+    def compute(cls, density, calcType=["E","V"], **kwargs):
         functional = HartreeFunctional(density, calcType=calcType)
         return functional

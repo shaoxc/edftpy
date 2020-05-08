@@ -1,5 +1,6 @@
 import numpy as np
 from .utils.common import Field, Functional, AbsFunctional
+from .kedf import KEDF
 from dftpy.functionals import FunctionalClass
 
 
@@ -175,7 +176,26 @@ class EnergyEvaluatorMix(AbsFunctional):
     def __call__(self, rho, calcType=["E","V"], **kwargs):
         return self.compute(rho, calcType, **kwargs)
 
-    def compute(self, rho, calcType=["E","V"], with_global = True):
+    def compute(self, rho, calcType=["E","V"], with_global = True, core_density = None):
+        #-----------------------------------------------------------------------
+        if core_density is not None :
+            # key = 'KE'
+            for key, value in self.embed_evaluator.funcdicts.items():
+                if isinstance(value, KEDF):
+                    break
+            remove_embed = {key : self.embed_evaluator.funcdicts[key]}
+            ke_embed = self.embed_evaluator.funcdicts[key]
+            self.embed_evaluator.update_functional(remove = remove_embed)
+            for key, value in self.gsystem.total_evaluator.funcdicts.items():
+                if isinstance(value, KEDF):
+                    break
+            remove_global = {key : self.gsystem.total_evaluator.funcdicts[key]}
+            ke_global = self.gsystem.total_evaluator.funcdicts[key]
+            self.gsystem.total_evaluator.update_functional(remove = remove_global)
+            print('#-----------------------------------------------------------------------')
+            print('core_density', np.sum(core_density), key)
+            print('#-----------------------------------------------------------------------')
+        #-----------------------------------------------------------------------
         if self.sub_evaluator is None :
             potential = Field(grid=rho.grid, rank=1, direct=True)
             obj = Functional(name = 'ZERO', energy=0.0, potential=potential)
@@ -183,20 +203,28 @@ class EnergyEvaluatorMix(AbsFunctional):
             obj = self.sub_evaluator(rho, calcType = calcType)
         if self.embed_evaluator is not None :
             obj -= self.embed_evaluator(rho, calcType = calcType)
+            if core_density is not None :
+                obj -= ke_embed(rho + core_density, calcType = calcType)
+
         if with_global :
             self.gsystem.set_density(rho + self.rest_rho)
             obj_global = self.gsystem.total_evaluator(self.gsystem.density, calcType = calcType)
+            if core_density is not None :
+                self.gsystem.set_density(rho + self.rest_rho + core_density)
+                obj_global += ke_global(self.gsystem.density, calcType = calcType)
             if 'V' in calcType :
                 if hasattr(obj, 'potential'):
                     obj.potential += self.gsystem.sub_value(obj_global.potential, rho)
                 else :
                     obj.potential = self.gsystem.sub_value(obj_global.potential, rho)
-                    #-----------------------------------------------------------------------
-                    # obj.potential += self.gsystem.sub_value(self.gsystem.rest_rho, rho) * 1E-1
-                    #-----------------------------------------------------------------------
             if 'E' in calcType :
                 if hasattr(obj, 'energy'):
                     obj.energy += obj_global.energy
                 else :
                     obj.energy = obj_global.energy
+        #-----------------------------------------------------------------------
+        if core_density is not None :
+            self.embed_evaluator.update_functional(add = remove_embed)
+            self.gsystem.total_evaluator.update_functional(add = remove_global)
+        #-----------------------------------------------------------------------
         return obj

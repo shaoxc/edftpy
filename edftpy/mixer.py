@@ -84,7 +84,7 @@ class SpecialPrecondition :
         if residual is not None :
             res = Field(self.grid, data=residual, direct=True)
             results += res.fft()*self.matrix
-        # results[self.mask] = nout.fft()[self.mask]
+        results[self.mask] = nout.fft()[self.mask]
         # results[self.mask] = nin_g[self.mask] + 0.5 * nout.fft()[self.mask]
 
         return results.ifft(force_real=True)
@@ -132,6 +132,9 @@ class LinearMixer(AbstractMixer):
         self.pred = SpecialPrecondition(predtype, predcoef, predecut=predecut)
         self.coef = coef
         self._delay = delay
+        self.restart()
+
+    def restart(self):
         self._iter = 0
 
     def __call__(self, nin, nout, coef = None):
@@ -160,18 +163,21 @@ class LinearMixer(AbstractMixer):
 class PulayMixer(AbstractMixer):
     def __init__(self, predtype = None, predcoef = [0.8, 0.1], maxm = 5, coef = [1.0], delay = 3, predecut = None, **kwargs):
         self.pred = SpecialPrecondition(predtype, predcoef, predecut=predecut)
-        self._iter = 0
         self._delay = delay
         self.maxm = maxm
-        self.dr_mat = None
-        self.dn_mat = None
         self.coef = coef
-        self.prev_density = None
-        self.prev_residual = None
+        self.restart()
 
     def __call__(self, nin, nout, coef = None):
         results = self.compute(nin, nout, coef)
         return results
+
+    def restart(self):
+        self._iter = 0
+        self.dr_mat = None
+        self.dn_mat = None
+        self.prev_density = None
+        self.prev_residual = None
 
     def residual(self, nin, nout):
         res = nout - nin
@@ -186,8 +192,12 @@ class PulayMixer(AbstractMixer):
         self._iter += 1
 
         r = nout - nin
-        print('mixxxxx', np.max(r), np.min(r), np.max(abs(r)), np.sum(r * r))
-        if self._iter > self._delay :
+        #-----------------------------------------------------------------------
+        if self._iter == 1 and self._delay < 1 :
+            res = r * coef[0]
+            print('!WARN : Change to linear mixer')
+            results = self.pred(nin, nout, residual=res)
+        elif self._iter > self._delay :
             dn = nin - self.prev_density
             dr = r - self.prev_residual
             if self.dr_mat is None :
@@ -221,8 +231,8 @@ class PulayMixer(AbstractMixer):
                     else :
                         drho += x[i] * self.dn_mat[i]
                         res += x[i] * self.dr_mat[i]
+                # drho *= coef[0]
                 res *= coef[0]
-                drho *= coef[0]
                 results = self.pred(nin, nout, drho, res)
             except Exception :
                 res = r * coef[0]
@@ -246,19 +256,22 @@ class BroydenMixer(AbstractMixer):
     """
     def __init__(self, predtype = None, predcoef = [0.8, 0.1], maxm = 5, coef = [1.0], delay = 3):
         self.pred = SpecialPrecondition(predtype, predcoef)
-        self._iter = 0
         self._delay = delay
         self.maxm = maxm
-        self.dr_mat = None
-        self.dn_mat = None
-        self.jr_mat = None
         self.coef = coef
-        self.prev_density = None
-        self.prev_residual = None
+        self.restart()
 
     def __call__(self, nin, nout, coef = None):
         results = self.compute(nin, nout, coef)
         return results
+
+    def restart(self):
+        self._iter = 0
+        self.dr_mat = None
+        self.dn_mat = None
+        self.jr_mat = None
+        self.prev_density = None
+        self.prev_residual = None
 
     def residual(self, nin, nout):
         res = nout - nin
@@ -321,3 +334,4 @@ class BroydenMixer(AbstractMixer):
         self.prev_residual = r.copy()
 
         return results
+

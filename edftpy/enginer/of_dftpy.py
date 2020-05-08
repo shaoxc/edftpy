@@ -1,5 +1,6 @@
 import copy
-from ..mixer import * 
+import numpy as np
+from ..mixer import LinearMixer, PulayMixer
 from ..utils.common import AbsDFT
 
 from dftpy.optimization import Optimization
@@ -37,8 +38,9 @@ class DFTpyOF(AbsDFT):
         #-----------------------------------------------------------------------
         self.mixer = mixer
         if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = None, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [1.0], predecut = None, delay = 1)
             # self.mixer = LinearMixer(predtype = None, coef = [0.7], predecut = None, delay = 1)
+            self.mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 0)
             # self.mixer = LinearMixer(predtype = 'inverse_kerker', predcoef = [0.8, 0.5], maxm = 5, coef = [0.5])
             # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [1.0], predecut = 20.0, delay = 1)
             # self.mixer = PulayMixer(predtype = None, predcoef = [0.8], maxm = 7, coef = [0.6], predecut = 20.0, delay = 5)
@@ -72,9 +74,33 @@ class DFTpyOF(AbsDFT):
         return func
 
     def update_density(self, **kwargs):
+        r = self.calc.rho - self.prev_density
+        print('res_norm_of', self._iter, np.max(abs(r)), np.sqrt(np.sum(r * r)/np.size(r)))
         self.density = self.mixer(self.prev_density, self.calc.rho, **kwargs)
         return self.density
 
     def get_fermi_level(self, **kwargs):
         results = self.calc.mu
         return results
+
+    def get_energy_part(self, ename, density = None, **kwargs):
+        evaluator = self.evaluator.gsystem.total_evaluator # Later will replace with sub_evaluator
+        # evaluator = self.evaluator.sub_evaluator 
+        key = None
+        if ename == 'TOTAL' :
+            energy = evaluator(density, calcType = ['E'], with_global = False).energy
+        elif ename == 'XC' :
+            key = 'XC'
+        elif ename == 'KEDF' :
+            key = 'KEDF'
+        elif ename == 'LOCAL' :
+            key = 'PSEUDO'
+        elif ename == 'HARTREE' :
+            key = 'HARTREE'
+        elif ename == 'EWALD' :
+            raise AttributeError("!ERROR : not contains this energy", ename)
+        else :
+            raise AttributeError("!ERROR : not contains this energy", ename)
+        if key is not None :
+            energy = evaluator.funcdicts[key](density, calcType = ['E']).energy
+        return energy

@@ -1,6 +1,7 @@
 import numpy as np
 import time
 import copy
+from .hartree import Hartree
 
 
 class Optimization(object):
@@ -31,10 +32,21 @@ class Optimization(object):
                 energy += func.energy
         return energy
 
-    def update_density(self, denlist = None, prev_denlist = None, mu = None, **kwargs):
+    def update_density(self, denlist = None, prev_denlist = None, mu = None, update = None, **kwargs):
         #-----------------------------------------------------------------------
+        diff_res = self.get_diff_residual()
+        d_e = max(diff_res)
+        print('diff_res', diff_res)
         for i, driver in enumerate(self.opt_drivers):
-            denlist[i] = driver.update_density()
+            coef = driver.calculator.mixer.coef.copy()
+            # print('coef',coef, 'i', i)
+            # coef[0] = self.get_frag_coef(coef[0], d_e, diff_res[i])
+            # print('outcoef',coef)
+            coef = None
+            if update[i] :
+                denlist[i] = driver.update_density(coef = coef)
+            else :
+                denlist[i] = driver.density.copy()
         #-----------------------------------------------------------------------
         # if mu is not None :
         if 0 :
@@ -73,6 +85,7 @@ class Optimization(object):
         else:
             self.gsystem = gsystem
         #-----------------------------------------------------------------------
+        self.nsub = len(self.opt_drivers)
         energy_history = []
 
         prev_denlist = copy.deepcopy(guess_rho)
@@ -111,23 +124,48 @@ class Optimization(object):
         # fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(0, energy, dE, resN, 1, timecost - time_begin)
         # print(seq +'\n' + fmt +'\n' + seq)
 
+        update = [True for _ in range(len(self.opt_drivers))]
+        res_norm = [1000 for _ in range(len(self.opt_drivers))]
+        res_history = [[] for _ in range(len(self.opt_drivers))]
         for it in range(self.options['maxiter']):
             self.iter = it
             prev_denlist, denlist = denlist, prev_denlist
-            for i, driver in enumerate(self.opt_drivers):
-                # prev_denlist[i] = denlist[i].copy()
-                # if it % 10 > 0 and i == 1: continue
-                # if it > 0 and i == 1: continue
-                gsystem.density[:] = totalrho
-                driver(density = prev_denlist[i], gsystem = gsystem, calcType = ['O', 'E'])
-                denlist[i] = driver.density
-                func_list[i] = driver.functional
-                mu_list[i] = driver.mu
             #-----------------------------------------------------------------------
-            if it > 0 :
-                totalrho, denlist = self.update_density(denlist, prev_denlist, mu = mu_list)
-            else :
-                totalrho, denlist = self.update_density(denlist, prev_denlist, mu = None)
+            for i, item in enumerate(res_norm):
+                res_history[i].append(item)
+                if i == 0 :
+                    ide = 1
+                    if it > 5 and it < 150 and (it - 5) % 5 > 0 :
+                        update[i] = False
+                    # if it > 5 :
+                        # if abs(res_history[i][-1]-res_history[i][-2]) < 1E-15 and \
+                                # res_history[ide][-1] < 1E-6 and res_history[ide][-1]-res_history[ide][-2] < 2E-7 :
+                            # update[i] = True
+                        # else :
+                            # update[i] = False
+                    else :
+                        update[i] = True
+
+                    if update[i] :
+                        if it > 5 :
+                            self.opt_drivers[ide].calculator.mixer.restart()
+                            self.opt_drivers[ide].calculator.mixer._delay = 0
+            #-----------------------------------------------------------------------
+            for i, driver in enumerate(self.opt_drivers):
+                #-----------------------------------------------------------------------
+                if update[i] :
+                    gsystem.density[:] = totalrho
+                    driver(density = prev_denlist[i], gsystem = gsystem, calcType = ['O', 'E'])
+                    denlist[i] = driver.density
+                    func_list[i] = driver.functional
+                    mu_list[i] = driver.mu
+                #-----------------------------------------------------------------------
+                # if it > 90 and it < 110 and i == 0:
+                    # self.output_density('den.dat.' + str(it), driver.density)
+                #-----------------------------------------------------------------------
+            res_norm = self.get_diff_residual()
+            #-----------------------------------------------------------------------
+            totalrho, denlist = self.update_density(denlist, prev_denlist, mu = mu_list, update = update)
             totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
             func_list[i + 1] = totalfunc
             energy = self.get_energy(func_list)
@@ -147,3 +185,41 @@ class Optimization(object):
         self.density = totalrho
         self.subdens = denlist
         return
+
+    def output_density(self, outfile, rho):
+        with open(outfile, "w") as fw:
+            fw.write("{0[0]:10d} {0[1]:10d} {0[2]:10d}\n".format(rho.grid.nr))
+            size = np.size(rho)
+            nl = size // 3
+            outrho = rho.ravel(order="F")
+            for line in outrho[: nl * 3].reshape(-1, 3):
+                fw.write("{0[0]:22.15E} {0[1]:22.15E} {0[2]:22.15E}\n".format(line))
+            for line in outrho[nl * 3 :]:
+                fw.write("{0:22.15E}".format(line))
+
+    def get_frag_coef(self, coef, d_e, sub_d_e, alpha = 1.0, maxs = 0.4):
+        d_e = abs(d_e)
+        sub_d_e = abs(sub_d_e)
+        if d_e > 1E-10 :
+            new_coef = alpha * (coef * (1.0 - sub_d_e/d_e)) + \
+                coef * (1.0 - alpha)
+            new_coef = max(new_coef, maxs * coef)
+        else :
+            new_coef = coef
+        return new_coef
+
+    def get_diff_residual(self, **kwargs):
+        diff_res = []
+        for i, driver in enumerate(self.opt_drivers):
+            r = driver.density - driver.prev_density
+            res_norm = float(np.sqrt(np.sum(r * r)/np.size(r)))
+            diff_res.append(res_norm)
+            # energy = Hartree.compute(driver.density.copy(), calcType=['E']).energy
+            # print('Hartree_i', i, energy)
+            # ls = driver.get_energy_traj('HARTREE', density = driver.density)
+            # if len(ls) > 1 :
+                # dr = abs(ls[-1]-ls[-2])
+            # else :
+                # dr = 0.0
+            # diff_res.append(dr)
+        return diff_res

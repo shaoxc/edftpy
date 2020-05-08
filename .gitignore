@@ -5,8 +5,8 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
-dftpy.egg-info
+edftpy.egg-info
 dev/
-examples/
+examples/debug
 doc/build/
 .ipynb_checkpoints/

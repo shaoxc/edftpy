@@ -5,10 +5,6 @@ import sys
 import os
 from edftpy import __version__, __author__, __contact__, __license__
 
-SRC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "./src")
-if SRC_DIR not in sys.path:
-    sys.path.insert(0, SRC_DIR)
-
 
 description = "EDFTpy"
 long_description = """EDFTpy"""
@@ -35,4 +31,4 @@ setup(name='edftpy',
       packages=find_packages(),
       scripts=scripts,
       include_package_data=True,
-      install_requires=['numpy>=1.8.0', 'scipy>=0.10.0'])
+      install_requires=['numpy>=1.8.0', 'scipy>=0.10.0', 'ase'])

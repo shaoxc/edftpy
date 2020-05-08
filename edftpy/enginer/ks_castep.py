@@ -2,18 +2,18 @@ import numpy as np
 from scipy import signal
 import copy
 from dftpy.formats.ase_io import ions2ase
+import caspytep
 import ase.io.castep as ase_io_castep
 import ase.calculators.castep as ase_calc_castep
 
-import caspytep
-
-from ..mixer import * 
+from ..mixer import LinearMixer, PulayMixer
 from ..utils.common import AbsDFT
 
 class CastepKS(AbsDFT):
     """description"""
     def __init__(self, evaluator = None, prefix = 'castep_in_sub', ions = None, params = None, cell_params = None, 
-            grid = None, rho_ini = None, exttype = 3, castep_in_file = None, mixer = None, **kwargs):
+            grid = None, rho_ini = None, exttype = 3, castep_in_file = None, mixer = None, core_density = None,
+            **kwargs):
         '''
         exttype :
                     2 : only hartree
@@ -23,6 +23,7 @@ class CastepKS(AbsDFT):
         self.grid = grid
         self.prefix = prefix
         self.exttype = exttype
+        self.core_density = core_density
         self.rho = None
         self.wfs = None
         self.occupations = None
@@ -41,7 +42,8 @@ class CastepKS(AbsDFT):
         self._filter = None
         self.mixer = mixer
         if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [1.0], predecut = 30.0, delay = 1)
+            self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [1.0], predecut = None, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [1.0], predecut = 30.0, delay = 1)
             # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.2, 1.0], maxm = 7, coef = [1.0], predecut = 30.0, delay = 1)
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = None, delay = 1)
             # self.mixer = LinearMixer(predtype =None, delay = 1, coef = [0.7])
@@ -149,7 +151,7 @@ class CastepKS(AbsDFT):
 
     def _get_extpot(self, charge, grid, **kwargs):
         rho = self._format_density_invert(charge, grid, **kwargs)
-        func = self.evaluator(rho)
+        func = self.evaluator(rho, core_density = self.core_density)
         #-----------------------------------------------------------------------
         # func.potential *= self.filter
         #-----------------------------------------------------------------------
@@ -246,6 +248,10 @@ class CastepKS(AbsDFT):
         #-----------------------------------------------------------------------
         prev_density = self._format_density_invert(self.prev_density, self.grid)
         density = self._format_density_invert(self.mdl.den, self.grid)
+        #-----------------------------------------------------------------------
+        r = density - prev_density
+        print('res_norm_ks', self._iter, np.max(abs(r)), np.sqrt(np.sum(r * r)/np.size(r)))
+        #-----------------------------------------------------------------------
         rho = self.mixer(prev_density, density, **kwargs)
         #-----------------------------------------------------------------------
         return rho
@@ -253,3 +259,25 @@ class CastepKS(AbsDFT):
     def get_fermi_level(self, **kwargs):
         results = self.mdl.fermi_energy
         return results
+
+    def get_energy_part(self, ename, density = None, **kwargs):
+        if ename == 'TOTAL' :
+            key = 'total_energy'
+        elif ename == 'XC' :
+            key = 'xc_energy'
+        elif ename == 'KEDF' :
+            key = 'kinetic_energy'
+        elif ename == 'NONLOCAL' :
+            key = 'nonlocal_energy'
+        elif ename == 'EWALD' :
+            key = 'ion_ion_energy0'
+        elif ename == 'LOCAL' :
+            key = 'locps_energy'
+        elif ename == 'HARTREE' :
+            key = 'hartree_energy'
+        elif ename == 'LOCALC' :
+            key = 'ion_noncoulomb_energy'
+        else :
+            raise AttributeError("!ERROR : not contains this energy", ename)
+        energy = caspytep.electronic.electronic_get_energy(key)
+        return energy
