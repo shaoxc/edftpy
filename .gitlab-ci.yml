@@ -4,7 +4,7 @@ Test:
   before_script:
     - git clone https://gitlab.com/pavanello-research-group/dftpy.git
     - home=$( pwd )
-    - cd libxc
+    - cd dftpy
     - python setup.py install
     - cd ..
   script:
