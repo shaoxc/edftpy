@@ -33,6 +33,9 @@ class PPXmlGPAW(object):
 
 class PPXml(object):
     def __init__(self, infile, symbol = 'Al', xctype = 'LDA', name='paw'):
+        '''
+        Ref : https://wiki.fysik.dtu.dk/gpaw/setups/pawxml.html
+        '''
         if infile.endswith('.gz'):
             fd = gzip.GzipFile(infile)
         else:

@@ -4,18 +4,16 @@ from ..hartree import Hartree
 
 class OptDriver:
 
-    def __init__(self, embed_evaluator = None, sub_evaluator = None, options=None, calculator = None, **kwargs):
+    def __init__(self, embed_evaluator = None, sub_evaluator = None, options=None, calculator = None, core_density = None, **kwargs):
         default_options = {
+                'update_delay' : 5, 
+                'update_freq' : 1
         }
         self.options = default_options
         if options is not None :
             self.options.update(options)
 
-        # if sub_evaluator is None:
-            # raise AttributeError("Must provide an subsystem functionals")
-        # else:
-            # self.sub_evaluator = sub_evaluator
-
+        self.core_density = core_density
         self.energy_evaluator = None
         self.get_energy_evaluator(embed_evaluator, sub_evaluator, **kwargs)
         self.calculator = calculator
@@ -26,6 +24,7 @@ class OptDriver:
                 'XC': [], 
                 'HARTREE': []}
         self.prev_density = None
+        self._it = 0
 
     def get_energy_evaluator(self, embed_evaluator = None, sub_evaluator = None, **kwargs):
         """
@@ -43,6 +42,12 @@ class OptDriver:
 
     def compute(self, density = None, gsystem = None, calcType = ['O', 'E'], ext_pot = None):
         #-----------------------------------------------------------------------
+        self._it += 1
+        # update_delay = self.options['update_delay']
+        # update_freq = self.options['update_freq']
+        # if self._it > update_delay and (self._it - update_delay) % update_freq > 0:
+            # return
+        #-----------------------------------------------------------------------
         if density is None and self.prev_density is None:
             raise AttributeError("Must provide a guess density")
         elif density is not None :
@@ -54,7 +59,9 @@ class OptDriver:
             self.energy_evaluator.gsystem = gsystem
 
         rho_ini = self.prev_density
+        #-----------------------------------------------------------------------
         self.energy_evaluator.rest_rho = gsystem.sub_value(gsystem.density, rho_ini) - rho_ini
+        self.energy_evaluator.get_embed_potential(rho_ini, core_density = self.core_density)
         #-----------------------------------------------------------------------
         self.density = self.calculator.get_density(rho_ini)
         # self.calculator.get_density(rho_ini)

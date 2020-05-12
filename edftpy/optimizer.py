@@ -27,9 +27,13 @@ class Optimization(object):
 
     def get_energy(self, func_list = None, **kwargs):
         energy = 0.0
+        elist = []
         if func_list is not None :
             for func in func_list :
                 energy += func.energy
+                elist.append(func.energy)
+        elist.append(energy)
+        print('all_energy', elist)
         return energy
 
     def update_density(self, denlist = None, prev_denlist = None, mu = None, update = None, **kwargs):
@@ -110,7 +114,6 @@ class Optimization(object):
         # func_list.append(totalfunc)
         # energy = self.get_energy(func_list)
         # energy_history.append(energy)
-
         #-----------------------------------------------------------------------
         fmt = "           {:8s}{:24s}{:16s}{:16s}{:8s}{:16s}".format("Step", "Energy(a.u.)", "dE", "dP", "Nls", "Time(s)")
         resN = 9999
@@ -130,29 +133,15 @@ class Optimization(object):
         for it in range(self.options['maxiter']):
             self.iter = it
             prev_denlist, denlist = denlist, prev_denlist
-            #-----------------------------------------------------------------------
-            for i, item in enumerate(res_norm):
-                res_history[i].append(item)
-                if i == 0 :
-                    ide = 1
-                    if it > 5 and it < 150 and (it - 5) % 5 > 0 :
-                        update[i] = False
-                    # if it > 5 :
-                        # if abs(res_history[i][-1]-res_history[i][-2]) < 1E-15 and \
-                                # res_history[ide][-1] < 1E-6 and res_history[ide][-1]-res_history[ide][-2] < 2E-7 :
-                            # update[i] = True
-                        # else :
-                            # update[i] = False
-                    else :
-                        update[i] = True
-
-                    if update[i] :
-                        if it > 5 :
-                            self.opt_drivers[ide].calculator.mixer.restart()
-                            self.opt_drivers[ide].calculator.mixer._delay = 0
-            #-----------------------------------------------------------------------
             for i, driver in enumerate(self.opt_drivers):
                 #-----------------------------------------------------------------------
+                update_delay = driver.options['update_delay']
+                update_freq = driver.options['update_freq']
+                if it > update_delay and (it - update_delay) % update_freq > 0:
+                    update[i] = False
+                else :
+                    update[i] = True
+
                 if update[i] :
                     gsystem.density[:] = totalrho
                     driver(density = prev_denlist[i], gsystem = gsystem, calcType = ['O', 'E'])
@@ -160,7 +149,7 @@ class Optimization(object):
                     func_list[i] = driver.functional
                     mu_list[i] = driver.mu
                 #-----------------------------------------------------------------------
-                # if it > 90 and it < 110 and i == 0:
+                # if it > 90 and it < 100 and i == 0:
                     # self.output_density('den.dat.' + str(it), driver.density)
                 #-----------------------------------------------------------------------
             res_norm = self.get_diff_residual()
@@ -223,3 +212,27 @@ class Optimization(object):
                 # dr = 0.0
             # diff_res.append(dr)
         return diff_res
+
+    def _update_try(self, it, res_norm):
+        update = [True for _ in range(len(self.opt_drivers))]
+        freq = 5
+        for i, item in enumerate(res_norm):
+            if i == 0 :
+                ide = 1
+                if it > freq and (it - freq) % freq > 0 :
+                    update[i] = False
+                # if it > freq and it < 150 and (it - freq) % freq > 0 :
+                # if it > freq :
+                    # if abs(res_history[i][-1]-res_history[i][-2]) < 1E-15 and \
+                            # res_history[ide][-1] < 1E-6 and res_history[ide][-1]-res_history[ide][-2] < 2E-7 :
+                        # update[i] = True
+                    # else :
+                        # update[i] = False
+                else :
+                    update[i] = True
+
+                if update[i] :
+                    if it > freq :
+                        self.opt_drivers[ide].calculator.mixer.restart()
+                        self.opt_drivers[ide].calculator.mixer._delay = 0
+        return update

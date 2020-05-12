@@ -176,7 +176,7 @@ class GlobalCell(object):
         indl = subrho.grid.shift
         nr_sub = subrho.grid.nr
         indr = indl + nr_sub
-        value = total[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]]
+        value = total[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]].copy()
         return value 
 
     def set_density(self, subrho, restart = False):

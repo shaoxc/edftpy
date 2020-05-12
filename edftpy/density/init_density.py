@@ -2,6 +2,7 @@ import os
 import numpy as np
 from scipy.interpolate import splrep, splev
 from numpy import linalg as LA
+from edftpy.utils.common import Field
 # try:
     # from edftpy.io.pp_xml import PPXmlGPAW as PPXml
 # except Exception :
@@ -97,10 +98,9 @@ class AtomicDensity(object):
         return r, v, info
 
     def read_density_xml(self, infile):
-        # try:
-            # from edftpy.io.pp_xml import PPXmlGPAW as PPXml
-        # except Exception :
-            # from edftpy.io.pp_xml import PPXml
+        '''
+        ! If import PPXml in the top, the castep won't work. I don't know why.???
+        '''
         from edftpy.io.pp_xml import PPXml
         pp = PPXml(infile)
         r, v, info = pp.get_pseudo_valence_density()
@@ -132,9 +132,8 @@ class AtomicDensity(object):
     def guess_rho_heg(self, ions, grid, ncharge = None, rho = None, ndens = 2, **kwargs):
         """
         """
-        nr = grid.nr
         if rho is None :
-            rho = np.zeros(nr)
+            rho = Field(grid)
 
         if ncharge is None :
             ncharge = 0.0
@@ -150,7 +149,7 @@ class AtomicDensity(object):
         dnr = (1.0/nr).reshape((3, 1))
         dtol = 1E-10 # for safe, replace the zero density as a value
         if rho is None :
-            rho = np.ones(nr) * dtol
+            rho = Field(grid) * dtol
         else :
             rho[:] = np.ones(nr) * dtol
         lattice = grid.lattice
