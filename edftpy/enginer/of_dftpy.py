@@ -39,8 +39,8 @@ class DFTpyOF(AbsDFT):
         self.mixer = mixer
         if self.mixer is None :
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [1.0], predecut = None, delay = 1)
-            # self.mixer = LinearMixer(predtype = None, coef = [0.7], predecut = None, delay = 1)
             self.mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 0)
+            # self.mixer = LinearMixer(predtype = None, coef = [0.7], predecut = None, delay = 1)
             # self.mixer = LinearMixer(predtype = 'inverse_kerker', predcoef = [0.8, 0.5], maxm = 5, coef = [0.5])
             # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [1.0], predecut = 20.0, delay = 1)
             # self.mixer = PulayMixer(predtype = None, predcoef = [0.8], maxm = 7, coef = [0.6], predecut = 20.0, delay = 5)

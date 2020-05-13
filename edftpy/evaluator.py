@@ -218,11 +218,12 @@ class EnergyEvaluatorMix(AbsFunctional):
     def rest_rho(self, value):
         self._rest_rho = value
 
-    def __call__(self, rho, calcType=["E","V"], **kwargs):
-        if self.embed_evaluator is None :
-            return self.compute_all(rho, calcType, **kwargs)
+    def __call__(self, rho, calcType=["E","V"], with_global = True, **kwargs):
+        # if self.embed_evaluator is not None :
+        if with_global :
+            return self.compute(rho, calcType, with_global = with_global, **kwargs)
         else :
-            return self.compute(rho, calcType, **kwargs)
+            return self.compute_normal(rho, calcType, with_global = with_global, **kwargs)
 
     def compute(self, rho, calcType=["E","V"], with_global = True, **kwargs):
         if self.sub_evaluator is None :
@@ -254,12 +255,13 @@ class EnergyEvaluatorMix(AbsFunctional):
             #-----------------------------------------------------------------------
         return obj
 
-    def compute_all(self, rho, calcType=["E","V"], with_global = True, **kwargs):
+    def compute_normal(self, rho, calcType=["E","V"], with_global = True, **kwargs):
         if self.sub_evaluator is None :
             potential = Field(grid=rho.grid, rank=1, direct=True)
             obj = Functional(name = 'ZERO', energy=0.0, potential=potential)
         else :
             obj = self.sub_evaluator(rho, calcType = calcType)
+
         if self.embed_evaluator is not None :
             obj -= self.embed_evaluator(rho, calcType = calcType)
 

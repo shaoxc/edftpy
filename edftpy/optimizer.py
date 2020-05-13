@@ -20,6 +20,7 @@ class Optimization(object):
             "maxiter": 20,
             "maxls": 30,
             "econv": 1.0e-6,
+            "ncheck": 2,
         }
 
         self.options = default_options
@@ -162,14 +163,13 @@ class Optimization(object):
             energy_history.append(energy)
             timecost = time.time()
             dE = energy_history[-1] - energy_history[-2]
+            resN = max(res_norm)
             fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(it, energy, dE, resN, 1, timecost - time_begin)
             fmt += "\n    Total: {:<8d}{:<24.12E}".format(it, totalfunc.energy)
             print(seq +'\n' + fmt +'\n' + seq)
-            if abs(dE) < self.options["econv"]:
-                if len(energy_history) > 2:
-                    if abs(energy_history[-1] - energy_history[-3]) < self.options["econv"]:
-                        print("#### Density Optimization Converged ####")
-                        break
+            if self.check_converge(energy_history):
+                print("#### Subsytem Density Optimization Converged ####")
+                break
         self.energy = energy
         self.density = totalrho
         self.subdens = denlist
@@ -212,6 +212,19 @@ class Optimization(object):
                 # dr = 0.0
             # diff_res.append(dr)
         return diff_res
+
+    def check_converge(self, energy_history, **kwargs):
+        econv = self.options["econv"]
+        ncheck = self.options["ncheck"]
+        E = energy_history[-1]
+        if econv is not None :
+            if len(energy_history) - 1 < ncheck :
+                return 
+            for i in range(ncheck):
+                dE = abs(energy_history[-2-i] - E)
+                if abs(dE) > econv :
+                    return False
+        return True
 
     def _update_try(self, it, res_norm):
         update = [True for _ in range(len(self.opt_drivers))]
