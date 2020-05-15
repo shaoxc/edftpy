@@ -34,7 +34,6 @@ class Optimization(object):
                 energy += func.energy
                 elist.append(func.energy)
         elist.append(energy)
-        print('all_energy', elist)
         return energy
 
     def update_density(self, denlist = None, prev_denlist = None, mu = None, update = None, **kwargs):
@@ -43,7 +42,7 @@ class Optimization(object):
         d_e = max(diff_res)
         print('diff_res', diff_res)
         for i, driver in enumerate(self.opt_drivers):
-            coef = driver.calculator.mixer.coef.copy()
+            # coef = driver.calculator.mixer.coef.copy()
             # print('coef',coef, 'i', i)
             # coef[0] = self.get_frag_coef(coef[0], d_e, diff_res[i])
             # print('outcoef',coef)
@@ -129,8 +128,6 @@ class Optimization(object):
         # print(seq +'\n' + fmt +'\n' + seq)
 
         update = [True for _ in range(len(self.opt_drivers))]
-        res_norm = [1000 for _ in range(len(self.opt_drivers))]
-        res_history = [[] for _ in range(len(self.opt_drivers))]
         for it in range(self.options['maxiter']):
             self.iter = it
             prev_denlist, denlist = denlist, prev_denlist
@@ -149,10 +146,6 @@ class Optimization(object):
                     denlist[i] = driver.density
                     func_list[i] = driver.functional
                     mu_list[i] = driver.mu
-                #-----------------------------------------------------------------------
-                # if it > 90 and it < 100 and i == 0:
-                    # self.output_density('den.dat.' + str(it), driver.density)
-                #-----------------------------------------------------------------------
             res_norm = self.get_diff_residual()
             #-----------------------------------------------------------------------
             totalrho, denlist = self.update_density(denlist, prev_denlist, mu = mu_list, update = update)
@@ -174,17 +167,6 @@ class Optimization(object):
         self.density = totalrho
         self.subdens = denlist
         return
-
-    def output_density(self, outfile, rho):
-        with open(outfile, "w") as fw:
-            fw.write("{0[0]:10d} {0[1]:10d} {0[2]:10d}\n".format(rho.grid.nr))
-            size = np.size(rho)
-            nl = size // 3
-            outrho = rho.ravel(order="F")
-            for line in outrho[: nl * 3].reshape(-1, 3):
-                fw.write("{0[0]:22.15E} {0[1]:22.15E} {0[2]:22.15E}\n".format(line))
-            for line in outrho[nl * 3 :]:
-                fw.write("{0:22.15E}".format(line))
 
     def get_frag_coef(self, coef, d_e, sub_d_e, alpha = 1.0, maxs = 0.4):
         d_e = abs(d_e)

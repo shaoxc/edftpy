@@ -29,7 +29,7 @@ class Evaluator(AbsFunctional):
         #-----------------------------------------------------------------------
         for key, evalfunctional in self.funcdicts.items():
             obj = evalfunctional(density, calcType)
-            # print(key, obj.energy * 27.21138)
+            # if hasattr(obj, 'energy'): print(key, obj.energy * 27.21138)
             if results is None :
                 results = obj
             else :
@@ -152,7 +152,7 @@ class EnergyEvaluatorMix(AbsFunctional):
         sub_evaluator = Evaluator(**funcdicts)
         return sub_evaluator
 
-    def get_embed_potential(self, rho, core_density = None, **kwargs):
+    def get_embed_potential(self, rho, core_density = None, with_global = False, **kwargs):
         if self.embed_evaluator is None :
             self.embed_potential = Field(grid=rho.grid, rank=1, direct=True)
             return
@@ -185,9 +185,10 @@ class EnergyEvaluatorMix(AbsFunctional):
         #-----------------------------------------------------------------------
         self.gsystem.set_density(rho + self.rest_rho)
         self.embed_potential -= self.embed_evaluator(rho, calcType = ['V']).potential
-        for key in self.gsystem.total_evaluator.funcdicts:
-            if key not in self.embed_evaluator.funcdicts:
-                remove_global[key] = self.gsystem.total_evaluator.funcdicts[key]
+        if not with_global :
+            for key in self.gsystem.total_evaluator.funcdicts:
+                if key not in self.embed_evaluator.funcdicts:
+                    remove_global[key] = self.gsystem.total_evaluator.funcdicts[key]
         self.gsystem.total_evaluator.update_functional(remove = remove_global)
         obj_global = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['V'])
         self.embed_potential += self.gsystem.sub_value(obj_global.potential, rho)
@@ -218,9 +219,12 @@ class EnergyEvaluatorMix(AbsFunctional):
     def rest_rho(self, value):
         self._rest_rho = value
 
-    def __call__(self, rho, calcType=["E","V"], with_global = True, **kwargs):
+    def __call__(self, rho, calcType=["E","V"], with_global = True, embed = True, **kwargs):
         # if self.embed_evaluator is not None :
-        if with_global :
+        #-----------------------------------------------------------------------
+        # embed = with_global
+        #-----------------------------------------------------------------------
+        if embed :
             return self.compute(rho, calcType, with_global = with_global, **kwargs)
         else :
             return self.compute_normal(rho, calcType, with_global = with_global, **kwargs)
@@ -240,9 +244,10 @@ class EnergyEvaluatorMix(AbsFunctional):
         if with_global :
             #-----------------------------------------------------------------------
             remove_global = {}
-            for key in self.embed_evaluator.funcdicts :
-                remove_global[key] = self.gsystem.total_evaluator.funcdicts[key]
-                self.gsystem.total_evaluator.update_functional(remove = remove_global)
+            if self.embed_evaluator is not None :
+                for key in self.embed_evaluator.funcdicts :
+                    remove_global[key] = self.gsystem.total_evaluator.funcdicts[key]
+                    self.gsystem.total_evaluator.update_functional(remove = remove_global)
             #-----------------------------------------------------------------------
             self.gsystem.set_density(rho + self.rest_rho)
             obj_global = self.gsystem.total_evaluator(self.gsystem.density, calcType = calcType)
@@ -261,9 +266,11 @@ class EnergyEvaluatorMix(AbsFunctional):
             obj = Functional(name = 'ZERO', energy=0.0, potential=potential)
         else :
             obj = self.sub_evaluator(rho, calcType = calcType)
+        # print('sub_energy', obj.energy)
 
         if self.embed_evaluator is not None :
             obj -= self.embed_evaluator(rho, calcType = calcType)
+            # print('emb_energy', self.embed_evaluator(rho).energy)
 
         if with_global :
             self.gsystem.set_density(rho + self.rest_rho)

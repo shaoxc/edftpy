@@ -15,6 +15,7 @@ class CastepKS(AbsDFT):
             grid = None, rho_ini = None, exttype = 3, castep_in_file = None, mixer = None, **kwargs):
         '''
         exttype :
+                    1 : only pseudo
                     2 : only hartree
                     3 : hartree and pseudo
         '''
@@ -40,10 +41,9 @@ class CastepKS(AbsDFT):
         self._filter = None
         self.mixer = mixer
         if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [1.0], predecut = None, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [1.0], predecut = 30.0, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.2, 1.0], maxm = 7, coef = [1.0], predecut = 30.0, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = None, delay = 1)
+            self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [1.0], predecut = None, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.2, 1.0], maxm = 7, coef = [1.0], predecut = 0, delay = 1)
             # self.mixer = LinearMixer(predtype =None, delay = 1, coef = [0.7])
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [1.0])
             # self.mixer = PulayMixer(predtype =None, predcoef = [0.2], maxm = 5, coef = [0.2])
@@ -185,10 +185,13 @@ class CastepKS(AbsDFT):
         #-----------------------------------------------------------------------
         self._iter += 1
         sym = True
+        self.perform_mix = True
         if self._iter == 1 :
-            caspytep.parameters.get_current_params().max_scf_cycles = 3
+            caspytep.parameters.get_current_params().max_scf_cycles = 2
+            self.perform_mix = False
         else :
             caspytep.parameters.get_current_params().max_scf_cycles = 1
+            self.perform_mix = False
 
         self._format_density(density, sym = sym)
 
@@ -196,11 +199,11 @@ class CastepKS(AbsDFT):
         #-----------------------------------------------------------------------
         extpot, extene = self._get_extpot(self.mdl.den, density.grid)
         if self._iter > 0 :
+            # print('perform_mix', self.exttype,self.perform_mix)
             self.mdl.converged = caspytep.electronic.electronic_minimisation_edft_ext(
                 self.mdl, extpot, extene, self.exttype, self.perform_mix)
         else :
             self.mdl.converged = caspytep.electronic.electronic_minimisation(self.mdl)
-        # copy the saved density as previous density
 
         caspytep.density.density_calculate_soft(self.mdl.wvfn,self.mdl.occ, self.mdl.den)
         if sym :
@@ -224,21 +227,22 @@ class CastepKS(AbsDFT):
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
         func = self.evaluator(density, calcType = ['E'], with_global = False)
+        etype = 2
         if 'E' in calcType :
-            xc_energy = caspytep.electronic.electronic_get_energy('xc_energy')
-            kinetic_energy = caspytep.electronic.electronic_get_energy('kinetic_energy')
-            func.energy = kinetic_energy + xc_energy
-            # total_energy = caspytep.electronic.electronic_get_energy('total_energy')
-            # # xc_energy = caspytep.electronic.electronic_get_energy('xc_energy')
-            # # kinetic_energy = caspytep.electronic.electronic_get_energy('kinetic_energy')
-            # # nonlocal_energy = caspytep.electronic.electronic_get_energy('nonlocal_energy')
-            # ion_ion_energy0 = caspytep.electronic.electronic_get_energy('ion_ion_energy0')
-            # locps_energy = caspytep.electronic.electronic_get_energy('locps_energy')
-            # hartree_energy = caspytep.electronic.electronic_get_energy('hartree_energy')
-            # ion_noncoulomb_energy = caspytep.electronic.electronic_get_energy('ion_noncoulomb_energy')
-            # # func.energy += total_energy - ion_ion_energy0 - locps_energy - 2.0 * ion_noncoulomb_energy - hartree_energy
-            # func.energy += total_energy - ion_ion_energy0 - locps_energy - ion_noncoulomb_energy - hartree_energy
-            # # func.energy += kinetic_energy + xc_energy
+            if etype == 1 :
+                xc_energy = caspytep.electronic.electronic_get_energy('xc_energy')
+                kinetic_energy = caspytep.electronic.electronic_get_energy('kinetic_energy')
+                ts = caspytep.electronic.electronic_get_energy('-TS')
+                func.energy += kinetic_energy + xc_energy + 0.5 * ts
+            else :
+                #-----------------------------------------------------------------------
+                total_energy = caspytep.electronic.electronic_get_energy('total_energy')
+                # nonlocal_energy = caspytep.electronic.electronic_get_energy('nonlocal_energy')
+                ion_ion_energy0 = caspytep.electronic.electronic_get_energy('ion_ion_energy0')
+                locps_energy = caspytep.electronic.electronic_get_energy('locps_energy')
+                hartree_energy = caspytep.electronic.electronic_get_energy('hartree_energy')
+                ion_noncoulomb_energy = caspytep.electronic.electronic_get_energy('ion_noncoulomb_energy')
+                func.energy += total_energy - ion_ion_energy0 - locps_energy - ion_noncoulomb_energy - hartree_energy
         return func
 
     def update_density(self, **kwargs):

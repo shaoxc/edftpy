@@ -44,7 +44,11 @@ class SpecialPrecondition :
             gg = self.grid.get_reciprocal().gg
             self._mask = np.zeros(self.grid.nrG, dtype = 'bool')
             if self._ecut is not None :
-                self._mask[gg > 2.0 * self._ecut] = True
+                if self._ecut < 2 :
+                    gmax = max(gg[:, 0, 0].max(), gg[0, :, 0].max(), gg[0, 0, :].max())
+                    self._mask[gg > gmax + 2] = True
+                else :
+                    self._mask[gg > 2.0 * self._ecut] = True
         return self._mask
 
     def kerker(self):
@@ -85,8 +89,8 @@ class SpecialPrecondition :
             res = Field(self.grid, data=residual, direct=True)
             results += res.fft()*self.matrix
         results[self.mask] = nout.fft()[self.mask]
-        # results[self.mask] = nin_g[self.mask] + 0.5 * nout.fft()[self.mask]
-
+        # results[self.mask] = nin_g[self.mask]*0.5 + 0.5 * nout.fft()[self.mask]
+        # results[self.mask] = nin_g[self.mask]
         return results.ifft(force_real=True)
 
     def add(self, density, residual = None, grid = None):

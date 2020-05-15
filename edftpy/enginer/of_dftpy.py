@@ -1,15 +1,20 @@
 import copy
 import numpy as np
+from functools import partial
+
 from ..mixer import LinearMixer, PulayMixer
 from ..utils.common import AbsDFT
+from .hamiltonian import Hamiltonian
 
 from dftpy.optimization import Optimization
+from dftpy.formats.io import write
 
 
 class DFTpyOF(AbsDFT):
     """description"""
-    def __init__(self, evaluator = None, grid = None, rho_ini = None, options = None, mixer = None, **kwargs):
+    def __init__(self, evaluator = None, grid = None, rho_ini = None, options = None, mixer = None, ions = None, **kwargs):
         default_options = {
+            "opt_method" : 'part',
             "method" :'CG-HS',
             "maxcor": 6,
             "ftol": 1.0e-7,
@@ -28,7 +33,8 @@ class DFTpyOF(AbsDFT):
             self.options.update(options)
 
         self.evaluator = evaluator
-        self.grid = grid
+        self._grid = grid
+        self._ions = ions
         self.rho = None
         self.fermi = None
         self.density = None
@@ -38,49 +44,100 @@ class DFTpyOF(AbsDFT):
         #-----------------------------------------------------------------------
         self.mixer = mixer
         if self.mixer is None :
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [1.0], predecut = None, delay = 1)
-            self.mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 0)
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.5], predecut = None, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = None, delay = 1)
+            # self.mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.2], predecut = None, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.3], predecut = 0, delay = 1)
+            # self.mixer = LinearMixer(predtype = None, coef = [1.0], predecut = 20, delay = 0)
+            # self.mixer = LinearMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [0.2], delay = 0)
+            # self.mixer = LinearMixer(predtype = None, coef = [0.5], predecut = 0, delay = 0)
             # self.mixer = LinearMixer(predtype = None, coef = [0.7], predecut = None, delay = 1)
-            # self.mixer = LinearMixer(predtype = 'inverse_kerker', predcoef = [0.8, 0.5], maxm = 5, coef = [0.5])
-            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [1.0], predecut = 20.0, delay = 1)
             # self.mixer = PulayMixer(predtype = None, predcoef = [0.8], maxm = 7, coef = [0.6], predecut = 20.0, delay = 5)
             # self.mixer = BroydenMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [1.0])
             # self.mixer = BroydenMixer(predtype =None, predcoef = [0.2], maxm = 7, coef = [1.0])
         #-----------------------------------------------------------------------
 
-    def get_density(self, density, vext = None, **kwargs):
+    @property
+    def grid(self):
+        if self._grid is None :
+            if hasattr(self.prev_density, 'grid'):
+                self._grid = self.prev_density.grid
+            elif hasattr(self.density, 'grid'):
+                self._grid = self.density.grid
+            else :
+                raise AttributeError("Must set grid firstly")
+        return self._grid
+
+    def get_density(self, density, **kwargs):
         self._iter += 1
         if self._iter == 1 :
             self.options['maxiter'] += 60
         elif self._iter == 2 :
             self.options['maxiter'] -= 60
+        self.prev_density = copy.deepcopy(density)
+        if self.options['opt_method'] == 'part' :
+            results = self.get_density_embed(density, **kwargs)
+        elif self.options['opt_method'] == 'full' :
+            results = self.get_density_full_opt(density, **kwargs)
+        elif self.options['opt_method'] == 'hamiltonian' :
+            results = self.get_density_hamiltonian(density)
+        return results
 
+    def get_density_full_opt(self, density, **kwargs):
         self.calc = Optimization(EnergyEvaluator=self.evaluator, guess_rho=density, optimization_options=self.options)
         self.calc.optimize_rho()
-        self.prev_density = copy.deepcopy(density)
-        return self.calc.rho
+        self.density = self.calc.rho
+        self.fermi_level = self.calc.mu
+        return self.density
+
+    def get_density_embed(self, density, **kwargs):
+        self.evaluator.get_embed_potential(density, with_global = True)
+        evaluator = partial(self.evaluator.compute, with_global = False)
+        self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options)
+        self.calc.optimize_rho()
+        self.density = self.calc.rho
+        self.fermi_level = self.calc.mu
+        #-----------------------------------------------------------------------
+        # phi = np.sqrt(self.density)
+        # residual = evaluator(self.density).potential*phi-self.fermi_level*phi
+        # print('rrrr', np.sum(residual ** 2), np.max(residual))
+        #-----------------------------------------------------------------------
+        return self.density
+
+    def get_density_hamiltonian(self, density, **kwargs):
+        potential = self.evaluator(density).potential
+        hamiltonian = Hamiltonian(potential, grid = self.grid)
+        eigens = hamiltonian.eigens()
+        eig = eigens[0][0]
+        rho = eigens[0][1] ** 2
+        self.density = rho * np.sum(density) / np.sum(rho)
+        self.fermi_level = eig
+        return self.density
 
     def get_kinetic_energy(self, **kwargs):
         pass
 
     def get_energy(self, density = None, **kwargs):
         if density is None :
-            density = self.calc.rho
-        energy = self.evaluator(density, calcType = ['E'], with_global = False).energy
+            density = self.density
+        energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False).energy
         return energy
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
-        func = self.evaluator(density, calcType = calcType, with_global = False)
+        func = self.evaluator(density, calcType = calcType, with_global = False, embed = False)
         return func
 
     def update_density(self, **kwargs):
-        r = self.calc.rho - self.prev_density
+        r = self.density - self.prev_density
         print('res_norm_of', self._iter, np.max(abs(r)), np.sqrt(np.sum(r * r)/np.size(r)))
-        self.density = self.mixer(self.prev_density, self.calc.rho, **kwargs)
+        self.density = self.mixer(self.prev_density, self.density, **kwargs)
+        # print('max',self.density.max(), self.density.min(), self.density.integral())
+        # write(str(self._iter) + '.xsf', self.density, self._ions)
         return self.density
 
     def get_fermi_level(self, **kwargs):
-        results = self.calc.mu
+        results = self.fermi_level
         return results
 
     def get_energy_part(self, ename, density = None, **kwargs):
