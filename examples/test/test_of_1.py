@@ -97,9 +97,5 @@ class Test(unittest.TestCase):
         return subsys_a, driver_a
 
 
-
 if __name__ == "__main__":
-    # unittest.main()
-    a = Test()
-    a.test_optim()
-    
+    unittest.main()
