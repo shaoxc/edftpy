@@ -31,7 +31,7 @@ class Test(unittest.TestCase):
 
         pp_al ='Al_OEPP_lda.recpot'
         posfile='fcc.vasp'
-        posfile='sub_al_al.vasp'
+        # posfile='sub_al_al.vasp'
 
         ions = io.read(path_pos+posfile, names=['Al'])
         gsystem = GlobalCell(ions, grid = None, ecut = 22.05, full = False, optfft = True)
@@ -68,7 +68,8 @@ class Test(unittest.TestCase):
         ewald_ = ewald(rho=rho, ions=ions, PME=True)
         energy += ewald_.energy
         print(energy)
-        self.assertTrue(np.isclose(energy, -10.117997349843236, rtol = 1E-3))
+        # self.assertTrue(np.isclose(energy, -10.117997349843236, rtol = 1E-3))
+        self.assertTrue(np.isclose(energy, -11.394097752526489, rtol = 1E-3))
 
     def gen_sub_of(self, ions, grid, pplist = None, index = None, atomicd = None, xc_kwargs = {}, ke_kwargs = {}, emb_ke_kwargs = {}, **kwargs):
         if atomicd is None :
