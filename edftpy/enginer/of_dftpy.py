@@ -45,7 +45,8 @@ class DFTpyOF(AbsDFT):
         self.mixer = mixer
         if self.mixer is None :
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.5], predecut = None, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = None, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.8], predecut = None, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [0.5], predecut = None, delay = 1)
             # self.mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
             # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.2], predecut = None, delay = 1)
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.3], predecut = 0, delay = 1)
@@ -93,7 +94,8 @@ class DFTpyOF(AbsDFT):
 
     def get_density_embed(self, density, **kwargs):
         self.evaluator.get_embed_potential(density, with_global = True)
-        evaluator = partial(self.evaluator.compute, with_global = False)
+        # evaluator = partial(self.evaluator.compute, with_global = False)
+        evaluator = self.evaluator.compute_only_ke
         self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options)
         self.calc.optimize_rho()
         self.density = self.calc.rho
@@ -121,11 +123,13 @@ class DFTpyOF(AbsDFT):
     def get_energy(self, density = None, **kwargs):
         if density is None :
             density = self.density
-        energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False).energy
+        # energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False).energy
+        energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True).energy
         return energy
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
-        func = self.evaluator(density, calcType = calcType, with_global = False, embed = False)
+        # func = self.evaluator(density, calcType = calcType, with_global = False, embed = False)
+        func = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True)
         return func
 
     def update_density(self, **kwargs):

@@ -42,10 +42,10 @@ class Optimization(object):
         d_e = max(diff_res)
         print('diff_res', diff_res)
         for i, driver in enumerate(self.opt_drivers):
-            # coef = driver.calculator.mixer.coef.copy()
-            # print('coef',coef, 'i', i)
-            # coef[0] = self.get_frag_coef(coef[0], d_e, diff_res[i])
-            # print('outcoef',coef)
+            coef = driver.calculator.mixer.coef.copy()
+            print('coef',coef, 'i', i)
+            coef[0] = self.get_frag_coef(coef[0], d_e, diff_res[i])
+            print('outcoef',coef)
             coef = None
             if update[i] :
                 denlist[i] = driver.update_density(coef = coef)
@@ -168,7 +168,7 @@ class Optimization(object):
         self.subdens = denlist
         return
 
-    def get_frag_coef(self, coef, d_e, sub_d_e, alpha = 1.0, maxs = 0.4):
+    def get_frag_coef(self, coef, d_e, sub_d_e, alpha = 1.0, maxs = 0.2):
         d_e = abs(d_e)
         sub_d_e = abs(sub_d_e)
         if d_e > 1E-10 :
