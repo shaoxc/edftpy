@@ -66,7 +66,7 @@ class OptDriver:
         rho_ini = self.prev_density
         #-----------------------------------------------------------------------
         self.energy_evaluator.rest_rho = gsystem.sub_value(gsystem.density, rho_ini) - rho_ini
-        self.energy_evaluator.get_embed_potential(rho_ini, core_density = self.core_density)
+        self.energy_evaluator.get_embed_potential(rho_ini, core_density = self.core_density, with_global = True)
         #-----------------------------------------------------------------------
         self.density = self.calculator.get_density(rho_ini)
         # self.calculator.get_density(rho_ini)

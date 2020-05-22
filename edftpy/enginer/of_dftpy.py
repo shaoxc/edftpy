@@ -44,7 +44,9 @@ class DFTpyOF(AbsDFT):
         #-----------------------------------------------------------------------
         self.mixer = mixer
         if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.5], predecut = None, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.3], predecut = None, delay = 1)
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
             # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.8], predecut = None, delay = 1)
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [0.5], predecut = None, delay = 1)
             # self.mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
@@ -93,8 +95,8 @@ class DFTpyOF(AbsDFT):
         return self.density
 
     def get_density_embed(self, density, **kwargs):
-        self.evaluator.get_embed_potential(density, with_global = True)
-        # evaluator = partial(self.evaluator.compute, with_global = False)
+        # self.evaluator.get_embed_potential(density, with_global = True)
+        # # evaluator = partial(self.evaluator.compute, with_global = False)
         evaluator = self.evaluator.compute_only_ke
         self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options)
         self.calc.optimize_rho()

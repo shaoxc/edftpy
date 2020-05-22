@@ -19,6 +19,7 @@ class SubCell(object):
             self._fake_core_density = None
         else :
             self._gen_fake_core_density(fake_core_options)
+        print('fake', np.sum(self._fake_core_density))
 
     @property
     def grid(self):
@@ -40,8 +41,6 @@ class SubCell(object):
 
     @property
     def fake_core_density(self):
-        # if self._fake_core_density is None:
-            # raise AttributeError("Must calculate density firstly")
         return self._fake_core_density
 
     @property
@@ -92,9 +91,9 @@ class SubCell(object):
         gaps = self.grid.spacings
         self._fake_core_density = Field(self.grid)
         for key, option in options.items() :
-            rcut = option.get('rcut', 3.0)
-            sigma = option.get('sigma', 0.5)
-            scale = option.get('scale', 0.5)
+            rcut = option.get('rcut', 5.0)
+            sigma = option.get('sigma', 0.3)
+            scale = option.get('scale', 1.0)
             border = (rcut / gaps).astype(np.int32) + 1
             ixyzA = np.mgrid[-border[0]:border[0]+1, -border[1]:border[1]+1, -border[2]:border[2]+1].reshape((3, -1))
             prho = np.zeros((2 * border[0]+1, 2 * border[1]+1, 2 * border[2]+1))
@@ -112,6 +111,7 @@ class SubCell(object):
                 dists = LA.norm(positions, axis = 0).reshape(prho.shape)
                 index = dists < rcut
                 prho[index] = gaussian(dists[index], sigma) * scale
+                # prho[index] = gaussian(dists[index], sigma, dim = 0) * scale
                 self._fake_core_density[l123A[0], l123A[1], l123A[2]] += prho.ravel()
 
 class GlobalCell(object):
@@ -122,6 +122,7 @@ class GlobalCell(object):
         if self._grid is None :
             self._gen_grid(ecut = ecut, spacing = spacing, full = full, optfft = optfft, **kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
+        self._fake_core_density = Field(grid=self.grid, rank=1, direct=True)
 
     @property
     def grid(self):
@@ -162,26 +163,40 @@ class GlobalCell(object):
         grid = Grid(lattice=lattice, nr=nr, full=full, direct = True, **kwargs)
         self._grid = grid
 
-    def update_density(self, subrho, restart = False):
-        indl = subrho.grid.shift
-        nr_sub = subrho.grid.nr
-        indr = indl + nr_sub
-        if restart :
-            # self._density[:] = 0.0
-            self._density[:] = 1E-30
-        self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
+    def update_density(self, subrho, grid = None, restart = False, fake = False):
+        indl, indr = self.get_boundary(subrho, grid)
+        if fake :
+            if restart :
+                self._fake_core_density[:] = 1E-30
+            self._fake_core_density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
+        else :
+            if restart :
+                self._density[:] = 1E-30
+            self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
         return self._density
 
-    def sub_value(self, total, subrho):
-        indl = subrho.grid.shift
-        nr_sub = subrho.grid.nr
-        indr = indl + nr_sub
+    def sub_value(self, total, subrho, grid = None):
+        indl, indr = self.get_boundary(subrho, grid)
         value = total[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]].copy()
         return value 
 
-    def set_density(self, subrho, restart = False):
-        indl = subrho.grid.shift
-        nr_sub = subrho.grid.nr
+    def set_density(self, subrho, grid = None, restart = False, fake = False):
+        indl, indr = self.get_boundary(subrho, grid)
+        if fake :
+            self._fake_core_density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
+            return self._fake_core_density
+        else :
+            self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] = subrho
+            return self._density
+
+    def get_boundary(self, subrho, grid = None):
+        if grid is None :
+            grid = subrho.grid
+        indl = grid.shift
+        nr_sub = grid.nr
         indr = indl + nr_sub
-        self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] = subrho
-        return self._density
+        return indl, indr
+
+    @property
+    def fake_core_density(self):
+        return self._fake_core_density

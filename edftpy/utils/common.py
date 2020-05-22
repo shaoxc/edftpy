@@ -7,7 +7,7 @@ from dftpy.base import DirectCell
 from abc import ABC, abstractmethod
 
 
-def Grid(lattice, nr, direct = True, origin = None, units=None, full=False, uppergrid = None, **kwargs):
+def Grid(lattice, nr, direct = True, origin=np.array([0.0, 0.0, 0.0]), units=None, full=False, uppergrid = None, **kwargs):
     if direct :
         obj = DirectGrid(lattice, nr, origin = origin, units=units, full=full, uppergrid = uppergrid, **kwargs)
     else :

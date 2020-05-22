@@ -23,6 +23,7 @@ class CastepKS(AbsDFT):
         self.grid = grid
         self.prefix = prefix
         self.exttype = exttype
+        self._ions = ions
         self.rho = None
         self.wfs = None
         self.occupations = None
@@ -41,7 +42,10 @@ class CastepKS(AbsDFT):
         self._filter = None
         self.mixer = mixer
         if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
+            self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
+            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.2, 1.0], maxm = 7, coef = [0.3], predecut = 0, delay = 1)
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [1.0], predecut = None, delay = 1)
             # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.2, 1.0], maxm = 7, coef = [1.0], predecut = 0, delay = 1)
             # self.mixer = LinearMixer(predtype =None, delay = 1, coef = [0.7])
@@ -149,12 +153,16 @@ class CastepKS(AbsDFT):
 
     def _get_extpot(self, charge, grid, **kwargs):
         rho = self._format_density_invert(charge, grid, **kwargs)
-        func = self.evaluator(rho)
+        # func = self.evaluator(rho)
+        # # func.potential *= self.filter
+        # extpot = func.potential.ravel(order = 'F')
+        # extene = func.energy
         #-----------------------------------------------------------------------
-        # func.potential *= self.filter
+        # self.evaluator.get_embed_potential(rho, with_global = True)
+        extpot = self.evaluator.embed_potential
+        extene = (extpot * rho).integral()
+        extpot = extpot.ravel(order = 'F')
         #-----------------------------------------------------------------------
-        extpot = func.potential.ravel(order = 'F')
-        extene = func.energy
         return extpot, extene
 
     def _windows_function(self, grid, alpha = 0.5, bd = [5, 5, 5], **kwargs):
@@ -286,3 +294,9 @@ class CastepKS(AbsDFT):
             raise AttributeError("!ERROR : not contains this energy", ename)
         energy = caspytep.electronic.electronic_get_energy(key)
         return energy
+
+    def get_forces(self, **kwargs):
+        forces = np.empty((3, self._ions.nat))
+        caspytep.firstd.firstd_calculate_forces_edft_ext(self.mdl, forces, 2)
+        forces = np.transpose(forces)
+        return forces
