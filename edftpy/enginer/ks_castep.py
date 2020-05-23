@@ -12,7 +12,7 @@ from ..utils.common import AbsDFT
 class CastepKS(AbsDFT):
     """description"""
     def __init__(self, evaluator = None, prefix = 'castep_in_sub', ions = None, params = None, cell_params = None, 
-            grid = None, rho_ini = None, exttype = 3, castep_in_file = None, mixer = None, **kwargs):
+            grid = None, rho_ini = None, exttype = 3, castep_in_file = None, mixer = None, core_density = None, **kwargs):
         '''
         exttype :
                     1 : only pseudo
@@ -24,6 +24,7 @@ class CastepKS(AbsDFT):
         self.prefix = prefix
         self.exttype = exttype
         self._ions = ions
+        self.core_density = core_density
         self.rho = None
         self.wfs = None
         self.occupations = None
@@ -153,12 +154,12 @@ class CastepKS(AbsDFT):
 
     def _get_extpot(self, charge, grid, **kwargs):
         rho = self._format_density_invert(charge, grid, **kwargs)
-        # func = self.evaluator(rho)
+        # func = self.evaluator(rho, embed = False)
         # # func.potential *= self.filter
         # extpot = func.potential.ravel(order = 'F')
         # extene = func.energy
         #-----------------------------------------------------------------------
-        # self.evaluator.get_embed_potential(rho, with_global = True)
+        self.evaluator.get_embed_potential(rho, core_density = self.core_density, with_global = True)
         extpot = self.evaluator.embed_potential
         extene = (extpot * rho).integral()
         extpot = extpot.ravel(order = 'F')
@@ -229,12 +230,12 @@ class CastepKS(AbsDFT):
         ion_ion_energy0 = caspytep.electronic.electronic_get_energy('ion_ion_energy0')
         if density is None :
             density = self._format_density_invert(self.mdl.den, self.grid)
-        energy = self.evaluator(density, calcType = ['E'], with_global = False).energy
+        energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False).energy
         energy += total_energy - ion_ion_energy0
         return energy
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
-        func = self.evaluator(density, calcType = ['E'], with_global = False)
+        func = self.evaluator(density, calcType = ['E'], with_global = False, embed = False)
         etype = 2
         if 'E' in calcType :
             if etype == 1 :

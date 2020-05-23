@@ -19,7 +19,7 @@ class SubCell(object):
             self._fake_core_density = None
         else :
             self._gen_fake_core_density(fake_core_options)
-        print('fake', np.sum(self._fake_core_density))
+            print('fake density', np.sum(self._fake_core_density) * self.grid.dV)
 
     @property
     def grid(self):
@@ -92,7 +92,7 @@ class SubCell(object):
         self._fake_core_density = Field(self.grid)
         for key, option in options.items() :
             rcut = option.get('rcut', 5.0)
-            sigma = option.get('sigma', 0.3)
+            sigma = option.get('sigma', 0.4)
             scale = option.get('scale', 1.0)
             border = (rcut / gaps).astype(np.int32) + 1
             ixyzA = np.mgrid[-border[0]:border[0]+1, -border[1]:border[1]+1, -border[2]:border[2]+1].reshape((3, -1))
@@ -113,6 +113,12 @@ class SubCell(object):
                 prho[index] = gaussian(dists[index], sigma) * scale
                 # prho[index] = gaussian(dists[index], sigma, dim = 0) * scale
                 self._fake_core_density[l123A[0], l123A[1], l123A[2]] += prho.ravel()
+
+        ncharge = 0.0
+        for i in range(self.ions.nat) :
+            ncharge += self.ions.Zval[self.ions.labels[i]]
+        factor = ncharge / (np.sum(self._fake_core_density) * self.grid.dV)
+        self._fake_core_density *= factor
 
 class GlobalCell(object):
     def __init__(self, ions, grid = None, ecut = 22, spacing = None, full = False, optfft = True, **kwargs):

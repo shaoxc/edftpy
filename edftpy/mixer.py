@@ -227,7 +227,7 @@ class PulayMixer(AbstractMixer):
 
             try:
                 x = linalg.solve(amat, b, assume_a = 'sym')
-                print('x', x)
+                # print('x', x)
                 for i in range(ns):
                     if i == 0 :
                         drho = nin + x[i] * self.dn_mat[i]

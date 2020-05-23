@@ -12,9 +12,11 @@ from dftpy.formats.io import write
 
 class DFTpyOF(AbsDFT):
     """description"""
-    def __init__(self, evaluator = None, grid = None, rho_ini = None, options = None, mixer = None, ions = None, **kwargs):
+    def __init__(self, evaluator = None, grid = None, rho_ini = None, options = None, mixer = None, 
+            ions = None, core_density = None, **kwargs):
         default_options = {
             "opt_method" : 'part',
+            # "opt_method" : 'full',
             "method" :'CG-HS',
             "maxcor": 6,
             "ftol": 1.0e-7,
@@ -33,6 +35,7 @@ class DFTpyOF(AbsDFT):
             self.options.update(options)
 
         self.evaluator = evaluator
+        self.core_density = core_density
         self._grid = grid
         self._ions = ions
         self.rho = None
@@ -45,7 +48,7 @@ class DFTpyOF(AbsDFT):
         self.mixer = mixer
         if self.mixer is None :
             # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.3], predecut = None, delay = 1)
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 0)
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
             # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.8], predecut = None, delay = 1)
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [0.5], predecut = None, delay = 1)
@@ -88,14 +91,16 @@ class DFTpyOF(AbsDFT):
         return results
 
     def get_density_full_opt(self, density, **kwargs):
-        self.calc = Optimization(EnergyEvaluator=self.evaluator, guess_rho=density, optimization_options=self.options)
+        self.evaluator.get_embed_potential(density, core_density = self.core_density, with_global = False, with_sub = False)
+        evaluator = self.evaluator.compute_embed
+        self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options)
         self.calc.optimize_rho()
         self.density = self.calc.rho
         self.fermi_level = self.calc.mu
         return self.density
 
     def get_density_embed(self, density, **kwargs):
-        # self.evaluator.get_embed_potential(density, with_global = True)
+        self.evaluator.get_embed_potential(density, core_density = self.core_density, with_global = True)
         # # evaluator = partial(self.evaluator.compute, with_global = False)
         evaluator = self.evaluator.compute_only_ke
         self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options)
@@ -110,7 +115,9 @@ class DFTpyOF(AbsDFT):
         return self.density
 
     def get_density_hamiltonian(self, density, **kwargs):
-        potential = self.evaluator(density).potential
+        self.evaluator.get_embed_potential(density, core_density = self.core_density, with_global = True)
+        # potential = self.evaluator(density).potential
+        potential = self.evaluator.embed_potential
         hamiltonian = Hamiltonian(potential, grid = self.grid)
         eigens = hamiltonian.eigens()
         eig = eigens[0][0]

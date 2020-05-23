@@ -4,7 +4,7 @@ from ..hartree import Hartree
 
 class OptDriver:
 
-    def __init__(self, energy_evaluator = None, embed_evaluator = None, sub_evaluator = None, options=None, calculator = None, core_density = None, **kwargs):
+    def __init__(self, energy_evaluator = None, embed_evaluator = None, sub_evaluator = None, options=None, calculator = None, **kwargs):
         default_options = {
                 'update_delay' : 5, 
                 'update_freq' : 1
@@ -15,7 +15,6 @@ class OptDriver:
 
         self.energy_evaluator = energy_evaluator
         self.calculator = calculator
-        self.core_density = core_density
         if self.energy_evaluator is None :
             self.get_energy_evaluator(embed_evaluator, sub_evaluator, **kwargs)
         if self.calculator is not None :
@@ -66,7 +65,6 @@ class OptDriver:
         rho_ini = self.prev_density
         #-----------------------------------------------------------------------
         self.energy_evaluator.rest_rho = gsystem.sub_value(gsystem.density, rho_ini) - rho_ini
-        self.energy_evaluator.get_embed_potential(rho_ini, core_density = self.core_density, with_global = True)
         #-----------------------------------------------------------------------
         self.density = self.calculator.get_density(rho_ini)
         # self.calculator.get_density(rho_ini)
