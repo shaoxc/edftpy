@@ -31,7 +31,6 @@ class Test(unittest.TestCase):
 
         pp_al ='Al_OEPP_lda.recpot'
         posfile='fcc.vasp'
-        # posfile='sub_al_al.vasp'
 
         ions = io.read(path_pos+posfile, names=['Al'])
         gsystem = GlobalCell(ions, grid = None, ecut = 22.05, full = False, optfft = True)
@@ -46,53 +45,64 @@ class Test(unittest.TestCase):
         ke = KEDF(**emb_ke_kwargs)
         funcdicts = {'KE' :ke, 'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
         total_evaluator = Evaluator(**funcdicts)
-        ############################## Subsytem ##############################
         denfiles= {'Al': data_path + 'Al.LDA.gz'} 
         ftypes = {'Al': 'xml'}
         atomicd = AtomicDensity(denfiles, ftypes = ftypes)
-        ke_kwargs = {}
-        index_a = None
-        subsys_a, driver_a = self.gen_sub_of(ions, grid, pplist, index_a, atomicd, xc_kwargs, ke_kwargs, emb_ke_kwargs = emb_ke_kwargs)
-        opt_drivers = [driver_a]
-        rho_ini = [subsys_a.density]
+        atomicd = AtomicDensity()
         #-----------------------------------------------------------------------
         gsystem.total_evaluator = total_evaluator
         #-----------------------------------------------------------------------
-        optimization_options = {'econv' : 1e-8, 'maxiter' : 80}
-        # optimization_options = {'econv' : 1e-8, 'maxiter' : 1}
-        optimization_options["econv"] *= ions.nat
-        opt = Optimization(opt_drivers = opt_drivers, options = optimization_options)
-        opt.optimize(gsystem = gsystem, guess_rho=rho_ini)
-        rho = opt.density
-        energy = opt.energy
-        ewald_ = ewald(rho=rho, ions=ions, PME=True)
-        energy += ewald_.energy
+
+        def test_ke(ke_kwargs):
+            index_a = None
+            subsys_a, driver_a = self.gen_sub_of(ions, grid, pplist, index_a, atomicd, xc_kwargs, ke_kwargs, emb_ke_kwargs = emb_ke_kwargs)
+            opt_drivers = [driver_a]
+            rho_ini = [subsys_a.density]
+            optimization_options = {'econv' : 1e-8, 'maxiter' : 70}
+            optimization_options["econv"] *= ions.nat
+            opt = Optimization(opt_drivers = opt_drivers, options = optimization_options)
+            opt.optimize(gsystem = gsystem, guess_rho=rho_ini)
+            rho = opt.density
+            energy = opt.energy
+            ewald_ = ewald(rho=rho, ions=ions, PME=True)
+            energy += ewald_.energy
+            return energy
+
+        # Test TFvW-KE
+        ke_kwargs = {'name' :'TF'}
+        energy = test_ke(ke_kwargs)
+        self.assertTrue(np.isclose(energy, -8.281114354275829, rtol = 1E-3))
+        # Test vW-KE
         print(energy)
-        # self.assertTrue(np.isclose(energy, -10.117997349843236, rtol = 1E-3))
+        ke_kwargs = None
+        energy = test_ke(ke_kwargs)
         self.assertTrue(np.isclose(energy, -11.394097752526489, rtol = 1E-3))
 
     def gen_sub_of(self, ions, grid, pplist = None, index = None, atomicd = None, xc_kwargs = {}, ke_kwargs = {}, emb_ke_kwargs = {}, **kwargs):
         if atomicd is None :
             atomicd = AtomicDensity()
         #-----------------------------------------------------------------------
-        # ke_sub_a = KEDF(**ke_kwargs)
-        # sub_funcdicts_a = {'KE' :ke_sub_a}
-        # sub_evaluator_a = Evaluator(**sub_funcdicts_a)
-        sub_evaluator_a = None
+        if ke_kwargs is None or len(ke_kwargs) == 0 :
+            sub_evaluator_a = None
+        else :
+            ke_sub_a = KEDF(**ke_kwargs)
+            sub_funcdicts_a = {'KE' :ke_sub_a}
+            sub_evaluator_a = Evaluator(**sub_funcdicts_a)
 
         ke_emb_a = KEDF(**emb_ke_kwargs)
         emb_funcdicts_a = {'KE' :ke_emb_a}
         emb_evaluator_a = Evaluator(**emb_funcdicts_a)
 
-        # subsys_a = SubCell(ions, grid, index = index, cellcut = [0.0, 0.0, 10.5], optfft = True)
-        subsys_a = SubCell(ions, grid, index = index, cellcut = [0.0, 0.0, 0.0], optfft = True)
+        subsys_a = SubCell(ions, grid, index = index, cellcut = [0.0, 0.0, 10.5], optfft = True)
+        # subsys_a = SubCell(ions, grid, index = index, cellcut = [0.0, 0.0, 0.0], optfft = True)
         ions_a = subsys_a.ions
         rho_a = subsys_a.density
         rho_a[:] = atomicd.guess_rho(ions_a, subsys_a.grid)
         options = {"method" :'CG-HS', "maxiter": 220, "econv": 1.0e-6, "ncheck": 2}
         ke_evaluator = KEDF(name='vW')
         energy_evaluator = EnergyEvaluatorMix(embed_evaluator = emb_evaluator_a, sub_evaluator = sub_evaluator_a, ke_evaluator = ke_evaluator, **kwargs)
-        mixer = PulayMixer(predtype = 'kerker', predcoef = [0.2, 1.0], maxm = 7, coef = [0.4], predecut = None, delay = 1)
+        # mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.6], predecut = 0.0, delay = 1)
+        mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.8], predecut = 0, delay = 1)
         of_enginer_a = DFTpyOF(mixer = mixer, options = options)
         driver_a = OptDriver(energy_evaluator = energy_evaluator, calculator = of_enginer_a)
         return subsys_a, driver_a

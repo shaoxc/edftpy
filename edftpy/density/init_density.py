@@ -171,6 +171,7 @@ class AtomicDensity(object):
             for i in range(ions.nat):
                 if ions.labels[i] != key:
                     continue
+                prho[:] = 0.0
                 posi = ions.pos[i].reshape((1, 3))
                 atomp = np.array(posi.to_crys()) * nr
                 atomp = atomp.reshape((3, 1))

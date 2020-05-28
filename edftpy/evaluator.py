@@ -145,13 +145,16 @@ class EnergyEvaluatorMix(AbsFunctional):
         sub_evaluator = Evaluator(**funcdicts)
         return sub_evaluator
 
-    def get_embed_potential(self, rho, core_density = None, with_global = False, with_sub = True, **kwargs):
+    def get_embed_potential(self, rho, gaussian_density = None, with_global = False, with_sub = True, **kwargs):
+        print('gaussian_density', gaussian_density is not None, self.gsystem.gaussian_density is not None, self.mod_type)
         self.gsystem.set_density(rho + self.rest_rho)
-        if core_density is not None :
-            # key = 'KE'
-            for key, value in self.embed_evaluator.funcdicts.items():
-                if isinstance(value, KEDF):
-                    break
+
+        key = None
+        for k, value in self.embed_evaluator.funcdicts.items():
+            if isinstance(value, KEDF):
+                key = k
+                break
+        if key is not None and gaussian_density is not None :
             remove_embed = {key : self.embed_evaluator.funcdicts[key]}
             ke_embed = self.embed_evaluator.funcdicts[key]
             self.embed_evaluator.update_functional(remove = remove_embed)
@@ -161,29 +164,19 @@ class EnergyEvaluatorMix(AbsFunctional):
             remove_global = {key : self.gsystem.total_evaluator.funcdicts[key]}
             ke_global = self.gsystem.total_evaluator.funcdicts[key]
             #-----------------------------------------------------------------------
-            if self.mod_type == 0 : # Without core_density
+            if self.mod_type == 0 : # Without gaussian_density
                 self.embed_potential = -ke_embed(rho, calcType = ['V']).potential
                 obj_global = ke_global(self.gsystem.density, calcType = ['V'])
-            elif self.mod_type == 1 : # core_density add to subsytem and global system
-                self.embed_potential = -ke_embed(core_density + rho, calcType = ['V']).potential * 0.5
-                obj_global = ke_global(self.gsystem.fake_core_density + self.gsystem.density, calcType = ['V']) * 0.5
-            elif self.mod_type == 2 : # core_density only add to global system
+            elif self.mod_type == 1 : # gaussian_density add to subsytem and global system
+                self.embed_potential = -ke_embed(gaussian_density + rho, calcType = ['V']).potential
+                obj_global = ke_global(self.gsystem.gaussian_density + self.gsystem.density, calcType = ['V'])
+            elif self.mod_type == 2 : # gaussian_density only add to global system (the worst)
                 self.embed_potential = -ke_embed(rho, calcType = ['V']).potential
-                obj_global = ke_global(self.gsystem.fake_core_density + self.gsystem.density, calcType = ['V']) * 0.5
-            elif self.mod_type == 3 : # Only use core_density
-                self.embed_potential = -ke_embed(core_density, calcType = ['V']).potential
-                obj_global = ke_global(self.gsystem.fake_core_density, calcType = ['V'])
-            elif self.mod_type == 101 : # Just for debug
-                self.embed_potential = -ke_embed(rho, calcType = ['V']).potential
-                self.gsystem.set_density(rho + self.rest_rho + core_density)
-                # self.gsystem.set_density(core_density)
-                obj_global = ke_global(self.gsystem.density, calcType = ['V'])
-            elif self.mod_type == 102 : # Just for debug
-                self.embed_potential = -ke_embed(rho, calcType = ['V']).potential * 2.0
-                obj_global = ke_global(self.gsystem.density, calcType = ['V']) * 2.0
-            #-----------------------------------------------------------------------
+                obj_global = ke_global(self.gsystem.gaussian_density + self.gsystem.density, calcType = ['V'])
+            elif self.mod_type == 3 : # Only use gaussian_density
+                self.embed_potential = -ke_embed(gaussian_density, calcType = ['V']).potential
+                obj_global = ke_global(self.gsystem.gaussian_density, calcType = ['V'])
             self.embed_potential += self.gsystem.sub_value(obj_global.potential, rho)
-            print('core_density ', self.mod_type)
         else :
             remove_global = {}
             remove_embed = {}

@@ -12,7 +12,7 @@ from ..utils.common import AbsDFT
 class CastepKS(AbsDFT):
     """description"""
     def __init__(self, evaluator = None, prefix = 'castep_in_sub', ions = None, params = None, cell_params = None, 
-            grid = None, rho_ini = None, exttype = 3, castep_in_file = None, mixer = None, core_density = None, **kwargs):
+            grid = None, rho_ini = None, exttype = 3, castep_in_file = None, mixer = None, gaussian_density = None, **kwargs):
         '''
         exttype :
                     1 : only pseudo
@@ -24,7 +24,7 @@ class CastepKS(AbsDFT):
         self.prefix = prefix
         self.exttype = exttype
         self._ions = ions
-        self.core_density = core_density
+        self.gaussian_density = gaussian_density
         self.rho = None
         self.wfs = None
         self.occupations = None
@@ -65,9 +65,10 @@ class CastepKS(AbsDFT):
                     value = []
                     for k2, v2 in v1.items() :
                         value.append((k2, v2))
+                        # ase_cell.__setattr__(k1, (k2, v2))
                     ase_cell.__setattr__(k1, value)
-            else :
-                ase_cell.__setattr__(k1, v1)
+                else :
+                    ase_cell.__setattr__(k1, v1)
 
         if castep_in_file is not None :
             calc = ase_io_castep.read_param(castep_in_file)
@@ -118,6 +119,9 @@ class CastepKS(AbsDFT):
         current_params.max_scf_cycles = 1
         self.mdl = mdl
         #-----------------------------------------------------------------------
+        caspytep.density.density_symmetrise(self.mdl.den)
+        self.mdl.den.real_charge[self.mdl.den.real_charge < 1E-30] = 1E-30
+        #-----------------------------------------------------------------------
         if rho_ini is not None :
             self._format_density(rho_ini, sym = True)
         #-----------------------------------------------------------------------
@@ -159,7 +163,7 @@ class CastepKS(AbsDFT):
         # extpot = func.potential.ravel(order = 'F')
         # extene = func.energy
         #-----------------------------------------------------------------------
-        self.evaluator.get_embed_potential(rho, core_density = self.core_density, with_global = True)
+        self.evaluator.get_embed_potential(rho, gaussian_density = self.gaussian_density, with_global = True)
         extpot = self.evaluator.embed_potential
         extene = (extpot * rho).integral()
         extpot = extpot.ravel(order = 'F')
@@ -204,7 +208,7 @@ class CastepKS(AbsDFT):
 
         self._format_density(density, sym = sym)
 
-        self.prev_density = copy.deepcopy(self.mdl.den.real_charge[:])
+        # self.prev_density = copy.deepcopy(self.mdl.den.real_charge[:])
         #-----------------------------------------------------------------------
         extpot, extene = self._get_extpot(self.mdl.den, density.grid)
         if self._iter > 0 :
@@ -213,12 +217,14 @@ class CastepKS(AbsDFT):
                 self.mdl, extpot, extene, self.exttype, self.perform_mix)
         else :
             self.mdl.converged = caspytep.electronic.electronic_minimisation(self.mdl)
+        self.prev_density = copy.deepcopy(self.mdl.den.real_charge[:])
 
         caspytep.density.density_calculate_soft(self.mdl.wvfn,self.mdl.occ, self.mdl.den)
         if sym :
             caspytep.density.density_symmetrise(self.mdl.den)
             caspytep.density.density_augment(self.mdl.wvfn,self.mdl.occ,self.mdl.den)
         rho = self._format_density_invert(self.mdl.den, density.grid)
+        print('KS_Chemical_potential ', self.get_fermi_level())
         return rho
 
     def get_kinetic_energy(self, **kwargs):

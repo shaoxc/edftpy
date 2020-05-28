@@ -55,7 +55,7 @@ class Optimization(object):
         # if mu is not None :
         if 0 :
             print('mu', mu)
-            scale = 0.1
+            scale = 0.05
             mu = np.array(mu)
             mu_av = np.mean(mu)
             d_mu = mu - mu_av
@@ -67,7 +67,7 @@ class Optimization(object):
             d_Ni -= np.sum(d_Ni)/len(d_Ni)
             print('Ni', Ni)
             print('d_Ni', d_Ni)
-            if np.max(d_Ni) > 1E-2 :
+            if np.max(np.abs(d_Ni)) > 1E-2 :
                 Ni_new = Ni + d_Ni * scale
                 print('Ni_new', Ni_new)
                 for i, rho_in in enumerate(denlist):
@@ -148,7 +148,11 @@ class Optimization(object):
                     mu_list[i] = driver.mu
             res_norm = self.get_diff_residual()
             #-----------------------------------------------------------------------
-            totalrho, denlist = self.update_density(denlist, prev_denlist, mu = mu_list, update = update)
+            if it > 3 :
+                totalrho, denlist = self.update_density(denlist, prev_denlist, mu = mu_list, update = update)
+            else :
+                totalrho, denlist = self.update_density(denlist, prev_denlist, mu = None, update = update)
+
             totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
             func_list[i + 1] = totalfunc
             energy = self.get_energy(func_list)

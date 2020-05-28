@@ -8,18 +8,18 @@ from numpy import linalg as LA
 
 
 class SubCell(object):
-    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, fake_core_options = None, **kwargs):
+    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, gaussian_options = None, **kwargs):
         self._grid = None
         self._ions = None
         self._density = None
 
         self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, **kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
-        if fake_core_options is None or len(fake_core_options)==0:
-            self._fake_core_density = None
+        if gaussian_options is None or len(gaussian_options)==0:
+            self._gaussian_density = None
         else :
-            self._gen_fake_core_density(fake_core_options)
-            print('fake density', np.sum(self._fake_core_density) * self.grid.dV)
+            self._gen_gaussian_density(gaussian_options)
+            print('gaussian density', np.sum(self._gaussian_density) * self.grid.dV)
 
     @property
     def grid(self):
@@ -40,8 +40,8 @@ class SubCell(object):
         return self._density
 
     @property
-    def fake_core_density(self):
-        return self._fake_core_density
+    def gaussian_density(self):
+        return self._gaussian_density
 
     @property
     def shift(self):
@@ -85,25 +85,31 @@ class SubCell(object):
         self._ions = ions_sub
         self._shift = shift
 
-    def _gen_fake_core_density(self, options={}):
+    def _gen_gaussian_density(self, options={}):
         nr = self.grid.nr
         dnr = (1.0/nr).reshape((3, 1))
         gaps = self.grid.spacings
-        self._fake_core_density = Field(self.grid)
+        # latp = self.grid.latparas
+        self._gaussian_density = Field(self.grid)
+        ncharge = 0.0
         for key, option in options.items() :
             rcut = option.get('rcut', 5.0)
             sigma = option.get('sigma', 0.4)
             scale = option.get('scale', 1.0)
+            # scale = option.get('scale', self.ions.Zval[key])
             border = (rcut / gaps).astype(np.int32) + 1
+            border = np.minimum(border, nr//2)
             ixyzA = np.mgrid[-border[0]:border[0]+1, -border[1]:border[1]+1, -border[2]:border[2]+1].reshape((3, -1))
             prho = np.zeros((2 * border[0]+1, 2 * border[1]+1, 2 * border[2]+1))
             for i in range(self.ions.nat):
                 if self.ions.labels[i] != key:
                     continue
+                prho[:] = 0.0
                 posi = self.ions.pos[i].reshape((1, 3))
                 atomp = np.array(posi.to_crys()) * nr
                 atomp = atomp.reshape((3, 1))
-                ipoint = np.floor(atomp) 
+                ipoint = np.floor(atomp + 1E-8) 
+                # ipoint = np.floor(atomp)
                 px = atomp - ipoint
                 l123A = np.mod(ipoint.astype(np.int32) - ixyzA, nr[:, None])
                 positions = (ixyzA + px) * dnr
@@ -112,13 +118,18 @@ class SubCell(object):
                 index = dists < rcut
                 prho[index] = gaussian(dists[index], sigma) * scale
                 # prho[index] = gaussian(dists[index], sigma, dim = 0) * scale
-                self._fake_core_density[l123A[0], l123A[1], l123A[2]] += prho.ravel()
+                self._gaussian_density[l123A[0], l123A[1], l123A[2]] += prho.ravel()
+                ncharge += scale
 
-        ncharge = 0.0
-        for i in range(self.ions.nat) :
-            ncharge += self.ions.Zval[self.ions.labels[i]]
-        factor = ncharge / (np.sum(self._fake_core_density) * self.grid.dV)
-        self._fake_core_density *= factor
+        if ncharge > 1E-3 :
+            factor = ncharge / (np.sum(self._gaussian_density) * self.grid.dV)
+        else :
+            factor = 0.0
+        print('fake01', np.sum(self._gaussian_density) * self.grid.dV)
+        self._gaussian_density *= factor
+        print('fake02', np.sum(self._gaussian_density) * self.grid.dV)
+        # rho_g = self._gaussian_density.fft()
+        # self._gaussian_density = rho_g.ifft()
 
 class GlobalCell(object):
     def __init__(self, ions, grid = None, ecut = 22, spacing = None, full = False, optfft = True, **kwargs):
@@ -128,7 +139,7 @@ class GlobalCell(object):
         if self._grid is None :
             self._gen_grid(ecut = ecut, spacing = spacing, full = full, optfft = optfft, **kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
-        self._fake_core_density = Field(grid=self.grid, rank=1, direct=True)
+        self._gaussian_density = Field(grid=self.grid, rank=1, direct=True)
 
     @property
     def grid(self):
@@ -173,8 +184,8 @@ class GlobalCell(object):
         indl, indr = self.get_boundary(subrho, grid)
         if fake :
             if restart :
-                self._fake_core_density[:] = 1E-30
-            self._fake_core_density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
+                self._gaussian_density[:] = 1E-30
+            self._gaussian_density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
         else :
             if restart :
                 self._density[:] = 1E-30
@@ -189,8 +200,8 @@ class GlobalCell(object):
     def set_density(self, subrho, grid = None, restart = False, fake = False):
         indl, indr = self.get_boundary(subrho, grid)
         if fake :
-            self._fake_core_density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
-            return self._fake_core_density
+            self._gaussian_density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
+            return self._gaussian_density
         else :
             self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] = subrho
             return self._density
@@ -204,5 +215,5 @@ class GlobalCell(object):
         return indl, indr
 
     @property
-    def fake_core_density(self):
-        return self._fake_core_density
+    def gaussian_density(self):
+        return self._gaussian_density
