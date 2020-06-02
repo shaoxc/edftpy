@@ -44,11 +44,12 @@ class DFTpyOF(AbsDFT):
         self.prev_density = None
         self.calc = None
         self._iter = 0
+        self.phi = None
         #-----------------------------------------------------------------------
         self.mixer = mixer
         if self.mixer is None :
-            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 0)
-            self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 0)
+            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
             # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.3], predecut = None, delay = 1)
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
             # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.8], predecut = None, delay = 1)
@@ -100,19 +101,27 @@ class DFTpyOF(AbsDFT):
         self.fermi_level = self.calc.mu
         return self.density
 
-    def get_density_embed(self, density, **kwargs):
+    # def get_density_embed(self, density, lphi = True, **kwargs):
+    def get_density_embed(self, density, lphi = False, **kwargs):
         self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = True)
         # # evaluator = partial(self.evaluator.compute, with_global = False)
         evaluator = self.evaluator.compute_only_ke
         self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options)
         self.calc.optimize_rho()
+        # self.calc.optimize_rho(lphi = True)
+        # self.calc.optimize_rho(guess_phi = self.phi, lphi = lphi)
+        # if self.calc.converged > 0 :
+            # print('Saved phi make DFTpy not converged, try turn off lphi')
+            # self.calc.optimize_rho(guess_phi = self.phi, lphi = False)
+        # if self.calc.converged > 0 :
+            # print('Saved phi make DFTpy not converged, try new phi')
+            # self.calc.optimize_rho(lphi = lphi)
+        # if self.calc.converged > 0 :
+            # print('Saved phi make DFTpy not converged, try new all')
+            # self.calc.optimize_rho()
         self.density = self.calc.rho
         self.fermi_level = self.calc.mu
-        #-----------------------------------------------------------------------
-        # phi = np.sqrt(self.density)
-        # residual = evaluator(self.density).potential*phi-self.fermi_level*phi
-        # print('rrrr', np.sum(residual ** 2), np.max(residual))
-        #-----------------------------------------------------------------------
+        self.phi = self.calc.phi
         return self.density
 
     def get_density_hamiltonian(self, density, **kwargs):
@@ -122,6 +131,7 @@ class DFTpyOF(AbsDFT):
         hamiltonian = Hamiltonian(potential, grid = self.grid)
         eigens = hamiltonian.eigens()
         eig = eigens[0][0]
+        print('min wave', np.min(eigens[0][1]))
         rho = eigens[0][1] ** 2
         self.density = rho * np.sum(density) / np.sum(rho)
         self.fermi_level = eig

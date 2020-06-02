@@ -8,14 +8,24 @@ from .utils.common import Field
 __all__ = ["LinearMixer", "PulayMixer", "BroydenMixer"]
 
 class SpecialPrecondition :
-    def __init__(self, predtype = 'inverse_kerker', predcoef = [0.8, 1.0], grid = None, predecut = None, **kwargs):
+    def __init__(self, predtype = 'inverse_kerker', predcoef = [0.8, 1.0, 1.0], grid = None, predecut = None, **kwargs):
         self.predtype = predtype
-        self.predcoef = predcoef
+        self._init_predcoef(predcoef, predtype)
         self._ecut = predecut
         self._grid = grid
         self._matrix = None
         self._direct = False
         self._mask = False
+
+    def _init_predcoef(self, predcoef=[], predtype = 'inverse_kerker'):
+        nl = len(predcoef)
+        if nl == 0 :
+            predcoef = [0.8, 1.0, 1.0]
+        elif nl == 1 :
+            predcoef.extend([1.0, 1.0])
+        elif nl == 2 :
+            predcoef.extend([1.0])
+        self.predcoef = predcoef
 
     @property
     def matrix(self):
@@ -54,9 +64,10 @@ class SpecialPrecondition :
     def kerker(self):
         a0 = self.predcoef[0]
         q0 = self.predcoef[1] ** 2
+        amin = self.predcoef[2]
         recip_grid = self.grid.get_reciprocal()
         gg = recip_grid.gg
-        preg = a0 * gg/(gg+q0)
+        preg = a0 * np.minimum(gg/(gg+q0), amin)
         preg = Field(recip_grid, data=preg, direct=False)
         matrix = preg
         return matrix
@@ -89,8 +100,9 @@ class SpecialPrecondition :
             res = Field(self.grid, data=residual, direct=True)
             results += res.fft()*self.matrix
         results[self.mask] = nout.fft()[self.mask]
-        # results[self.mask] = nin_g[self.mask]*0.5 + 0.5 * nout.fft()[self.mask]
+        # results[self.mask] = nin_g[self.mask]*0.8 + 0.2 * nout.fft()[self.mask]
         # results[self.mask] = nin_g[self.mask]
+        print('predcoef', self.predcoef, self.predtype)
         return results.ifft(force_real=True)
 
     def add(self, density, residual = None, grid = None):
@@ -194,6 +206,8 @@ class PulayMixer(AbstractMixer):
         if coef is None :
             coef = self.coef
         self._iter += 1
+
+        print('ccccc', coef)
 
         r = nout - nin
         #-----------------------------------------------------------------------

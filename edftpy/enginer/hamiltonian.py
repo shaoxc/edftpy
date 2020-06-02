@@ -56,6 +56,6 @@ class Hamiltonian(object):
                 phi = Field(self.grid, data = eigens[1][:, i])
                 results.append([eig, phi])
                 res = self.h_mul_phi(phi) - eig * phi
-                # print('res', np.max(res), np.min(res), np.sum(res * res))
+                print('res', np.max(res), np.min(res), np.sum(res * res)*self.grid.dV)
                 # print('phi', np.max(phi), np.min(phi), np.sum(phi * phi))
         return results

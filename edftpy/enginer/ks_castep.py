@@ -122,8 +122,11 @@ class CastepKS(AbsDFT):
         caspytep.density.density_symmetrise(self.mdl.den)
         self.mdl.den.real_charge[self.mdl.den.real_charge < 1E-30] = 1E-30
         #-----------------------------------------------------------------------
+        print('sum', np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
         if rho_ini is not None :
             self._format_density(rho_ini, sym = True)
+        self.mdl.den.real_charge *= real_charge/ (np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
+        print('sum2', np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
         #-----------------------------------------------------------------------
 
     def _write_cell(self, outfile, ions, pbc = None, params = None, **kwargs):

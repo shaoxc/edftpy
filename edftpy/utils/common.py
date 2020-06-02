@@ -5,6 +5,8 @@ from dftpy.grid import DirectGrid, ReciprocalGrid
 from dftpy.atom import Atom as dftpy_atom
 from dftpy.base import DirectCell
 from abc import ABC, abstractmethod
+from scipy.interpolate import interp1d, splrep, splev
+from dftpy.math_utils import quartic_interpolation
 
 
 def Grid(lattice, nr, direct = True, origin=np.array([0.0, 0.0, 0.0]), units=None, full=False, uppergrid = None, **kwargs):
@@ -14,8 +16,56 @@ def Grid(lattice, nr, direct = True, origin=np.array([0.0, 0.0, 0.0]), units=Non
         obj = ReciprocalGrid(lattice, nr, origin = origin, units=units, full=full, uppergrid = uppergrid, **kwargs)
     return obj
 
+class RadialGrid(object):
+    def __init__(self, r = None, v = None, direct = True, **kwargs):
+        self._r = r
+        self._v = v
+        self._v_interp = None
+        self.direct = direct
+
+    @property
+    def r(self):
+        return self._r
+
+    @r.setter
+    def r(self, r):
+        self._r = r
+
+    @property
+    def v(self):
+        return self._v
+
+    @v.setter
+    def v(self, v):
+        self._v = v
+
+    @property
+    def v_interp(self):
+        if self._v_interp is None :
+            self._v_interp = splrep(self.r, self.v)
+        return self._v_interp
+
+    def to_3d_grid(self, dist, direct = None, out = None):
+        if out is None :
+            results = np.zeros_like(dist)
+        else :
+            results = out
+        mask = dist < self._r[-1]
+        results[mask] = splev(dist[mask], self.v_interp, der=0)
+        #-----------------------------------------------------------------------
+        mask = dist < self._r[1]
+        v = self._v
+        dp = v[1]-v[0]
+        f = [v[2], v[1], v[0], v[1], v[2]]
+        dx = dist[mask]/dp
+        results[mask] = quartic_interpolation(f, dx)
+        #-----------------------------------------------------------------------
+        return results
+
 def Field(grid, memo="", rank=1, data = None, direct = True, order = 'C', cplx = False):
         kwargs = {'memo' :memo, 'rank' :rank, 'cplx' :cplx, 'griddata_F' :None, 'griddata_C' :None}
+        if data is None and not direct :
+            data = np.zeros(grid.nr, dtype=np.complex128)
         if order == 'C' :
             kwargs['griddata_C'] = data
         else :

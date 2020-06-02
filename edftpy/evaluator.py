@@ -290,7 +290,7 @@ class EnergyEvaluatorMix(AbsFunctional):
         return obj
 
     def compute_only_ke(self, rho, calcType=["E","V"], embed = True, **kwargs):
-        obj = self.ke_evaluator(rho)
+        obj = self.ke_evaluator(rho, calcType = calcType, **kwargs)
         # print('embed', embed, obj.energy)
         if embed :
             if 'V' in calcType :

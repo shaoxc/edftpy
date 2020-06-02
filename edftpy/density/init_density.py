@@ -2,7 +2,7 @@ import os
 import numpy as np
 from scipy.interpolate import splrep, splev
 from numpy import linalg as LA
-from edftpy.utils.common import Field
+from edftpy.utils.common import Field, RadialGrid
 # try:
     # from edftpy.io.pp_xml import PPXmlGPAW as PPXml
 # except Exception :
@@ -15,17 +15,17 @@ class AtomicDensity(object):
     This is a template class and should never be touched.
     """
 
-    def __init__(self, files =None, grid=None, ions=None, ftypes = None, **kwargs):
+    def __init__(self, files =None, grid=None, ions=None, ftypes = None, direct = True, **kwargs):
 
         self.files = files
         if self.files is None:
             return
-        # if files None:
-            # raise AttributeError("Must specify files for atomic density")
+        self.direct = direct
 
         self._r = {}
         self._arho = {}
         self._info= {}
+        self._radial = {}
         for key, infile in files.items() :
             print("setting key: " + key)
             if not os.path.isfile(infile):
@@ -122,14 +122,21 @@ class AtomicDensity(object):
         v = data[:, 1]
         return r, v, info
 
-    def guess_rho(self, ions, grid, ncharge = None, rho = None, ndens = 2, **kwargs):
+    def guess_rho(self, ions, grid, ncharge = None, rho = None, ndens = 2, dtol=1E-30, **kwargs):
         if self.files is None :
-            rho = self.guess_rho_heg(ions, grid, ncharge, rho, **kwargs)
+            new_rho = self.guess_rho_heg(ions, grid, ncharge, rho, dtol = dtol, **kwargs)
+        elif self.direct :
+            new_rho = self.guess_rho_atom(ions, grid, ncharge, rho, ndens, dtol = dtol, **kwargs)
         else :
-            rho = self.guess_rho_atom(ions, grid, ncharge, rho, ndens, **kwargs)
+            new_rho = self.get_3d_value_recipe(ions, grid.get_reciprocal(), ncharge, rho, dtol = dtol, **kwargs)
+
+        if rho is not None :
+            rho[:] = new_rho
+        else :
+            rho = new_rho
         return rho
 
-    def guess_rho_heg(self, ions, grid, ncharge = None, rho = None, ndens = 2, **kwargs):
+    def guess_rho_heg(self, ions, grid, ncharge = None, rho = None, ndens = 2, dtol=1E-30, **kwargs):
         """
         """
         if rho is None :
@@ -142,14 +149,13 @@ class AtomicDensity(object):
         rho[:] = ncharge / (np.size(rho) * grid.dV)
         return rho
 
-    def guess_rho_atom(self, ions, grid, ncharge = None, rho = None, ndens = 2, **kwargs):
+    def guess_rho_atom(self, ions, grid, ncharge = None, rho = None, ndens = 2, dtol=1E-30, **kwargs):
         """
         """
         nr = grid.nr
         dnr = (1.0/nr).reshape((3, 1))
-        dtol = 1E-10 # for safe, replace the zero density as a value
         if rho is None :
-            rho = Field(grid) * dtol
+            rho = Field(grid) + dtol
         else :
             rho[:] = np.ones(nr) * dtol
         lattice = grid.lattice
@@ -193,13 +199,12 @@ class AtomicDensity(object):
         rho[:] *= ncharge / (np.sum(rho) * grid.dV)
         return rho
 
-    def guess_rho_all(self, ions, grid, pbc = [1, 1, 1], **kwargs):
+    def guess_rho_all(self, ions, grid, pbc = [1, 1, 1], dtol = 1E-30, **kwargs):
         """
         haven't finished
         """
         nr = grid.nr
         dnr = (1.0/nr).reshape((3, 1))
-        dtol = 1E-8 # for safe, replace the zero density as a value
         rho = np.ones(nr) * dtol
         lattice = grid.lattice
         metric = np.dot(lattice.T, lattice)
@@ -267,4 +272,28 @@ class AtomicDensity(object):
                             index = np.logical_and(dists < rcut, dists > rtol)
                             prho[index] = splev(dists[index], tck, der = 0)
                             rho[l123A[0], l123A[1], l123A[2]] += prho.ravel()
+        return rho
+
+    def get_3d_value_recipe(self, ions, grid, ncharge = None, rho = None, dtol=1E-30, direct=True, **kwargs):
+        """
+        """
+        rho = Field(grid, direct = False)
+
+        radial = {}
+        vlines = {}
+        for key in self._r :
+            r = self._r[key]
+            arho = self._arho[key]
+            radial[key] = RadialGrid(r, arho, direct = False)
+            vlines[key] = radial[key].to_3d_grid(grid.q)
+            for i in range(ions.nat):
+                if ions.labels[i] == key:
+                    strf = ions.strf(grid, i)
+                    rho += vlines[key] * strf
+
+        if direct :
+            rho = rho.ifft()
+            rho[rho < dtol] = dtol
+        print('Guess density (Recipe): ', np.sum(rho) * rho.grid.dV)
+        print('Guess density (Recipe): ', rho.integral())
         return rho
