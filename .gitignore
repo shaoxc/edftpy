@@ -8,6 +8,5 @@ build/
 edftpy.egg-info
 dev/
 examples/debug
-examples/dev
 doc/build/
 .ipynb_checkpoints/

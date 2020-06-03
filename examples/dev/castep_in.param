@@ -1,0 +1,22 @@
+TASK               : Energy
+CUT_OFF_ENERGY     : 600 eV
+XC_FUNCTIONAL      : LDA
+SPIN_POLARIZED     : false
+FIX_OCCUPANCY      : false
+#SMEARING_SCHEME   : Gaussian
+#SMEARING_WIDTH    : 300 K
+SMEARING_SCHEME    : FermiDirac
+SMEARING_WIDTH     : 300.0 K
+ELEC_ENERGY_TOL    : 1.0e-5 eV
+OPT_STRATEGY       : speed
+NUM_DUMP_CYCLES    : 0
+ELEC_METHOD        : dm
+GRID_SCALE         : 1
+CALCULATE_STRESS   : false
+NEXTRA_BANDS       : 10
+#MIXING_SCHEME     : Linear
+#MIXING_SCHEME     : Broyden
+MIXING_SCHEME      : Pulay
+IPRINT             : 1
+MIX_CHARGE_AMP     : 0.1
+MAX_SCF_CYCLES     : 60
