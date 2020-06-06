@@ -100,7 +100,7 @@ class Test(unittest.TestCase):
         ions_a = subsys_a.ions
         rho_a = subsys_a.density
         rho_a[:] = atomicd.guess_rho(ions_a, subsys_a.grid)
-        options = {"method" :'CG-HS', "maxiter": 820, "econv": 1.0e-10*ions.nat, "ncheck": 2, "opt_method" : 'part'}
+        options = {"method" :'CG-HS', "maxiter": 820, "econv": 1.0e-6*ions.nat, "ncheck": 2, "opt_method" : 'part'}
         # options = {"method" :'CG-HS', "maxiter": 820, "econv": 1.0e-8*ions.nat, "ncheck": 2, "opt_method" : 'hamiltonian'}
         ke_evaluator = KEDF(name='vW')
         # vw_kwargs = {'name' :'GGA', 'k_str' : 'STV', 'params' : [0.0, 1.0, 0.01]}
@@ -108,7 +108,7 @@ class Test(unittest.TestCase):
         energy_evaluator = EnergyEvaluatorMix(embed_evaluator = emb_evaluator_a, sub_evaluator = sub_evaluator_a, ke_evaluator = ke_evaluator, **kwargs)
         opt_options = {}
         #mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-        mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 1.0], maxm = 7, coef = [0.6], predecut = 0, delay = 0)
+        mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 1.0], maxm = 7, coef = [0.2], predecut = 40, delay = 0)
         of_enginer_a = DFTpyOF(options = options, ions = ions_a, gaussian_density = subsys_a.gaussian_density, mixer = mixer)
         driver_a = OptDriver(energy_evaluator = energy_evaluator, calculator = of_enginer_a, options = opt_options, mixer=mixer)
         return subsys_a, driver_a

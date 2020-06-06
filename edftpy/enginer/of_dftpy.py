@@ -16,7 +16,6 @@ class DFTpyOF(AbsDFT):
             ions = None, gaussian_density = None, **kwargs):
         default_options = {
             "opt_method" : 'part',
-            # "opt_method" : 'full',
             "method" :'CG-HS',
             "maxcor": 6,
             "ftol": 1.0e-7,
@@ -45,6 +44,7 @@ class DFTpyOF(AbsDFT):
         self.calc = None
         self._iter = 0
         self.phi = None
+        self.residual_norm = 1E-6
         #-----------------------------------------------------------------------
         self.mixer = mixer
         if self.mixer is None :
@@ -90,38 +90,59 @@ class DFTpyOF(AbsDFT):
             results = self.get_density_full_opt(density, **kwargs)
         elif self.options['opt_method'] == 'hamiltonian' :
             results = self.get_density_hamiltonian(density)
+        # np.savetxt('of_den_no.' + str(self._iter), np.c_[self.grid.get_reciprocal().q.real.ravel(), self.density.fft().real.ravel()])
+        # np.savetxt('of_den.' + str(self._iter), np.c_[self.grid.get_reciprocal().q.real.ravel(), self.density.fft().real.ravel()])
         return results
 
     def get_density_full_opt(self, density, **kwargs):
         self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = False, with_sub = False)
         evaluator = self.evaluator.compute_embed
-        self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options)
+        if 'method' in self.options :
+            optimization_method = self.options['method']
+        else :
+            optimization_method = 'CG-HS'
+        self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options, optimization_method = optimization_method)
         self.calc.optimize_rho()
         self.density = self.calc.rho
         self.fermi_level = self.calc.mu
         return self.density
 
-    # def get_density_embed(self, density, lphi = True, **kwargs):
     def get_density_embed(self, density, lphi = False, **kwargs):
+        if self._iter == 1 :
+            self.options['econv0'] = self.options['econv'] * 1E4
+        self.options['econv'] = self.options['econv0'] * self.residual_norm
+        if self._iter > 10 :
+            self.options['econv'] = self.options['econv0'] * self.residual_norm /1E4
+            if self.options['econv'] < 1E-14 : self.options['econv'] = 1E-14 
+
+        if 'method' in self.options :
+            optimization_method = self.options['method']
+        else :
+            optimization_method = 'CG-HS'
+        # print('options', self.options)
         self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = True)
         # # evaluator = partial(self.evaluator.compute, with_global = False)
         evaluator = self.evaluator.compute_only_ke
-        self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options)
-        self.calc.optimize_rho()
-        # self.calc.optimize_rho(lphi = True)
-        # self.calc.optimize_rho(guess_phi = self.phi, lphi = lphi)
+        self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options, optimization_method = optimization_method)
+        self.calc.optimize_rho(guess_rho = density)
+        # self.calc.optimize_rho(guess_rho = density, lphi = True)
+        # self.calc.optimize_rho(guess_rho = density, guess_phi = self.phi, lphi = lphi)
+        # self.calc.optimize_rho(guess_rho = density, guess_phi = self.phi, lphi = True)
         # if self.calc.converged > 0 :
             # print('Saved phi make DFTpy not converged, try turn off lphi')
-            # self.calc.optimize_rho(guess_phi = self.phi, lphi = False)
+            # self.calc.optimize_rho(guess_rho = density, guess_phi = self.phi, lphi = False)
         # if self.calc.converged > 0 :
             # print('Saved phi make DFTpy not converged, try new phi')
-            # self.calc.optimize_rho(lphi = lphi)
+            # self.calc.optimize_rho(guess_rho = density, lphi = lphi)
         # if self.calc.converged > 0 :
             # print('Saved phi make DFTpy not converged, try new all')
-            # self.calc.optimize_rho()
+            # self.calc.optimize_rho(guess_rho = density)
+        # if self.calc.converged == 1 :
+            # print("!WARN: DFTpy not converged")
+            # raise AttributeError("!!!ERROR : DFTpy not converged")
         self.density = self.calc.rho
         self.fermi_level = self.calc.mu
-        self.phi = self.calc.phi
+        self.phi = self.calc.phi.copy()
         return self.density
 
     def get_density_hamiltonian(self, density, **kwargs):
@@ -131,6 +152,7 @@ class DFTpyOF(AbsDFT):
         hamiltonian = Hamiltonian(potential, grid = self.grid)
         eigens = hamiltonian.eigens()
         eig = eigens[0][0]
+        print('eig', eig)
         print('min wave', np.min(eigens[0][1]))
         rho = eigens[0][1] ** 2
         self.density = rho * np.sum(density) / np.sum(rho)
@@ -150,10 +172,12 @@ class DFTpyOF(AbsDFT):
     def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
         # func = self.evaluator(density, calcType = calcType, with_global = False, embed = False)
         func = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True)
+        print('sub_energy_of', func.energy)
         return func
 
     def update_density(self, **kwargs):
         r = self.density - self.prev_density
+        self.residual_norm = np.sqrt(np.sum(r * r)/np.size(r))
         print('res_norm_of', self._iter, np.max(abs(r)), np.sqrt(np.sum(r * r)/np.size(r)))
         self.density = self.mixer(self.prev_density, self.density, **kwargs)
         # print('max',self.density.max(), self.density.min(), self.density.integral())

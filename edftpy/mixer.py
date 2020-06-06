@@ -4,6 +4,7 @@ from scipy import linalg
 from abc import ABC, abstractmethod
 
 from .utils.common import Field
+from .utils.math import fermi_dirac
 
 __all__ = ["LinearMixer", "PulayMixer", "BroydenMixer"]
 
@@ -133,7 +134,7 @@ class AbstractMixer(ABC):
     def __call__(self):
         pass
 
-    def format_density(self, results, nin, tol = 1E-30):
+    def format_density(self, results, nin, tol = 1E-300):
         results[results < tol] = tol
         ncharge = np.sum(nin)
         results *= ncharge/np.sum(results)
@@ -250,6 +251,9 @@ class PulayMixer(AbstractMixer):
                         drho += x[i] * self.dn_mat[i]
                         res += x[i] * self.dr_mat[i]
                 # drho *= coef[0]
+                #-----------------------------------------------------------------------
+                # res[:] = filter_density(res)
+                #-----------------------------------------------------------------------
                 res *= coef[0]
                 results = self.pred(nin, nout, drho, res)
             except Exception :
@@ -258,7 +262,11 @@ class PulayMixer(AbstractMixer):
                 print('amat', amat)
                 results = self.pred(nin, nout, residual=res)
         else :
-            results = nout.copy()
+            res = r * 0.8
+            print('delay : use linear mixer')
+            results = self.pred(nin, nout, residual=res)
+            # results = nout.copy()
+            # print('delay : use output density')
         #-----------------------------------------------------------------------
         results = self.format_density(results, nin)
         #-----------------------------------------------------------------------
@@ -353,3 +361,14 @@ class BroydenMixer(AbstractMixer):
 
         return results
 
+# def filter_density(density, mu = 0.5, kt = 0.01):
+    # ncharge = np.sum(density)
+    # recip_grid = density.grid.get_reciprocal()
+    # q = recip_grid.q
+    # mu *= np.max(q)
+    # kt *= mu
+    # _filter = fermi_dirac(q.real, mu = mu, kt = kt)
+    # den_g = density.fft() * _filter
+    # den = den_g.ifft(force_real=True)
+    # den *= ncharge/np.sum(den)
+    # return den

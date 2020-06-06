@@ -1,5 +1,8 @@
+import numpy as np
+
 from ..evaluator import EnergyEvaluatorMix
 from ..hartree import Hartree
+from ..utils.math import fermi_dirac
 
 
 class OptDriver:
@@ -29,6 +32,7 @@ class OptDriver:
                 'HARTREE': []}
         self.prev_density = None
         self._it = 0
+        self._filter = None
 
     def get_energy_evaluator(self, embed_evaluator = None, sub_evaluator = None, **kwargs):
         """
@@ -62,11 +66,12 @@ class OptDriver:
         else:
             self.energy_evaluator.gsystem = gsystem
 
-        rho_ini = self.prev_density
+        rho_ini = self.prev_density.copy()
         #-----------------------------------------------------------------------
         self.energy_evaluator.rest_rho = gsystem.sub_value(gsystem.density, rho_ini) - rho_ini
         #-----------------------------------------------------------------------
         self.density = self.calculator.get_density(rho_ini)
+        self.density[:] = self.filter_density(self.density)
         # self.calculator.get_density(rho_ini)
         # self.density = self.calculator.update_density()
         self.mu = self.calculator.get_fermi_level()
@@ -84,7 +89,9 @@ class OptDriver:
         return
 
     def update_density(self, **kwargs):
-        return self.calculator.update_density(**kwargs)
+        density = self.calculator.update_density(**kwargs)
+        # density[:] = self.filter_density(density)
+        return density
 
     def get_energy_traj(self, ename = 'HARTREE', density = None):
         # if ename is not None :
@@ -98,3 +105,18 @@ class OptDriver:
 
         return self.energy_traj[ename]
 
+    def filter_density(self, density, mu = 0.7, kt = 0.05):
+        self._filter = 1.0
+        # Not use _filter
+        ncharge = np.sum(density)
+        if self._filter is None :
+            recip_grid = density.grid.get_reciprocal()
+            q = recip_grid.q
+            mu *= np.max(q)
+            kt *= mu
+            self._filter = fermi_dirac(q.real, mu = mu, kt = kt)
+        den_g = density.fft() * self._filter
+        den = den_g.ifft(force_real=True)
+        den *= ncharge/np.sum(den)
+        den[den < 0] = 1E-300
+        return den

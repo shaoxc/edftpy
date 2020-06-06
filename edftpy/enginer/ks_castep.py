@@ -261,6 +261,7 @@ class CastepKS(AbsDFT):
                 hartree_energy = caspytep.electronic.electronic_get_energy('hartree_energy')
                 ion_noncoulomb_energy = caspytep.electronic.electronic_get_energy('ion_noncoulomb_energy')
                 func.energy += total_energy - ion_ion_energy0 - locps_energy - ion_noncoulomb_energy - hartree_energy
+        print('sub_energy_ks', func.energy)
         return func
 
     def update_density(self, **kwargs):

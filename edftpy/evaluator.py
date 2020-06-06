@@ -181,6 +181,7 @@ class EnergyEvaluatorMix(AbsFunctional):
             remove_global = {}
             remove_embed = {}
             self.embed_potential = Field(rho.grid)
+        # print('pot2', np.min(self.embed_potential), np.max(self.embed_potential))
         #-----------------------------------------------------------------------
         if self.embed_evaluator is not None :
             self.embed_potential -= self.embed_evaluator(rho, calcType = ['V']).potential
@@ -196,6 +197,8 @@ class EnergyEvaluatorMix(AbsFunctional):
         #-----------------------------------------------------------------------
         if with_sub and self.sub_evaluator is not None :
             self.embed_potential += self.sub_evaluator(rho, calcType = ['V']).potential
+
+        # print('pot3', np.min(self.embed_potential), np.max(self.embed_potential))
 
     @property
     def gsystem(self):
