@@ -117,6 +117,9 @@ class OptDriver:
             self._filter = fermi_dirac(q.real, mu = mu, kt = kt)
         den_g = density.fft() * self._filter
         den = den_g.ifft(force_real=True)
+        #-----------------------------------------------------------------------
+        den = density
+        #-----------------------------------------------------------------------
         den *= ncharge/np.sum(den)
         den[den < 0] = 1E-300
         return den

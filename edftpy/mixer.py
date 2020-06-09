@@ -178,11 +178,12 @@ class LinearMixer(AbstractMixer):
 
 
 class PulayMixer(AbstractMixer):
-    def __init__(self, predtype = None, predcoef = [0.8, 0.1], maxm = 5, coef = [1.0], delay = 3, predecut = None, **kwargs):
+    def __init__(self, predtype = None, predcoef = [0.8, 0.1], maxm = 5, coef = [1.0], delay = 3, predecut = None, restarted = False, **kwargs):
         self.pred = SpecialPrecondition(predtype, predcoef, predecut=predecut)
         self._delay = delay
         self.maxm = maxm
         self.coef = coef
+        self.restarted = restarted
         self.restart()
 
     def __call__(self, nin, nout, coef = None):
@@ -217,6 +218,10 @@ class PulayMixer(AbstractMixer):
             print('!WARN : Change to linear mixer')
             results = self.pred(nin, nout, residual=res)
         elif self._iter > self._delay :
+            if self.restarted and (self._iter-self._delay) %(self.maxm+1)==0 :
+                self.dr_mat = None
+                self.dn_mat = None
+                print('Restart history of the mixer')
             dn = nin - self.prev_density
             dr = r - self.prev_residual
             if self.dr_mat is None :

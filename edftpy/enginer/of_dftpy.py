@@ -111,8 +111,9 @@ class DFTpyOF(AbsDFT):
         if self._iter == 1 :
             self.options['econv0'] = self.options['econv'] * 1E4
         self.options['econv'] = self.options['econv0'] * self.residual_norm
-        if self._iter > 10 :
-            self.options['econv'] = self.options['econv0'] * self.residual_norm /1E4
+        if self._iter > 20 :
+            self.options['econv'] = self.options['econv0'] * self.residual_norm /1E2
+            #self.options['econv'] = self.options['econv0'] * self.residual_norm /1E4
             if self.options['econv'] < 1E-14 : self.options['econv'] = 1E-14 
 
         if 'method' in self.options :
