@@ -103,7 +103,6 @@ class SpecialPrecondition :
         results[self.mask] = nout.fft()[self.mask]
         # results[self.mask] = nin_g[self.mask]*0.8 + 0.2 * nout.fft()[self.mask]
         # results[self.mask] = nin_g[self.mask]
-        print('predcoef', self.predcoef, self.predtype)
         return results.ifft(force_real=True)
 
     def add(self, density, residual = None, grid = None):
@@ -135,9 +134,10 @@ class AbstractMixer(ABC):
         pass
 
     def format_density(self, results, nin, tol = 1E-300):
-        results[results < tol] = tol
+        # results[results < tol] = tol
         ncharge = np.sum(nin)
-        results *= ncharge/np.sum(results)
+        # results *= ncharge/np.sum(results)
+        results += (ncharge-np.sum(results))/np.size(results)
         results = Field(nin.grid, data=results, direct=True)
         return results
 
@@ -250,7 +250,7 @@ class PulayMixer(AbstractMixer):
                 # print('x', x)
                 for i in range(ns):
                     if i == 0 :
-                        drho = nin + x[i] * self.dn_mat[i]
+                        drho = x[i] * self.dn_mat[i]
                         res = r + x[i] * self.dr_mat[i]
                     else :
                         drho += x[i] * self.dn_mat[i]

@@ -83,8 +83,8 @@ class CastepKS(AbsDFT):
                     for k2, v2 in v1.items() :
                         value.append((k2, v2))
                     castep_params.__setattr__(k1, value)
-            else :
-                castep_params.__setattr__(k1, v1)
+                else :
+                    castep_params.__setattr__(k1, v1)
 
     def _castep_initialise(self, rho_ini = None, **kwargs):
         caspytep.cell.cell_read(self.prefix)

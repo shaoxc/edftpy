@@ -77,7 +77,8 @@ def Field(grid, memo="", rank=1, data = None, direct = True, order = 'C', cplx =
         return obj
 
 def Atoms(labels, zvals=None, pos=None, cell=None, basis="Cartesian", origin = [0.0, 0.0, 0.0], **kwargs):
-    cell = DirectCell(cell, origin=origin)
+    if not isinstance(cell, DirectCell):
+        cell = DirectCell(cell, origin=origin)
     obj = dftpy_atom(Zval = zvals, label = labels, pos = pos, cell = cell)
     return obj
 

@@ -71,7 +71,7 @@ class OptDriver:
         self.energy_evaluator.rest_rho = gsystem.sub_value(gsystem.density, rho_ini) - rho_ini
         #-----------------------------------------------------------------------
         self.density = self.calculator.get_density(rho_ini)
-        self.density[:] = self.filter_density(self.density)
+        # self.density[:] = self.filter_density(self.density)
         # self.calculator.get_density(rho_ini)
         # self.density = self.calculator.update_density()
         self.mu = self.calculator.get_fermi_level()
