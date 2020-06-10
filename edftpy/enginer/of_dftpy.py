@@ -112,8 +112,8 @@ class DFTpyOF(AbsDFT):
             self.options['econv0'] = self.options['econv'] * 1E4
         self.options['econv'] = self.options['econv0'] * self.residual_norm
         if self._iter > 3 :
-            self.options['econv'] = self.options['econv0'] * self.residual_norm /1E2
-            # self.options['econv'] = self.options['econv0'] * self.residual_norm /1E4
+            # self.options['econv'] = self.options['econv0'] * self.residual_norm /1E2
+            self.options['econv'] = self.options['econv0'] * self.residual_norm /1E4
             if self.options['econv'] < 1E-14 : self.options['econv'] = 1E-14 
 
         if 'method' in self.options :
@@ -125,8 +125,12 @@ class DFTpyOF(AbsDFT):
         # # evaluator = partial(self.evaluator.compute, with_global = False)
         evaluator = self.evaluator.compute_only_ke
         self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options, optimization_method = optimization_method)
-        self.calc.optimize_rho(guess_rho = density)
-        # self.calc.optimize_rho(guess_rho = density, lphi = True)
+        # self.calc.optimize_rho(guess_rho = density)
+        # if self._iter < 30 :
+            # self.calc.optimize_rho(guess_rho = density)
+        # else :
+            # self.calc.optimize_rho_try(guess_rho = density, phi0 = self.phi.copy(), paramc = 1E-2)
+        self.calc.optimize_rho(guess_rho = density, lphi = True)
         # self.calc.optimize_rho(guess_rho = density, guess_phi = self.phi, lphi = lphi)
         # self.calc.optimize_rho(guess_rho = density, guess_phi = self.phi, lphi = True)
         # if self.calc.converged > 0 :

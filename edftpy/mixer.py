@@ -37,6 +37,8 @@ class SpecialPrecondition :
                 self._matrix = self.kerker()
             elif self.predtype == 'inverse_kerker' :
                 self._matrix = self.inverse_kerker()
+            elif self.predtype == 'resta' :
+                self._matrix = self.resta()
         return self._matrix
 
     @property
@@ -69,6 +71,7 @@ class SpecialPrecondition :
         recip_grid = self.grid.get_reciprocal()
         gg = recip_grid.gg
         preg = a0 * np.minimum(gg/(gg+q0), amin)
+        # preg = a0 * np.maximum(gg/(gg+q0), 0.01)
         preg = Field(recip_grid, data=preg, direct=False)
         matrix = preg
         return matrix
@@ -81,6 +84,21 @@ class SpecialPrecondition :
         preg = b0/gg + 1.0
         gg[0, 0, 0] = 0.0
         preg[0, 0, 0] = 0.0
+        preg = Field(recip_grid, data=preg, direct=False)
+        matrix = preg
+        return matrix
+
+    def resta(self):
+        epsi = self.predcoef[0]
+        q0 = self.predcoef[1] ** 2
+        rs = self.predcoef[2]
+        recip_grid = self.grid.get_reciprocal()
+        gg = recip_grid.gg
+        q = recip_grid.q
+        q[0, 0, 0] = 1.0
+        preg = (q0 * np.sin(q*rs)/(epsi*q*rs)+gg) / (q0+gg)
+        q[0, 0, 0] = 0.0
+        preg[0, 0, 0] = 1.0
         preg = Field(recip_grid, data=preg, direct=False)
         matrix = preg
         return matrix
@@ -210,6 +228,13 @@ class PulayMixer(AbstractMixer):
         self._iter += 1
 
         print('ccccc', coef)
+        # if self._iter == 20 :
+            # self.pred.predcoef[1] = 0.4
+            # self.pred._matrix = None
+            # print('Embed restart pulay coef')
+            # self.dr_mat = None
+            # self.dn_mat = None
+            # print('Restart history of the mixer')
 
         r = nout - nin
         #-----------------------------------------------------------------------
