@@ -296,4 +296,9 @@ class AtomicDensity(object):
             rho[rho < dtol] = dtol
         print('Guess density (Recipe): ', np.sum(rho) * rho.grid.dV)
         print('Guess density (Recipe): ', rho.integral())
+        if ncharge is None :
+            ncharge = 0.0
+            for i in range(ions.nat) :
+                ncharge += ions.Zval[ions.labels[i]]
+        rho[:] *= ncharge / (rho.integral())
         return rho

@@ -68,7 +68,7 @@ class Test(unittest.TestCase):
         index_a = np.arange(0, 2)
         index_b = np.arange(2, ions.nat)
         ke_kwargs = {'name' :'LMGPA', 'y' :0.0, 'interp' :'hermite', 'kdd' :3, 'ratio':1.15, 'fd':3, 'kfmin' :1E-3, 'kfmax' :4.0, 'lumpfactor' : None, 'ldw' : 1.0/6.0}
-        ke_kwargs = {'name' :'TF', 'x' :1.0}
+        # ke_kwargs = {'name' :'TF', 'x' :1.0}
         subsys_a, driver_a = self.gen_sub_of(ions, grid, pplist, index_a, atomicd, xc_kwargs, ke_kwargs, emb_ke_kwargs = emb_ke_kwargs, gaussian_options = gaussian_options)
         subsys_b, driver_b = self.gen_sub_of(ions, grid, pplist, index_b, atomicd, xc_kwargs, ke_kwargs, emb_ke_kwargs = emb_ke_kwargs, gaussian_options = gaussian_options)
         #-----------------------------------------------------------------------
@@ -120,6 +120,7 @@ class Test(unittest.TestCase):
         energy_evaluator = EnergyEvaluatorMix(embed_evaluator = emb_evaluator_a, sub_evaluator = sub_evaluator_a, ke_evaluator = ke_evaluator, **kwargs)
         # mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 1.0], maxm = 7, coef = [0.2], predecut = None, delay = 0)
         mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 1.0, 1.0], maxm = 3, coef = [0.2], predecut = 40, delay = 0, restarted = True)
+        mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.01, 1], maxm = 3, coef = [0.2], predecut = None, delay = 0, restarted = False)
         of_enginer_a = DFTpyOF(options = options, ions = ions_a, gaussian_density = subsys_a.gaussian_density, mixer = mixer)
         # opt_options = {'update_delay' : 1, 'update_freq' : 200}
         opt_options = {}
@@ -151,7 +152,7 @@ class Test(unittest.TestCase):
                 'devel_code' : 'STD_GRID={0} {1} {2}  FINE_GRID={0} {1} {2}'.format(*subsys_a.grid.nr)
                 }
         mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-        mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 1.0, 1.0], maxm = 3, coef = [0.2], predecut = 40, delay = 1, restarted = True)
+        mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 1.0, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1, restarted = False)
         ks_enginer_a = CastepKS(prefix = 'castep_in_a', ions = ions_a, cell_params = cell_params, params = params, exttype = 3,
                 grid = subsys_a.grid, rho_ini = None, castep_in_file = 'castep_in.param', gaussian_density = subsys_a.gaussian_density, mixer = mixer)
         rho_a[:] = ks_enginer_a._format_density_invert(ks_enginer_a.mdl.den, ks_enginer_a.grid)

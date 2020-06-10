@@ -108,8 +108,8 @@ class Test(unittest.TestCase):
         energy_evaluator = EnergyEvaluatorMix(embed_evaluator = emb_evaluator_a, sub_evaluator = sub_evaluator_a, ke_evaluator = ke_evaluator, **kwargs)
         opt_options = {}
         #mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-        # mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 1.0], maxm = 7, coef = [0.2], predecut = 40, delay = 0)
-        mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 1.0], maxm = 7, coef = [0.2], predecut = 40, delay = 0, restarted = True)
+        mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.4], maxm = 7, coef = [0.2], predecut = None, delay = 0)
+        # mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 1.0], maxm = 7, coef = [0.4], predecut = None, delay = 0, restarted = True)
         of_enginer_a = DFTpyOF(options = options, ions = ions_a, gaussian_density = subsys_a.gaussian_density, mixer = mixer)
         driver_a = OptDriver(energy_evaluator = energy_evaluator, calculator = of_enginer_a, options = opt_options, mixer=mixer)
         return subsys_a, driver_a
