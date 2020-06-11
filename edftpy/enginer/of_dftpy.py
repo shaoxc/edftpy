@@ -44,26 +44,13 @@ class DFTpyOF(AbsDFT):
         self.calc = None
         self._iter = 0
         self.phi = None
-        self.residual_norm = 1E-6
+        self.residual_norm = 1
         #-----------------------------------------------------------------------
         self.mixer = mixer
         if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 0)
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.3], predecut = None, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.8], predecut = None, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [0.5], predecut = None, delay = 1)
-            # self.mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.2], predecut = None, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.3], predecut = 0, delay = 1)
-            # self.mixer = LinearMixer(predtype = None, coef = [1.0], predecut = 20, delay = 0)
-            # self.mixer = LinearMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [0.2], delay = 0)
-            # self.mixer = LinearMixer(predtype = None, coef = [0.5], predecut = 0, delay = 0)
-            # self.mixer = LinearMixer(predtype = None, coef = [0.7], predecut = None, delay = 1)
-            # self.mixer = PulayMixer(predtype = None, predcoef = [0.8], maxm = 7, coef = [0.6], predecut = 20.0, delay = 5)
-            # self.mixer = BroydenMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [1.0])
-            # self.mixer = BroydenMixer(predtype =None, predcoef = [0.2], maxm = 7, coef = [1.0])
+            # self.mixer = LinearMixer(predtype = 'kerker', coef = [0.7], predecut = 0, delay = 1)
         #-----------------------------------------------------------------------
 
     @property
@@ -79,23 +66,38 @@ class DFTpyOF(AbsDFT):
 
     def get_density(self, density, **kwargs):
         self._iter += 1
+        #-----------------------------------------------------------------------
         if self._iter == 1 :
-            self.options['maxiter'] += 60
-        elif self._iter == 2 :
-            self.options['maxiter'] -= 60
-        self.prev_density = copy.deepcopy(density)
+            self.options['econv0'] = self.options['econv'] * 1E4
+            self.residual_norm = 1
+            self.options['econv'] = self.options['econv0'] * self.residual_norm
+        econv = self.options['econv0'] * self.residual_norm
+        if econv < self.options['econv'] :
+            self.options['econv'] = econv
+            if self.options['econv'] < 1E-14 * self._ions.nat : self.options['econv'] = 1E-14 * self._ions.nat
+        #-----------------------------------------------------------------------
+        self.prev_density = density.copy()
         if self.options['opt_method'] == 'part' :
             results = self.get_density_embed(density, **kwargs)
         elif self.options['opt_method'] == 'full' :
             results = self.get_density_full_opt(density, **kwargs)
         elif self.options['opt_method'] == 'hamiltonian' :
             results = self.get_density_hamiltonian(density)
-        # np.savetxt('of_den_no.' + str(self._iter), np.c_[self.grid.get_reciprocal().q.real.ravel(), self.density.fft().real.ravel()])
         # np.savetxt('of_den.' + str(self._iter), np.c_[self.grid.get_reciprocal().q.real.ravel(), self.density.fft().real.ravel()])
         return results
 
     def get_density_full_opt(self, density, **kwargs):
-        self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = False, with_sub = False)
+        #-----------------------------------------------------------------------
+        # if self._iter == 1 :
+            # self.options['econv0'] = self.options['econv'] * 1E4
+            # self.residual_norm = 1
+            # self.options['econv'] = self.options['econv0'] * self.residual_norm
+        # econv = self.options['econv0'] * self.residual_norm
+        # if econv < self.options['econv'] :
+            # self.options['econv'] = econv
+        #-----------------------------------------------------------------------
+        # self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = False, with_sub = False, with_ke = False)
+        self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = False, with_sub = False, with_ke = True)
         evaluator = self.evaluator.compute_embed
         if 'method' in self.options :
             optimization_method = self.options['method']
@@ -108,29 +110,22 @@ class DFTpyOF(AbsDFT):
         return self.density
 
     def get_density_embed(self, density, lphi = False, **kwargs):
-        if self._iter == 1 :
-            self.options['econv0'] = self.options['econv'] * 1E4
-        self.options['econv'] = self.options['econv0'] * self.residual_norm
-        if self._iter > 3 :
-            # self.options['econv'] = self.options['econv0'] * self.residual_norm /1E2
-            self.options['econv'] = self.options['econv0'] * self.residual_norm /1E4
-            if self.options['econv'] < 1E-14 : self.options['econv'] = 1E-14 
 
         if 'method' in self.options :
             optimization_method = self.options['method']
         else :
             optimization_method = 'CG-HS'
-        # print('options', self.options)
+        # if self._iter > 20 :
+            # self.options['econv'] = self.options['econv0'] * self.residual_norm /1E2
+            # # self.options['econv'] = self.options['econv0'] * self.residual_norm /1E4
+            # if self.options['econv'] < 1E-14 * self._ions.nat : self.options['econv'] = 1E-14 * self._ions.nat
         self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = True)
         # # evaluator = partial(self.evaluator.compute, with_global = False)
         evaluator = self.evaluator.compute_only_ke
         self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options, optimization_method = optimization_method)
-        # self.calc.optimize_rho(guess_rho = density)
-        # if self._iter < 30 :
-            # self.calc.optimize_rho(guess_rho = density)
-        # else :
-            # self.calc.optimize_rho_try(guess_rho = density, phi0 = self.phi.copy(), paramc = 1E-2)
-        self.calc.optimize_rho(guess_rho = density, lphi = True)
+        self.calc.optimize_rho(guess_rho = density)
+
+        # self.calc.optimize_rho(guess_rho = density, lphi = True)
         # self.calc.optimize_rho(guess_rho = density, guess_phi = self.phi, lphi = lphi)
         # self.calc.optimize_rho(guess_rho = density, guess_phi = self.phi, lphi = True)
         # if self.calc.converged > 0 :
@@ -175,8 +170,10 @@ class DFTpyOF(AbsDFT):
         return energy
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
-        # func = self.evaluator(density, calcType = calcType, with_global = False, embed = False)
-        func = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True)
+        if self.options['opt_method'] == 'full' :
+            func = self.evaluator(density, calcType = calcType, with_global = False, embed = False)
+        else :
+            func = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True)
         print('sub_energy_of', func.energy)
         return func
 

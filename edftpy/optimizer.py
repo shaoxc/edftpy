@@ -39,14 +39,13 @@ class Optimization(object):
     def update_density(self, denlist = None, prev_denlist = None, mu = None, update = None, **kwargs):
         #-----------------------------------------------------------------------
         diff_res = self.get_diff_residual()
-        d_e = max(diff_res)
         print('diff_res', diff_res)
         for i, driver in enumerate(self.opt_drivers):
             coef = driver.calculator.mixer.coef.copy()
-            # print('coef',coef, 'i', i)
-            # coef[0] = self.get_frag_coef(coef[0], d_e, diff_res[i])
-            # print('outcoef',coef)
-            coef = None
+            print('coef',coef, 'i', i)
+            coef[0] = self.get_frag_coef(coef[0], diff_res[i], diff_res)
+            print('outcoef',coef)
+            # coef = None
             if update[i] :
                 denlist[i] = driver.update_density(coef = coef)
             else :
@@ -172,12 +171,16 @@ class Optimization(object):
         self.subdens = denlist
         return
 
-    def get_frag_coef(self, coef, d_e, sub_d_e, alpha = 1.0, maxs = 0.2):
-        d_e = abs(d_e)
+    def get_frag_coef(self, coef, sub_d_e, d_e, alpha = 1.0, maxs = 0.2):
+        '''
+        '''
+        d_e = np.array(d_e)
+        d_min = np.min(d_e)
+        d_max = np.max(d_e)
         sub_d_e = abs(sub_d_e)
-        if d_e > 1E-10 :
-            new_coef = alpha * (coef * (1.0 - sub_d_e/d_e)) + \
-                coef * (1.0 - alpha)
+        if d_max > 1E-10 :
+            # new_coef = alpha * (coef * (1.0 - sub_d_e/d_max)) + coef * (1.0 - alpha)
+            new_coef = (1.0 - sub_d_e * (sub_d_e - d_min) / d_max ** 2) * coef
             new_coef = max(new_coef, maxs * coef)
         else :
             new_coef = coef

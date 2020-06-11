@@ -145,7 +145,7 @@ class EnergyEvaluatorMix(AbsFunctional):
         sub_evaluator = Evaluator(**funcdicts)
         return sub_evaluator
 
-    def get_embed_potential(self, rho, gaussian_density = None, with_global = False, with_sub = True, **kwargs):
+    def get_embed_potential(self, rho, gaussian_density = None, with_global = False, with_sub = True, with_ke = False, **kwargs):
         print('gaussian_density', gaussian_density is not None, self.gsystem.gaussian_density is not None, self.mod_type)
         self.gsystem.set_density(rho + self.rest_rho)
 
@@ -181,7 +181,7 @@ class EnergyEvaluatorMix(AbsFunctional):
             remove_global = {}
             remove_embed = {}
             self.embed_potential = Field(rho.grid)
-        # print('pot2', np.min(self.embed_potential), np.max(self.embed_potential))
+        print('pot2', np.min(self.embed_potential), np.max(self.embed_potential))
         #-----------------------------------------------------------------------
         if self.embed_evaluator is not None :
             self.embed_potential -= self.embed_evaluator(rho, calcType = ['V']).potential
@@ -198,7 +198,10 @@ class EnergyEvaluatorMix(AbsFunctional):
         if with_sub and self.sub_evaluator is not None :
             self.embed_potential += self.sub_evaluator(rho, calcType = ['V']).potential
 
-        # print('pot3', np.min(self.embed_potential), np.max(self.embed_potential))
+        if with_ke and self.ke_evaluator is not None :
+            self.embed_potential += self.ke_evaluator(rho, calcType = ['V']).potential
+
+        print('pot3', np.min(self.embed_potential), np.max(self.embed_potential))
 
     @property
     def gsystem(self):
@@ -213,10 +216,11 @@ class EnergyEvaluatorMix(AbsFunctional):
 
     @property
     def ke_evaluator(self):
-        if self._ke_evaluator is not None:
-            return self._ke_evaluator
-        else:
-            raise AttributeError("Must specify ke_evaluator for EnergyEvaluatorMix")
+        # if self._ke_evaluator is not None:
+            # return self._ke_evaluator
+        # else:
+            # raise AttributeError("Must specify ke_evaluator for EnergyEvaluatorMix")
+        return self._ke_evaluator
 
     @ke_evaluator.setter
     def ke_evaluator(self, value):

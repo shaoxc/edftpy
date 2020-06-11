@@ -6,7 +6,7 @@ dist/
 build/
 .pytest_cache/
 edftpy.egg-info
-dev/
 examples/debug
 doc/build/
 .ipynb_checkpoints/
+bak/

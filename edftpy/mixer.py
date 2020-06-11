@@ -228,8 +228,12 @@ class PulayMixer(AbstractMixer):
         self._iter += 1
 
         print('ccccc', coef)
+        # rho0 = np.mean(nin)
+        # kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
+        # print('kf', kf, self.pred.predcoef[1])
         # if self._iter == 20 :
-            # self.pred.predcoef[1] = 0.4
+        # if abs(kf - self.pred.predcoef[1]) > 0.1 :
+            # self.pred.predcoef[1] = kf
             # self.pred._matrix = None
             # print('Embed restart pulay coef')
             # self.dr_mat = None
@@ -292,11 +296,11 @@ class PulayMixer(AbstractMixer):
                 print('amat', amat)
                 results = self.pred(nin, nout, residual=res)
         else :
-            res = r * 0.8
-            print('delay : use linear mixer')
-            results = self.pred(nin, nout, residual=res)
-            # results = nout.copy()
-            # print('delay : use output density')
+            # res = r * 0.8
+            # results = self.pred(nin, nout, residual=res)
+            # print('delay : use linear mixer')
+            results = nout.copy()
+            print('delay : use output density')
         #-----------------------------------------------------------------------
         results = self.format_density(results, nin)
         #-----------------------------------------------------------------------
@@ -304,6 +308,32 @@ class PulayMixer(AbstractMixer):
         self.prev_residual = r.copy()
 
         return results
+
+    def get_direction(self, r):
+        ns = len(self.dr_mat)
+        amat = np.empty((ns, ns))
+        b = np.empty((ns))
+        for i in range(ns):
+            for j in range(i + 1):
+                amat[i, j] = np.sum(self.dr_mat[i] * self.dr_mat[j])
+                amat[j, i] = amat[i, j]
+            b[i] = -np.sum(self.dr_mat[i] * r)
+
+        try:
+            x = linalg.solve(amat, b, assume_a = 'sym')
+            # print('x', x)
+            for i in range(ns):
+                if i == 0 :
+                    drho = x[i] * self.dn_mat[i]
+                    res = r + x[i] * self.dr_mat[i]
+                else :
+                    drho += x[i] * self.dn_mat[i]
+                    res += x[i] * self.dr_mat[i]
+            return (res, drho)
+        except Exception :
+            print('!WARN : Change to linear mixer')
+            print('amat', amat)
+            return False
 
 
 class BroydenMixer(AbstractMixer):

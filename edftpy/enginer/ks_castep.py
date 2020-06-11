@@ -15,14 +15,20 @@ class CastepKS(AbsDFT):
             grid = None, rho_ini = None, exttype = 3, castep_in_file = None, mixer = None, gaussian_density = None, **kwargs):
         '''
         exttype :
-                    1 : only pseudo
-                    2 : only hartree
-                    3 : hartree and pseudo
+                    1 : only pseudo                  : 001 
+                    2 : only hartree                 : 010
+                    3 : hartree + pseudo             : 011
+                    4 : only xc                      : 100
+                    5 : pseudo + xc                  : 101
+                    6 : hartree + xc                 : 110
+                    7 : pseudo + hartree + xc        : 111
         '''
         self.evaluator = evaluator
         self.grid = grid
         self.prefix = prefix
         self.exttype = exttype
+        if self.exttype > 3 :
+            raise AttributeError("!!!ERROR : Will support later")
         self._ions = ions
         self.gaussian_density = gaussian_density
         self.rho = None
@@ -44,15 +50,6 @@ class CastepKS(AbsDFT):
         self.mixer = mixer
         if self.mixer is None :
             self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.2, 1.0], maxm = 7, coef = [0.3], predecut = 0, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [1.0], predecut = None, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.2, 1.0], maxm = 7, coef = [1.0], predecut = 0, delay = 1)
-            # self.mixer = LinearMixer(predtype =None, delay = 1, coef = [0.7])
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 5, coef = [1.0])
-            # self.mixer = PulayMixer(predtype =None, predcoef = [0.2], maxm = 5, coef = [0.2])
-            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [1.0], predecut = 20.0, delay = 1)
 
     def _build_ase_atoms(self, ions, params = None, cell_params = None, castep_in_file = None):
         ase_atoms = ions2ase(ions)
