@@ -74,7 +74,8 @@ class DFTpyOF(AbsDFT):
         econv = self.options['econv0'] * self.residual_norm
         if econv < self.options['econv'] :
             self.options['econv'] = econv
-            if self.options['econv'] < 1E-14 * self._ions.nat : self.options['econv'] = 1E-14 * self._ions.nat
+            if self._ions is not None :
+                if self.options['econv'] < 1E-14 * self._ions.nat : self.options['econv'] = 1E-14 * self._ions.nat
         #-----------------------------------------------------------------------
         self.prev_density = density.copy()
         if self.options['opt_method'] == 'part' :
