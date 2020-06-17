@@ -27,7 +27,7 @@ class AtomicDensity(object):
         self._info= {}
         self._radial = {}
         for key, infile in files.items() :
-            print("setting key: " + key)
+            print("AtomicDensity key: " + key)
             if not os.path.isfile(infile):
                 raise Exception("Density file " + infile + " for atom type " + str(key) + " not found")
             else:

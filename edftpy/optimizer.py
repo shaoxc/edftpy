@@ -41,11 +41,11 @@ class Optimization(object):
         diff_res = self.get_diff_residual()
         print('diff_res', diff_res)
         for i, driver in enumerate(self.opt_drivers):
-            coef = driver.calculator.mixer.coef.copy()
-            print('coef',coef, 'i', i)
-            coef[0] = self.get_frag_coef(coef[0], diff_res[i], diff_res)
-            print('outcoef',coef)
-            # coef = None
+            # coef = driver.calculator.mixer.coef.copy()
+            # print('coef',coef, 'i', i)
+            # coef[0] = self.get_frag_coef(coef[0], diff_res[i], diff_res)
+            # print('outcoef',coef)
+            coef = None
             if update[i] :
                 denlist[i] = driver.update_density(coef = coef)
             else :

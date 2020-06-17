@@ -150,10 +150,11 @@ class EnergyEvaluatorMix(AbsFunctional):
         self.gsystem.set_density(rho + self.rest_rho)
 
         key = None
-        for k, value in self.embed_evaluator.funcdicts.items():
-            if isinstance(value, KEDF):
-                key = k
-                break
+        if self.embed_evaluator is not None :
+            for k, value in self.embed_evaluator.funcdicts.items():
+                if isinstance(value, KEDF):
+                    key = k
+                    break
         if key is not None and gaussian_density is not None :
             remove_embed = {key : self.embed_evaluator.funcdicts[key]}
             ke_embed = self.embed_evaluator.funcdicts[key]
@@ -177,11 +178,17 @@ class EnergyEvaluatorMix(AbsFunctional):
                 self.embed_potential = -ke_embed(gaussian_density, calcType = ['V']).potential
                 obj_global = ke_global(self.gsystem.gaussian_density, calcType = ['V'])
             self.embed_potential += self.gsystem.sub_value(obj_global.potential, rho)
+            #-----------------------------------------------------------------------
+            # rho_min = 1E-6
+            # gsystem_rho_sub = self.gsystem.sub_value(self.gsystem.density, rho)
+            # mask = np.logical_or(gsystem_rho_sub < rho_min, rho < rho_min)
+            # self.embed_potential[mask] = 0
+            #-----------------------------------------------------------------------
+            print('pot2', np.min(self.embed_potential), np.max(self.embed_potential))
         else :
             remove_global = {}
             remove_embed = {}
             self.embed_potential = Field(rho.grid)
-        print('pot2', np.min(self.embed_potential), np.max(self.embed_potential))
         #-----------------------------------------------------------------------
         if self.embed_evaluator is not None :
             self.embed_potential -= self.embed_evaluator(rho, calcType = ['V']).potential
