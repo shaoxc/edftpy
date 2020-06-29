@@ -51,17 +51,13 @@ class OptDriver:
     def compute(self, density = None, gsystem = None, calcType = ['O', 'E'], ext_pot = None):
         #-----------------------------------------------------------------------
         self._it += 1
-        # update_delay = self.options['update_delay']
-        # update_freq = self.options['update_freq']
-        # if self._it > update_delay and (self._it - update_delay) % update_freq > 0:
-            # return
         #-----------------------------------------------------------------------
         if density is None and self.prev_density is None:
             raise AttributeError("Must provide a guess density")
         elif density is not None :
             self.prev_density = density
 
-        if gsystem is None:
+        if gsystem is None and self.energy_evaluator.gsystem is None :
             raise AttributeError("Must provide global system")
         else:
             self.energy_evaluator.gsystem = gsystem

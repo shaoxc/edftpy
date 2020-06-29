@@ -3,6 +3,7 @@ from .utils.common import Field, Functional, AbsFunctional
 from .kedf import KEDF
 from dftpy.functionals import FunctionalClass
 from dftpy.formats.io import write
+import scipy.special as sp
 
 
 class Evaluator(AbsFunctional):
@@ -136,6 +137,7 @@ class EnergyEvaluatorMix(AbsFunctional):
         self.embed_potential = None
         self.mod_type = mod_type
         self._ke_evaluator = ke_evaluator
+        self._iter = 0
 
     def get_sub_evaluator(self, sub_functionals, **kwargs):
         funcdicts = {}
@@ -146,6 +148,7 @@ class EnergyEvaluatorMix(AbsFunctional):
         return sub_evaluator
 
     def get_embed_potential(self, rho, gaussian_density = None, with_global = False, with_sub = True, with_ke = False, **kwargs):
+        self._iter += 1
         print('gaussian_density', gaussian_density is not None, self.gsystem.gaussian_density is not None, self.mod_type)
         self.gsystem.set_density(rho + self.rest_rho)
 
@@ -206,7 +209,11 @@ class EnergyEvaluatorMix(AbsFunctional):
             self.embed_potential += self.sub_evaluator(rho, calcType = ['V']).potential
 
         if with_ke and self.ke_evaluator is not None :
-            self.embed_potential += self.ke_evaluator(rho, calcType = ['V']).potential
+            if self._iter < 0 :
+                pot = self.ke_evaluator(rho, calcType = ['V'], ldw = 0.1).potential
+            else :
+                pot = self.ke_evaluator(rho, calcType = ['V']).potential
+            self.embed_potential += pot
 
         print('pot3', np.min(self.embed_potential), np.max(self.embed_potential))
 
@@ -301,10 +308,16 @@ class EnergyEvaluatorMix(AbsFunctional):
                 obj.potential += self.gsystem.sub_value(obj_global.potential, rho)
             if 'E' in calcType :
                 obj.energy += obj_global.energy
+        if self.ke_evaluator is not None :
+            # here we return exact NL-KEDF energy
+            obj += self.ke_evaluator(rho, calcType = calcType, ldw = None)
+            # obj += self.ke_evaluator(rho, calcType = calcType)
         return obj
 
     def compute_only_ke(self, rho, calcType=["E","V"], embed = True, **kwargs):
-        obj = self.ke_evaluator(rho, calcType = calcType, **kwargs)
+        if 'ldw' in kwargs :
+            kwargs.pop('ldw', None)
+        obj = self.ke_evaluator(rho, calcType = calcType, ldw = None, **kwargs)
         # print('embed', embed, obj.energy)
         if embed :
             if 'V' in calcType :
@@ -318,3 +331,14 @@ class EnergyEvaluatorMix(AbsFunctional):
                 obj -= self.embed_evaluator(rho, calcType = calcType)
         # print('embed1', embed, obj.energy)
         return obj
+
+def smooth_interpolating_potential(density, potential, a = 5E-2, b = 3):
+    mask1 = np.logical_and(density > 0, density < a)
+    mask2 = density >= a
+    fab = np.zeros_like(potential)
+    fab[mask1] = (1.0+np.exp(a/(a - density[mask1])))/(np.exp(a/density[mask1])+np.exp(a/(a - density[mask1])))
+    fab[mask2] = 1.0
+    # fab = sp.erfc(density/a)
+    potential *= fab
+    return potential
+

@@ -18,7 +18,7 @@ from edftpy.enginer.driver import OptDriver
 from edftpy.enginer.of_dftpy import DFTpyOF
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
-from edftpy.mixer import PulayMixer
+from edftpy.mixer import PulayMixer, LinearMixer
 
 class Test(unittest.TestCase):
     def test_optim(self):
@@ -98,11 +98,12 @@ class Test(unittest.TestCase):
         ions_a = subsys_a.ions
         rho_a = subsys_a.density
         rho_a[:] = atomicd.guess_rho(ions_a, subsys_a.grid)
-        options = {"method" :'CG-HS', "maxiter": 220, "econv": 1.0e-6, "ncheck": 2}
+        options = {"method" :'CG-HS', "maxiter": 220, "econv": 1.0e-6, "ncheck": 2, "opt_method" : 'part'}
         ke_evaluator = KEDF(name='vW')
         energy_evaluator = EnergyEvaluatorMix(embed_evaluator = emb_evaluator_a, sub_evaluator = sub_evaluator_a, ke_evaluator = ke_evaluator, **kwargs)
         # mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.6], predecut = 0.0, delay = 1)
         mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.8], predecut = 0, delay = 1)
+        # mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
         of_enginer_a = DFTpyOF(mixer = mixer, options = options)
         driver_a = OptDriver(energy_evaluator = energy_evaluator, calculator = of_enginer_a)
         return subsys_a, driver_a

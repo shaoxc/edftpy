@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 
 from .utils.common import Field
 from .utils.math import fermi_dirac
+from .density import normalization_density
 
 __all__ = ["LinearMixer", "PulayMixer", "BroydenMixer"]
 
@@ -151,12 +152,9 @@ class AbstractMixer(ABC):
     def __call__(self):
         pass
 
-    def format_density(self, results, nin, tol = 1E-300):
-        # results[results < tol] = tol
-        ncharge = np.sum(nin)
-        # results *= ncharge/np.sum(results)
-        results += (ncharge-np.sum(results))/np.size(results)
-        results = Field(nin.grid, data=results, direct=True)
+    def format_density(self, results, nin):
+        ncharge = nin.integral()
+        results = normalization_density(results, ncharge=ncharge, grid=nin.grid)
         return results
 
 

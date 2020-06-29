@@ -8,11 +8,13 @@ import ase.calculators.castep as ase_calc_castep
 
 from ..mixer import LinearMixer, PulayMixer
 from ..utils.common import AbsDFT
+from ..density import normalization_density
 
 class CastepKS(AbsDFT):
     """description"""
     def __init__(self, evaluator = None, prefix = 'castep_in_sub', ions = None, params = None, cell_params = None, 
-            grid = None, rho_ini = None, exttype = 3, castep_in_file = None, mixer = None, gaussian_density = None, **kwargs):
+            grid = None, rho_ini = None, exttype = 3, castep_in_file = None, mixer = None, 
+            ncharge = None, gaussian_density = None, **kwargs):
         '''
         exttype :
                     1 : only pseudo                  : 001 
@@ -27,8 +29,8 @@ class CastepKS(AbsDFT):
         self.grid = grid
         self.prefix = prefix
         self.exttype = exttype
-        if self.exttype > 3 :
-            raise AttributeError("!!!ERROR : Will support later")
+        # if self.exttype > 3 :
+            # raise AttributeError("!!!ERROR : Will support later")
         self._ions = ions
         self.gaussian_density = gaussian_density
         self.rho = None
@@ -43,7 +45,7 @@ class CastepKS(AbsDFT):
         self._write_cell(self.prefix + '.cell', ions, params = cell_params)
         self._write_params(self.prefix + '.param', params = params)
 
-        self._castep_initialise(rho_ini = rho_ini, **kwargs)
+        self._castep_initialise(rho_ini = rho_ini, ncharge = ncharge, **kwargs)
         self.prev_density = copy.deepcopy(self.mdl.den)
         self._iter = 0
         self._filter = None
@@ -83,13 +85,15 @@ class CastepKS(AbsDFT):
                 else :
                     castep_params.__setattr__(k1, v1)
 
-    def _castep_initialise(self, rho_ini = None, **kwargs):
+    def _castep_initialise(self, rho_ini = None, ncharge = None, **kwargs):
         caspytep.cell.cell_read(self.prefix)
 
         current_cell = caspytep.cell.get_current_cell()
         caspytep.ion.ion_read()
 
         real_charge = float(np.dot(current_cell.num_ions_in_species, current_cell.ionic_charge))
+        if ncharge is not None :
+            real_charge = ncharge
         real_num_atoms = current_cell.mixture_weight.sum()
         fixed_cell = current_cell.cell_constraints.max() == 0
 
@@ -117,13 +121,18 @@ class CastepKS(AbsDFT):
         self.mdl = mdl
         #-----------------------------------------------------------------------
         caspytep.density.density_symmetrise(self.mdl.den)
-        self.mdl.den.real_charge[self.mdl.den.real_charge < 1E-30] = 1E-30
         #-----------------------------------------------------------------------
-        print('sum', np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
         if rho_ini is not None :
-            self._format_density(rho_ini, sym = True)
-        self.mdl.den.real_charge *= real_charge/ (np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
-        print('sum2', np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
+            self._format_density(rho_ini)
+            # self._format_density(rho_ini, sym = True)
+        self.density = self._format_density_invert(self.mdl.den, self.grid)
+        self.density = normalization_density(self.density, ncharge = real_charge, grid = self.grid)
+        self._format_density(self.density, sym = True)
+        #-----------------------------------------------------------------------
+        # self.mdl.den.real_charge[self.mdl.den.real_charge < 1E-30] = 1E-30
+        # print('sum', np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
+        # self.mdl.den.real_charge *= real_charge/ (np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
+        # print('sum2', np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
         #-----------------------------------------------------------------------
 
     def _write_cell(self, outfile, ions, pbc = None, params = None, **kwargs):
@@ -242,22 +251,45 @@ class CastepKS(AbsDFT):
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
         func = self.evaluator(density, calcType = ['E'], with_global = False, embed = False)
-        etype = 2
+        etype = 1
         if 'E' in calcType :
             if etype == 1 :
-                xc_energy = caspytep.electronic.electronic_get_energy('xc_energy')
                 kinetic_energy = caspytep.electronic.electronic_get_energy('kinetic_energy')
+                nonlocal_energy = caspytep.electronic.electronic_get_energy('nonlocal_energy')
                 ts = caspytep.electronic.electronic_get_energy('-TS')
-                func.energy += kinetic_energy + xc_energy + 0.5 * ts
+
+                locps_energy = caspytep.electronic.electronic_get_energy('locps_energy')
+                ion_noncoulomb_energy = caspytep.electronic.electronic_get_energy('ion_noncoulomb_energy')
+
+                hartree_energy = caspytep.electronic.electronic_get_energy('hartree_energy')
+
+                xc_energy = caspytep.electronic.electronic_get_energy('xc_energy')
+                func.energy += kinetic_energy + nonlocal_energy + ts
+                if self.exttype & 1 == 0 :
+                    func.energy += locps_energy + ion_noncoulomb_energy
+                if self.exttype & 2 == 0 :
+                    func.energy += hartree_energy
+                if self.exttype & 4 == 0 :
+                    func.energy += xc_energy
             else :
                 #-----------------------------------------------------------------------
                 total_energy = caspytep.electronic.electronic_get_energy('total_energy')
-                # nonlocal_energy = caspytep.electronic.electronic_get_energy('nonlocal_energy')
                 ion_ion_energy0 = caspytep.electronic.electronic_get_energy('ion_ion_energy0')
                 locps_energy = caspytep.electronic.electronic_get_energy('locps_energy')
                 hartree_energy = caspytep.electronic.electronic_get_energy('hartree_energy')
+                xc_energy = caspytep.electronic.electronic_get_energy('xc_energy')
                 ion_noncoulomb_energy = caspytep.electronic.electronic_get_energy('ion_noncoulomb_energy')
-                func.energy += total_energy - ion_ion_energy0 - locps_energy - ion_noncoulomb_energy - hartree_energy
+                # func.energy += total_energy - ion_ion_energy0 - locps_energy - ion_noncoulomb_energy - hartree_energy
+                func.energy += total_energy - ion_ion_energy0
+                if self.exttype & 1 == 1 :
+                    # print('ks 1', locps_energy + ion_noncoulomb_energy)
+                    func.energy -= (locps_energy + ion_noncoulomb_energy)
+                if self.exttype & 2 == 2 :
+                    func.energy -= hartree_energy
+                    # print('ks 2', hartree_energy)
+                if self.exttype & 4 == 4 :
+                    func.energy -= xc_energy
+                    # print('ks 4', xc_energy)
         print('sub_energy_ks', func.energy)
         return func
 

@@ -13,9 +13,9 @@ from dftpy.formats.io import write
 class DFTpyOF(AbsDFT):
     """description"""
     def __init__(self, evaluator = None, grid = None, rho_ini = None, options = None, mixer = None, 
-            ions = None, gaussian_density = None, **kwargs):
+            ions = None, gaussian_density = None, subcell = None, **kwargs):
         default_options = {
-            "opt_method" : 'part',
+            "opt_method" : 'full',
             "method" :'CG-HS',
             "maxcor": 6,
             "ftol": 1.0e-7,
@@ -45,6 +45,7 @@ class DFTpyOF(AbsDFT):
         self._iter = 0
         self.phi = None
         self.residual_norm = 1
+        self.subcell = subcell
         #-----------------------------------------------------------------------
         self.mixer = mixer
         if self.mixer is None :
@@ -64,19 +65,32 @@ class DFTpyOF(AbsDFT):
                 raise AttributeError("Must set grid firstly")
         return self._grid
 
-    def get_density(self, density, **kwargs):
+    def get_density(self, density, res_max = None, **kwargs):
         self._iter += 1
         #-----------------------------------------------------------------------
+        if res_max is None :
+            norm = self.residual_norm
+        else :
+            norm = res_max
+
         if self._iter == 1 :
             self.options['econv0'] = self.options['econv'] * 1E4
+            self.options['econv'] = self.options['econv0']
             self.residual_norm = 1
-            self.options['econv'] = self.options['econv0'] * self.residual_norm
-        econv = self.options['econv0'] * self.residual_norm
+        elif self._iter < 2 :
+            norm = max(0.1, self.residual_norm)
+
+        econv = self.options['econv0'] * norm
         if econv < self.options['econv'] :
             self.options['econv'] = econv
+            # if self.options['econv'] < self.options['econv0'] / 1E4 :
+                # self.options['econv'] = self.options['econv0'] / 1E4
             if self._ions is not None :
-                if self.options['econv'] < 1E-14 * self._ions.nat : self.options['econv'] = 1E-14 * self._ions.nat
+                if self.options['econv'] < 1E-12 * self._ions.nat : self.options['econv'] = 1E-12 * self._ions.nat
+        if norm < 1E-6 :
+            self.options['maxiter'] = 4
         #-----------------------------------------------------------------------
+        print('econv', self.options['econv'])
         self.prev_density = density.copy()
         if self.options['opt_method'] == 'part' :
             results = self.get_density_embed(density, **kwargs)
@@ -88,15 +102,6 @@ class DFTpyOF(AbsDFT):
         return results
 
     def get_density_full_opt(self, density, **kwargs):
-        #-----------------------------------------------------------------------
-        # if self._iter == 1 :
-            # self.options['econv0'] = self.options['econv'] * 1E4
-            # self.residual_norm = 1
-            # self.options['econv'] = self.options['econv0'] * self.residual_norm
-        # econv = self.options['econv0'] * self.residual_norm
-        # if econv < self.options['econv'] :
-            # self.options['econv'] = econv
-        #-----------------------------------------------------------------------
         # self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = False, with_sub = False, with_ke = False)
         self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = False, with_sub = False, with_ke = True)
         evaluator = self.evaluator.compute_embed
@@ -166,8 +171,8 @@ class DFTpyOF(AbsDFT):
     def get_energy(self, density = None, **kwargs):
         if density is None :
             density = self.density
-        # energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False).energy
-        energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True).energy
+        energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False).energy
+        # energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True).energy
         return energy
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):

@@ -1,6 +1,6 @@
 import numpy as np
 import copy
-from dftpy.math_utils import bestFFTsize, ecut2spacing
+from dftpy.math_utils import ecut2nr, bestFFTsize
 
 from edftpy.utils.common import Field, Grid, Atoms
 from ..utils.math import gaussian
@@ -8,12 +8,15 @@ from numpy import linalg as LA
 
 
 class SubCell(object):
-    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, gaussian_options = None, **kwargs):
+    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, full = False, gaussian_options = None, coarse_grid_ecut = None, **kwargs):
         self._grid = None
         self._ions = None
         self._density = None
+        self._grid_coarse = None
+        self._density_coarse = None
+        self._index_coarse = None
 
-        self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, **kwargs)
+        self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, full = full, coarse_grid_ecut = coarse_grid_ecut, **kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
         if gaussian_options is None or len(gaussian_options)==0:
             self._gaussian_density = None
@@ -40,6 +43,22 @@ class SubCell(object):
         return self._density
 
     @property
+    def grid_coarse(self):
+        return self._grid_coarse
+
+    @property
+    def density_coarse(self):
+        return self._density_coarse
+
+    @property
+    def index_coarse(self):
+        return self._index_coarse
+
+    @density_coarse.setter
+    def density_coarse(self, value):
+        self._density_coarse[:] = value
+
+    @property
     def gaussian_density(self):
         return self._gaussian_density
 
@@ -47,7 +66,7 @@ class SubCell(object):
     def shift(self):
         return self._shift
 
-    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = True, full = False):
+    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = True, full = False, coarse_grid_ecut = None):
         lattice_sub = ions.pos.cell.lattice.copy()
         if index is None :
             index = np.ones(ions.nat, dtype = 'bool')
@@ -79,11 +98,15 @@ class SubCell(object):
         print('subcell grid', nr)
 
         ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = lattice_sub, basis = 'Cartesian', origin = origin)
-        grid_sub = Grid(lattice=lattice_sub, nr=nr, full=False, direct = True, origin = origin, pbc = pbc)
+        grid_sub = Grid(lattice=lattice_sub, nr=nr, full=full, direct = True, origin = origin, pbc = pbc)
         grid_sub.shift = shift
         self._grid = grid_sub
         self._ions = ions_sub
         self._shift = shift
+        if coarse_grid_ecut is not None :
+            nr_coarse = ecut2nr(coarse_grid_ecut, lattice_sub, optfft = optfft)
+            grid_coarse = Grid(lattice=lattice_sub, nr=nr_coarse, full=full, direct = True, origin = origin, pbc = pbc)
+            self._grid_coarse = grid_coarse
 
     def _gen_gaussian_density(self, options={}):
         nr = self.grid.nr
@@ -132,12 +155,12 @@ class SubCell(object):
         # self._gaussian_density = rho_g.ifft()
 
 class GlobalCell(object):
-    def __init__(self, ions, grid = None, ecut = 22, spacing = None, full = False, optfft = True, **kwargs):
+    def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, **kwargs):
         self._ions = ions
         self._grid = grid
 
         if self._grid is None :
-            self._gen_grid(ecut = ecut, spacing = spacing, full = full, optfft = optfft, **kwargs)
+            self._gen_grid(ecut = ecut, spacing = spacing, nr = nr, full = full, optfft = optfft, **kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
         self._gaussian_density = Field(grid=self.grid, rank=1, direct=True)
 
@@ -167,18 +190,15 @@ class GlobalCell(object):
     def total_evaluator(self, value):
         self._total_evaluator = value
 
-    def _gen_grid(self, ecut = 22, spacing = None, full = False, optfft = True, **kwargs):
+    def _gen_grid(self, ecut = 22, spacing = None, full = False, nr = None, optfft = True, **kwargs):
         lattice = self.ions.pos.cell.lattice
-        if spacing is None :
-            spacing = ecut2spacing(ecut)
-        metric = np.dot(lattice.T, lattice)
-        nr = np.zeros(3, dtype = 'int32')
-        for i in range(3):
-            nr[i] = int(np.sqrt(metric[i, i])/spacing)
-            if optfft :
-                nr[i] = bestFFTsize(nr[i])
+        if nr is None :
+            nr = ecut2nr(ecut, lattice, optfft = optfft, spacing = spacing)
+        else :
+            nr = np.asarray(nr)
         grid = Grid(lattice=lattice, nr=nr, full=full, direct = True, **kwargs)
         self._grid = grid
+        print('GlobalCell grid', nr)
 
     def update_density(self, subrho, grid = None, restart = False, fake = False):
         indl, indr = self.get_boundary(subrho, grid)

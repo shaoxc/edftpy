@@ -3,6 +3,7 @@ import numpy as np
 from scipy.interpolate import splrep, splev
 from numpy import linalg as LA
 from edftpy.utils.common import Field, RadialGrid
+from .density import get_3d_value_recipe
 # try:
     # from edftpy.io.pp_xml import PPXmlGPAW as PPXml
 # except Exception :
@@ -275,6 +276,9 @@ class AtomicDensity(object):
         return rho
 
     def get_3d_value_recipe(self, ions, grid, ncharge = None, rho = None, dtol=1E-30, direct=True, **kwargs):
+        return get_3d_value_recipe(self._r, self._arho, ions, grid, ncharge, rho, dtol, direct, **kwargs)
+
+    def _get_3d_value_recipe(self, ions, grid, ncharge = None, rho = None, dtol=1E-30, direct=True, **kwargs):
         """
         """
         rho = Field(grid, direct = False)
