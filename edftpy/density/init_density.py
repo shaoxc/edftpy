@@ -3,7 +3,7 @@ import numpy as np
 from scipy.interpolate import splrep, splev
 from numpy import linalg as LA
 from edftpy.utils.common import Field, RadialGrid
-from .density import get_3d_value_recipe
+# from .density import get_3d_value_recipe
 # try:
     # from edftpy.io.pp_xml import PPXmlGPAW as PPXml
 # except Exception :
