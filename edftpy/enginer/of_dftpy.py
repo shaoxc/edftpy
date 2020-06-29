@@ -12,8 +12,7 @@ from dftpy.formats.io import write
 
 class DFTpyOF(AbsDFT):
     """description"""
-    def __init__(self, evaluator = None, grid = None, rho_ini = None, options = None, mixer = None, 
-            ions = None, gaussian_density = None, subcell = None, **kwargs):
+    def __init__(self, evaluator = None, subcell = None, options = None, mixer = None, **kwargs):
         default_options = {
             "opt_method" : 'full',
             "method" :'CG-HS',
@@ -34,12 +33,7 @@ class DFTpyOF(AbsDFT):
             self.options.update(options)
 
         self.evaluator = evaluator
-        self.gaussian_density = gaussian_density
-        self._grid = grid
-        self._ions = ions
-        self.rho = None
         self.fermi = None
-        self.density = None
         self.prev_density = None
         self.calc = None
         self._iter = 0
@@ -51,19 +45,8 @@ class DFTpyOF(AbsDFT):
         if self.mixer is None :
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-            # self.mixer = LinearMixer(predtype = 'kerker', coef = [0.7], predecut = 0, delay = 1)
         #-----------------------------------------------------------------------
-
-    @property
-    def grid(self):
-        if self._grid is None :
-            if hasattr(self.prev_density, 'grid'):
-                self._grid = self.prev_density.grid
-            elif hasattr(self.density, 'grid'):
-                self._grid = self.density.grid
-            else :
-                raise AttributeError("Must set grid firstly")
-        return self._grid
+        self.density = self.subcell.density
 
     def get_density(self, density, res_max = None, **kwargs):
         self._iter += 1
@@ -85,10 +68,9 @@ class DFTpyOF(AbsDFT):
             self.options['econv'] = econv
             # if self.options['econv'] < self.options['econv0'] / 1E4 :
                 # self.options['econv'] = self.options['econv0'] / 1E4
-            if self._ions is not None :
-                if self.options['econv'] < 1E-12 * self._ions.nat : self.options['econv'] = 1E-12 * self._ions.nat
-        if norm < 1E-6 :
-            self.options['maxiter'] = 4
+            if self.options['econv'] < 1E-12 * self.subcell.ions.nat : self.options['econv'] = 1E-12 * self.subcell.ions.nat
+        # if norm < 1E-6 :
+            # self.options['maxiter'] = 4
         #-----------------------------------------------------------------------
         print('econv', self.options['econv'])
         self.prev_density = density.copy()
@@ -98,12 +80,11 @@ class DFTpyOF(AbsDFT):
             results = self.get_density_full_opt(density, **kwargs)
         elif self.options['opt_method'] == 'hamiltonian' :
             results = self.get_density_hamiltonian(density)
-        # np.savetxt('of_den.' + str(self._iter), np.c_[self.grid.get_reciprocal().q.real.ravel(), self.density.fft().real.ravel()])
         return results
 
     def get_density_full_opt(self, density, **kwargs):
-        # self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = False, with_sub = False, with_ke = False)
-        self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = False, with_sub = False, with_ke = True)
+        # self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_global = False, with_sub = False, with_ke = False)
+        self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_global = False, with_sub = False, with_ke = True)
         evaluator = self.evaluator.compute_embed
         if 'method' in self.options :
             optimization_method = self.options['method']
@@ -124,8 +105,8 @@ class DFTpyOF(AbsDFT):
         # if self._iter > 20 :
             # self.options['econv'] = self.options['econv0'] * self.residual_norm /1E2
             # # self.options['econv'] = self.options['econv0'] * self.residual_norm /1E4
-            # if self.options['econv'] < 1E-14 * self._ions.nat : self.options['econv'] = 1E-14 * self._ions.nat
-        self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = True)
+            # if self.options['econv'] < 1E-14 * self.subcell.ions.nat : self.options['econv'] = 1E-14 * self.subcell.ions.nat
+        self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_global = True)
         # # evaluator = partial(self.evaluator.compute, with_global = False)
         evaluator = self.evaluator.compute_only_ke
         self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options, optimization_method = optimization_method)
@@ -152,10 +133,10 @@ class DFTpyOF(AbsDFT):
         return self.density
 
     def get_density_hamiltonian(self, density, **kwargs):
-        self.evaluator.get_embed_potential(density, gaussian_density = self.gaussian_density, with_global = True)
+        self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_global = True)
         # potential = self.evaluator(density).potential
         potential = self.evaluator.embed_potential
-        hamiltonian = Hamiltonian(potential, grid = self.grid)
+        hamiltonian = Hamiltonian(potential, grid = self.subcell.grid)
         eigens = hamiltonian.eigens()
         eig = eigens[0][0]
         print('eig', eig)
@@ -189,7 +170,7 @@ class DFTpyOF(AbsDFT):
         print('res_norm_of', self._iter, np.max(abs(r)), np.sqrt(np.sum(r * r)/np.size(r)))
         self.density = self.mixer(self.prev_density, self.density, **kwargs)
         # print('max',self.density.max(), self.density.min(), self.density.integral())
-        # write(str(self._iter) + '.xsf', self.density, self._ions)
+        # write(str(self._iter) + '.xsf', self.density, self.subcell.ions)
         return self.density
 
     def get_fermi_level(self, **kwargs):

@@ -104,7 +104,7 @@ class Test(unittest.TestCase):
         # mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.6], predecut = 0.0, delay = 1)
         mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.8], predecut = 0, delay = 1)
         # mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
-        of_enginer_a = DFTpyOF(mixer = mixer, options = options)
+        of_enginer_a = DFTpyOF(mixer = mixer, options = options, subcell = subsys_a)
         driver_a = OptDriver(energy_evaluator = energy_evaluator, calculator = of_enginer_a)
         return subsys_a, driver_a
 

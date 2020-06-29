@@ -12,9 +12,8 @@ from ..density import normalization_density
 
 class CastepKS(AbsDFT):
     """description"""
-    def __init__(self, evaluator = None, prefix = 'castep_in_sub', ions = None, params = None, cell_params = None, 
-            grid = None, rho_ini = None, exttype = 3, castep_in_file = None, mixer = None, 
-            ncharge = None, gaussian_density = None, **kwargs):
+    def __init__(self, evaluator = None, subcell = None, prefix = 'castep_in_sub', params = None, cell_params = None, 
+            exttype = 3, castep_in_file = None, mixer = None, ncharge = None, **kwargs):
         '''
         exttype :
                     1 : only pseudo                  : 001 
@@ -26,13 +25,9 @@ class CastepKS(AbsDFT):
                     7 : pseudo + hartree + xc        : 111
         '''
         self.evaluator = evaluator
-        self.grid = grid
         self.prefix = prefix
         self.exttype = exttype
-        # if self.exttype > 3 :
-            # raise AttributeError("!!!ERROR : Will support later")
-        self._ions = ions
-        self.gaussian_density = gaussian_density
+        self.subcell = subcell
         self.rho = None
         self.wfs = None
         self.occupations = None
@@ -40,21 +35,28 @@ class CastepKS(AbsDFT):
         self.fermi = None
         self.perform_mix = False
         self.mdl = None
-        self.density = None
-        self._build_ase_atoms(ions, params, cell_params, castep_in_file)
-        self._write_cell(self.prefix + '.cell', ions, params = cell_params)
+        self._build_ase_atoms(params, cell_params, castep_in_file)
+        self._write_cell(self.prefix + '.cell', params = cell_params)
         self._write_params(self.prefix + '.param', params = params)
 
-        self._castep_initialise(rho_ini = rho_ini, ncharge = ncharge, **kwargs)
+        self._castep_initialise(rho_ini = None, ncharge = ncharge, **kwargs)
         self.prev_density = copy.deepcopy(self.mdl.den)
         self._iter = 0
         self._filter = None
         self.mixer = mixer
         if self.mixer is None :
             self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
+        #-----------------------------------------------------------------------
+        self.subcell.density[:] = self._format_density_invert(self.mdl.den, self.subcell.grid)
+        self.density = self.subcell.density
+        #-----------------------------------------------------------------------
 
-    def _build_ase_atoms(self, ions, params = None, cell_params = None, castep_in_file = None):
-        ase_atoms = ions2ase(ions)
+    @property
+    def grid(self):
+        return self.subcell.grid
+
+    def _build_ase_atoms(self, params = None, cell_params = None, castep_in_file = None):
+        ase_atoms = ions2ase(self.subcell.ions)
         ase_atoms.set_calculator(ase_calc_castep.Castep())
         self.ase_atoms = ase_atoms
         ase_cell = self.ase_atoms.calc.cell
@@ -135,7 +137,7 @@ class CastepKS(AbsDFT):
         # print('sum2', np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
         #-----------------------------------------------------------------------
 
-    def _write_cell(self, outfile, ions, pbc = None, params = None, **kwargs):
+    def _write_cell(self, outfile, pbc = None, params = None, **kwargs):
         ase_atoms = self.ase_atoms
         ase_io_castep.write_cell(outfile, ase_atoms, force_write = True)
         return
@@ -172,7 +174,7 @@ class CastepKS(AbsDFT):
         # extpot = func.potential.ravel(order = 'F')
         # extene = func.energy
         #-----------------------------------------------------------------------
-        self.evaluator.get_embed_potential(rho, gaussian_density = self.gaussian_density, with_global = True)
+        self.evaluator.get_embed_potential(rho, gaussian_density = self.subcell.gaussian_density, with_global = True)
         extpot = self.evaluator.embed_potential
         extene = (extpot * rho).integral()
         extpot = extpot.ravel(order = 'F')
@@ -202,8 +204,6 @@ class CastepKS(AbsDFT):
         '''
         Must call first time
         '''
-        if self.grid is None :
-            self.grid = density.grid
         #-----------------------------------------------------------------------
         self._iter += 1
         sym = True
@@ -336,7 +336,7 @@ class CastepKS(AbsDFT):
         return energy
 
     def get_forces(self, **kwargs):
-        forces = np.empty((3, self._ions.nat))
+        forces = np.empty((3, self.subcell.ions.nat))
         caspytep.firstd.firstd_calculate_forces_edft_ext(self.mdl, forces, 2)
         forces = np.transpose(forces)
         return forces

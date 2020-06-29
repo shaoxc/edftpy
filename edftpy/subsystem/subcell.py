@@ -42,6 +42,12 @@ class SubCell(object):
             raise AttributeError("Must set density firstly")
         return self._density
 
+    @density.setter
+    def density(self, value):
+        if self._density is None:
+            raise AttributeError("Must set density firstly")
+        self._density[:] = value
+
     @property
     def grid_coarse(self):
         return self._grid_coarse

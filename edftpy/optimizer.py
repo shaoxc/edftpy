@@ -87,25 +87,38 @@ class Optimization(object):
                 raise AttributeError("Must provide global system")
         else:
             self.gsystem = gsystem
+
+        if guess_rho is None :
+            guess_rho = []
+            for driver in self.opt_drivers:
+                guess_rho.append(driver.density)
+
+        self.gsystem.gaussian_density[:] = 0.0
+        for driver in self.opt_drivers:
+            gaussian_density = driver.calculator.subcell.gaussian_density
+            if gaussian_density is not None :
+                self.gsystem.update_density(gaussian_density, restart = False, fake = True)
         #-----------------------------------------------------------------------
         self.nsub = len(self.opt_drivers)
         energy_history = []
 
-        prev_denlist = copy.deepcopy(guess_rho)
-        for i, item in enumerate(prev_denlist):
+        prev_denlist = []
+        denlist = []
+        for i, item in enumerate(guess_rho):
+            prev_denlist.append(item.copy())
+            denlist.append(item.copy())
             if i == 0 :
-                gsystem.update_density(item, restart = True)
+                self.gsystem.update_density(item, restart = True)
             else :
-                gsystem.update_density(item, restart = False)
-        totalrho = gsystem.density.copy()
+                self.gsystem.update_density(item, restart = False)
+        totalrho = self.gsystem.density.copy()
 
         mu_list = [[] for _ in range(len(self.opt_drivers))]
         func_list = [[] for _ in range(len(self.opt_drivers) + 1)]
-        denlist = copy.deepcopy(prev_denlist)
         energy_history = [0.0]
         # for i, driver in enumerate(self.opt_drivers):
-            # gsystem.density[:] = totalrho
-            # driver(density = prev_denlist[i], gsystem = gsystem, calcType = ['E'])
+            # self.gsystem.density[:] = totalrho
+            # driver(density = prev_denlist[i], gsystem = self.gsystem, calcType = ['E'])
             # func_list.append(driver.functional)
             # mu_list.append([])
 
@@ -140,8 +153,8 @@ class Optimization(object):
                     update[i] = True
 
                 if update[i] :
-                    gsystem.density[:] = totalrho
-                    driver(density = prev_denlist[i], gsystem = gsystem, calcType = ['O', 'E'])
+                    self.gsystem.density[:] = totalrho
+                    driver(density = prev_denlist[i], gsystem = self.gsystem, calcType = ['O', 'E'])
                     denlist[i] = driver.density
                     func_list[i] = driver.functional
                     mu_list[i] = driver.mu

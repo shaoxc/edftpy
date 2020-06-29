@@ -33,6 +33,8 @@ class OptDriver:
         self.prev_density = None
         self._it = 0
         self._filter = None
+        self.density = None
+        self.density = self.calculator.density
 
     def get_energy_evaluator(self, embed_evaluator = None, sub_evaluator = None, **kwargs):
         """
