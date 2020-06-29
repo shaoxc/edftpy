@@ -10,3 +10,4 @@ examples/debug
 doc/build/
 .ipynb_checkpoints/
 bak/
+.buildconfig
