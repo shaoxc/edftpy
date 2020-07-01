@@ -4,6 +4,7 @@ from functools import partial
 
 from ..mixer import LinearMixer, PulayMixer
 from ..utils.common import AbsDFT
+from ..utils.math import grid_map_data
 from .hamiltonian import Hamiltonian
 
 from dftpy.optimization import Optimization
@@ -68,9 +69,9 @@ class DFTpyOF(AbsDFT):
             self.options['econv'] = econv
             # if self.options['econv'] < self.options['econv0'] / 1E4 :
                 # self.options['econv'] = self.options['econv0'] / 1E4
-            if self.options['econv'] < 1E-12 * self.subcell.ions.nat : self.options['econv'] = 1E-12 * self.subcell.ions.nat
-        # if norm < 1E-6 :
-            # self.options['maxiter'] = 4
+            # if self.options['econv'] < 1E-12 * self.subcell.ions.nat : self.options['econv'] = 1E-12 * self.subcell.ions.nat
+        if norm < 1E-8 :
+            self.options['maxiter'] = 4
         #-----------------------------------------------------------------------
         print('econv', self.options['econv'])
         self.prev_density = density.copy()
@@ -83,16 +84,27 @@ class DFTpyOF(AbsDFT):
         return results
 
     def get_density_full_opt(self, density, **kwargs):
-        # self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_global = False, with_sub = False, with_ke = False)
         self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_global = False, with_sub = False, with_ke = True)
-        evaluator = self.evaluator.compute_embed
         if 'method' in self.options :
             optimization_method = self.options['method']
         else :
             optimization_method = 'CG-HS'
-        self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options, optimization_method = optimization_method)
-        self.calc.optimize_rho()
-        self.density = self.calc.rho
+
+        if self.evaluator.grid_coarse is None :
+            rho = density
+            evaluator = self.evaluator.compute_embed
+            self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=rho, optimization_options=self.options, optimization_method = optimization_method)
+            self.calc.optimize_rho()
+            self.density = self.calc.rho
+            # self.density.grid = density.grid
+        else :
+            rho = grid_map_data(density, grid = self.evaluator.grid_coarse)
+            evaluator = self.evaluator.compute_embed_coarse
+            self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=rho, optimization_options=self.options, optimization_method = optimization_method)
+            self.calc.optimize_rho(guess_phi = self.phi)
+            self.density = grid_map_data(self.calc.rho, grid = density.grid)
+            self.density *= np.sum(density)/np.sum(self.density)
+            self.phi = self.calc.phi.copy()
         self.fermi_level = self.calc.mu
         return self.density
 
@@ -158,9 +170,11 @@ class DFTpyOF(AbsDFT):
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
         if self.options['opt_method'] == 'full' :
-            func = self.evaluator(density, calcType = calcType, with_global = False, embed = False)
+            # func = self.evaluator(density, calcType = calcType, with_global = False, embed = False)
+            func = self.evaluator.compute(density, calcType = calcType, with_global = False)
         else :
-            func = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True)
+            # func = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True)
+            func = self.evaluator.compute_only_ke(density, calcType = calcType, with_global = False, embed = False)
         print('sub_energy_of', func.energy)
         return func
 

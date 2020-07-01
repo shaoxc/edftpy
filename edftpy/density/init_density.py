@@ -166,6 +166,7 @@ class AtomicDensity(object):
             latp[i] = np.sqrt(metric[i, i])
         gaps = latp / nr
         for key in self._r :
+            print('kkkk', key)
             r = self._r[key]
             arho = self._arho[key]
             rcut = np.max(r)

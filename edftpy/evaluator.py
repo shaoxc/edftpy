@@ -1,5 +1,6 @@
 import numpy as np
 from .utils.common import Field, Functional, AbsFunctional
+from .utils.math import grid_map_index, grid_map_data
 from .kedf import KEDF
 from dftpy.functionals import FunctionalClass
 from dftpy.formats.io import write
@@ -126,18 +127,21 @@ class TotalEvaluatorAll(object):
 
 
 class EnergyEvaluatorMix(AbsFunctional):
-    def __init__(self, embed_evaluator = None, sub_evaluator = None, sub_functionals = None, ke_evaluator = None, mod_type = 1, **kwargs):
+    def __init__(self, embed_evaluator = None, sub_evaluator = None, ke_evaluator = None, mod_type = 1, gsystem = None,
+            sub_evaluator_coarse = None, grid_coarse = None, gsystem_coarse = None, **kwargs):
         """
         sub_functionals : [dict{'type', 'name', 'options'}]
         """
         self.embed_evaluator = embed_evaluator
         self.sub_evaluator = sub_evaluator
-        # self.sub_evaluator = self.get_sub_evaluator(sub_functionals)
-        self._gsystem = None
+        self._gsystem = gsystem
         self.embed_potential = None
         self.mod_type = mod_type
         self._ke_evaluator = ke_evaluator
         self._iter = 0
+        self.sub_evaluator_coarse = sub_evaluator_coarse
+        self.grid_coarse = grid_coarse
+        self._gsystem_coarse = gsystem_coarse
 
     def get_sub_evaluator(self, sub_functionals, **kwargs):
         funcdicts = {}
@@ -209,13 +213,16 @@ class EnergyEvaluatorMix(AbsFunctional):
             self.embed_potential += self.sub_evaluator(rho, calcType = ['V']).potential
 
         if with_ke and self.ke_evaluator is not None :
-            if self._iter < 0 :
+            if self._iter < 0 : # debug most stable
                 pot = self.ke_evaluator(rho, calcType = ['V'], ldw = 0.1).potential
             else :
                 pot = self.ke_evaluator(rho, calcType = ['V']).potential
             self.embed_potential += pot
 
         print('pot3', np.min(self.embed_potential), np.max(self.embed_potential))
+
+        if self.grid_coarse is not None :
+            self.embed_potential_coarse = grid_map_data(self.embed_potential, self.grid_coarse.nr)
 
     @property
     def gsystem(self):
@@ -227,6 +234,14 @@ class EnergyEvaluatorMix(AbsFunctional):
     @gsystem.setter
     def gsystem(self, value):
         self._gsystem = value
+
+    @property
+    def gsystem_coarse(self):
+        return self._gsystem_coarse
+
+    @gsystem_coarse.setter
+    def gsystem_coarse(self, value):
+        self._gsystem_coarse = value
 
     @property
     def ke_evaluator(self):
@@ -250,6 +265,8 @@ class EnergyEvaluatorMix(AbsFunctional):
     @rest_rho.setter
     def rest_rho(self, value):
         self._rest_rho = value
+        if self.grid_coarse is not None :
+            self.rest_rho_coarse = grid_map_data(self.rest_rho, self.grid_coarse.nr)
 
     def __call__(self, rho, calcType=["E","V"], with_global = True, embed = True, only_ke = False, **kwargs):
 
@@ -332,6 +349,38 @@ class EnergyEvaluatorMix(AbsFunctional):
         # print('embed1', embed, obj.energy)
         return obj
 
+    def compute_embed_coarse(self, rho, calcType=["E","V"], with_global = True, **kwargs):
+        if self.sub_evaluator_coarse is None :
+            potential = Field(grid=rho.grid, rank=1, direct=True)
+            obj = Functional(name = 'ZERO', energy=0.0, potential=potential)
+        else :
+            obj = self.sub_evaluator_coarse(rho, calcType = calcType)
+
+        if 'V' in calcType :
+            obj.potential += self.embed_potential_coarse
+        if 'E' in calcType :
+            obj.energy += np.sum(rho * self.embed_potential_coarse) * rho.grid.dV
+
+        if with_global :
+            #-----------------------------------------------------------------------
+            remove_global = {}
+            if self.embed_evaluator is not None :
+                for key in self.embed_evaluator.funcdicts :
+                    remove_global[key] = self.gsystem_coarse.total_evaluator.funcdicts[key]
+                    self.gsystem_coarse.total_evaluator.update_functional(remove = remove_global)
+            #-----------------------------------------------------------------------
+            self.gsystem_coarse.set_density(rho + self.rest_rho_coarse)
+            obj_global = self.gsystem_coarse.total_evaluator(self.gsystem_coarse.density, calcType = calcType)
+            if 'V' in calcType :
+                obj.potential += self.gsystem_coarse.sub_value(obj_global.potential, rho)
+            if 'E' in calcType :
+                obj.energy += obj_global.energy
+            #-----------------------------------------------------------------------
+            self.gsystem_coarse.total_evaluator.update_functional(add = remove_global)
+            #-----------------------------------------------------------------------
+        return obj
+
+
 def smooth_interpolating_potential(density, potential, a = 5E-2, b = 3):
     mask1 = np.logical_and(density > 0, density < a)
     mask2 = density >= a
@@ -341,4 +390,3 @@ def smooth_interpolating_potential(density, potential, a = 5E-2, b = 3):
     # fab = sp.erfc(density/a)
     potential *= fab
     return potential
-

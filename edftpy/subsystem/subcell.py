@@ -73,6 +73,7 @@ class SubCell(object):
         return self._shift
 
     def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = True, full = False, coarse_grid_ecut = None):
+        lattice = ions.pos.cell.lattice.copy()
         lattice_sub = ions.pos.cell.lattice.copy()
         if index is None :
             index = np.ones(ions.nat, dtype = 'bool')
@@ -86,10 +87,14 @@ class SubCell(object):
 
         pbc = np.ones(3, dtype = 'int32')
         for i in range(3):
+            latp0 = np.linalg.norm(lattice[:, i])
             latp = np.linalg.norm(lattice_sub[:, i])
-            if cellcut[i] > 1E-6 and latp > 2.0 * cellcut[i]:
+            if cellcut[i] > 1E-6 :
                 pbc[i] = False
                 cell_size[i] += cellcut[i] * 2.0
+                if cell_size[i] > (latp0 - spacings[i]):
+                    origin[i] = 0.0
+                    continue
                 origin[i] -= cellcut[i]
                 shift[i] = int(origin[i]/spacings[i])
                 origin[i] = shift[i] * spacings[i]
@@ -206,7 +211,42 @@ class GlobalCell(object):
         self._grid = grid
         print('GlobalCell grid', nr)
 
-    def update_density(self, subrho, grid = None, restart = False, fake = False):
+    def update_density(self, subrho, grid = None, restart = False, fake = False, index = None):
+        if index is None :
+            index = self.get_sub_index(subrho, grid)
+        if fake :
+            if restart :
+                self._gaussian_density[:] = 1E-30
+            self._gaussian_density[index[0], index[1], index[2]] += subrho.ravel()
+        else :
+            if restart :
+                self._density[:] = 1E-30
+            self._density[index[0], index[1], index[2]] += subrho.ravel()
+        return self._density
+
+    def sub_value(self, total, subrho, grid = None, index = None):
+        if grid is None :
+            if hasattr(subrho, 'grid'):
+                grid = subrho.grid
+            else :
+                grid = subrho
+        if index is None :
+            index = self.get_sub_index(subrho, grid = grid)
+        value = total[index[0], index[1], index[2]]
+        value = Field(grid=grid, data=value, direct=True)
+        return value 
+
+    def set_density(self, subrho, grid = None, restart = False, fake = False, index = None):
+        if index is None :
+            index = self.get_sub_index(subrho, grid)
+        if fake :
+            self._gaussian_density[index[0], index[1], index[2]] = subrho.ravel()
+            return self._gaussian_density
+        else :
+            self._density[index[0], index[1], index[2]] = subrho.ravel()
+            return self._density
+
+    def update_density_bound(self, subrho, grid = None, restart = False, fake = False):
         indl, indr = self.get_boundary(subrho, grid)
         if fake :
             if restart :
@@ -218,15 +258,15 @@ class GlobalCell(object):
             self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
         return self._density
 
-    def sub_value(self, total, subrho, grid = None):
+    def sub_value_bound(self, total, subrho, grid = None):
         indl, indr = self.get_boundary(subrho, grid)
         value = total[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]].copy()
         return value 
 
-    def set_density(self, subrho, grid = None, restart = False, fake = False):
+    def set_density_bound(self, subrho, grid = None, restart = False, fake = False):
         indl, indr = self.get_boundary(subrho, grid)
         if fake :
-            self._gaussian_density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
+            self._gaussian_density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] = subrho
             return self._gaussian_density
         else :
             self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] = subrho
@@ -239,6 +279,24 @@ class GlobalCell(object):
         nr_sub = grid.nr
         indr = indl + nr_sub
         return indl, indr
+
+    def get_sub_index(self, subrho = None, grid = None):
+        if grid is None :
+            if hasattr(subrho, 'grid'):
+                grid = subrho.grid
+            else :
+                grid = subrho
+        indl = grid.shift
+        nr_sub = grid.nr
+        indr = indl + nr_sub
+        index = np.mgrid[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]].reshape((3, -1))
+        nr = self.grid.nr
+        for i in range(3):
+            mask = index[i] < 0
+            index[i][mask] += nr[i]
+            mask2 = index[i] > nr[i] - 1
+            index[i][mask2] -= nr[i]
+        return index
 
     @property
     def gaussian_density(self):
