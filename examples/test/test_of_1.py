@@ -71,11 +71,12 @@ class Test(unittest.TestCase):
         # Test TFvW-KE
         ke_kwargs = {'name' :'TF'}
         energy = test_ke(ke_kwargs)
+        print('energy', energy)
         self.assertTrue(np.isclose(energy, -8.281114354275829, rtol = 1E-3))
         # Test vW-KE
-        print(energy)
         ke_kwargs = None
         energy = test_ke(ke_kwargs)
+        print('energy', energy)
         self.assertTrue(np.isclose(energy, -11.394097752526489, rtol = 1E-3))
 
     def gen_sub_of(self, ions, grid, pplist = None, index = None, atomicd = None, xc_kwargs = {}, ke_kwargs = {}, emb_ke_kwargs = {}, **kwargs):

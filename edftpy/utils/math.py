@@ -61,3 +61,13 @@ def fine_to_coarse_bak(data, nr_coarse, direct = True):
     else :
         results = value_g
     return results
+
+def smooth_interpolating_potential(density, potential, a = 5E-2, b = 3):
+    mask1 = np.logical_and(density > 0, density < a)
+    mask2 = density >= a
+    fab = np.zeros_like(potential)
+    fab[mask1] = (1.0+np.exp(a/(a - density[mask1])))/(np.exp(a/density[mask1])+np.exp(a/(a - density[mask1])))
+    fab[mask2] = 1.0
+    # fab = sp.erfc(density/a)
+    potential *= fab
+    return potential

@@ -308,7 +308,7 @@ class EnergyEvaluatorMix(AbsFunctional):
             #-----------------------------------------------------------------------
         return obj
 
-    def compute(self, rho, calcType=["E","V"], with_global = True, **kwargs):
+    def compute(self, rho, calcType=["E","V"], with_global = True, with_ke = True, **kwargs):
         if self.sub_evaluator is None :
             potential = Field(grid=rho.grid, rank=1, direct=True)
             obj = Functional(name = 'ZERO', energy=0.0, potential=potential)
@@ -325,7 +325,7 @@ class EnergyEvaluatorMix(AbsFunctional):
                 obj.potential += self.gsystem.sub_value(obj_global.potential, rho)
             if 'E' in calcType :
                 obj.energy += obj_global.energy
-        if self.ke_evaluator is not None :
+        if self.ke_evaluator is not None and with_ke:
             # here we return exact NL-KEDF energy
             obj += self.ke_evaluator(rho, calcType = calcType, ldw = None)
             # obj += self.ke_evaluator(rho, calcType = calcType)
@@ -379,14 +379,3 @@ class EnergyEvaluatorMix(AbsFunctional):
             self.gsystem_coarse.total_evaluator.update_functional(add = remove_global)
             #-----------------------------------------------------------------------
         return obj
-
-
-def smooth_interpolating_potential(density, potential, a = 5E-2, b = 3):
-    mask1 = np.logical_and(density > 0, density < a)
-    mask2 = density >= a
-    fab = np.zeros_like(potential)
-    fab[mask1] = (1.0+np.exp(a/(a - density[mask1])))/(np.exp(a/density[mask1])+np.exp(a/(a - density[mask1])))
-    fab[mask2] = 1.0
-    # fab = sp.erfc(density/a)
-    potential *= fab
-    return potential

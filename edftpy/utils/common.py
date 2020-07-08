@@ -4,6 +4,7 @@ from dftpy.field import DirectField, ReciprocalField
 from dftpy.grid import DirectGrid, ReciprocalGrid
 from dftpy.atom import Atom as dftpy_atom
 from dftpy.base import DirectCell
+from dftpy.base import Coord as dftpy_coord
 from abc import ABC, abstractmethod
 from scipy.interpolate import interp1d, splrep, splev
 from dftpy.math_utils import quartic_interpolation
@@ -86,6 +87,13 @@ def Functional(name=None, energy=None, potential=None, **kwargs):
     obj = dftpy_func(name = name, energy = energy, potential = potential, **kwargs)
     return obj
 
+def Coord(pos, cell=None, basis="Cartesian"):
+    if cell is None :
+        cell = pos.cell
+    elif not isinstance(cell, DirectCell):
+        cell = DirectCell(cell)
+    obj = dftpy_coord(pos, cell, basis)
+    return obj
 
 class AbsFunctional(ABC):
     @abstractmethod

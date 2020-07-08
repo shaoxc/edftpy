@@ -314,6 +314,7 @@ class CastepKS(AbsDFT):
                 if self.exttype & 4 == 0 :
                     func.energy += xc_energy
             else :
+                # This way need give exact energy of external potential (extene)
                 #-----------------------------------------------------------------------
                 total_energy = caspytep.electronic.electronic_get_energy('total_energy')
                 ion_ion_energy0 = caspytep.electronic.electronic_get_energy('ion_ion_energy0')
@@ -337,6 +338,7 @@ class CastepKS(AbsDFT):
 
     def update_density(self, **kwargs):
         mix_grid = False
+        # mix_grid = True
         if self.mixer is None :
             if self._iter > 1 :
                 caspytep.dm.dm_mix_density(self.mdl.den, self.mdl.den)

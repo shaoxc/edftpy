@@ -168,10 +168,15 @@ class DFTpyOF(AbsDFT):
         # energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True).energy
         return energy
 
-    def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
+    def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, **kwargs):
         if self.options['opt_method'] == 'full' :
             # func = self.evaluator(density, calcType = calcType, with_global = False, embed = False)
-            func = self.evaluator.compute(density, calcType = calcType, with_global = False)
+            if olevel == 0 :
+                func = self.evaluator.compute(density, calcType = calcType, with_global = False)
+            elif olevel == 1 :
+                func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False)
+            elif olevel == 2 :
+                func = self.evaluator.compute_embed(density, calcType = calcType, with_global = False)
         else :
             # func = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True)
             func = self.evaluator.compute_only_ke(density, calcType = calcType, with_global = False, embed = False)

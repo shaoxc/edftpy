@@ -2,6 +2,7 @@ import numpy as np
 import time
 import copy
 from .hartree import Hartree
+from dftpy.formats import io
 
 
 class Optimization(object):
@@ -34,6 +35,21 @@ class Optimization(object):
                 energy += func.energy
                 elist.append(func.energy)
         elist.append(energy)
+        return energy
+
+    def get_energy_all(self, totalrho = None, totalfunc = None, olevel = 0, **kwargs):
+        elist = []
+        if totalfunc is None :
+            if totalrho is None :
+                totalrho = self.gsystem.density.copy()
+            totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
+        elist.append(totalfunc.energy)
+        for i, driver in enumerate(self.opt_drivers):
+            self.gsystem.density[:] = totalrho
+            driver(density =driver.density, gsystem = self.gsystem, calcType = ['E'], olevel = olevel)
+            elist.append(driver.energy)
+        elist = np.asarray(elist)
+        energy = [np.sum(elist), elist]
         return energy
 
     def update_density(self, denlist = None, prev_denlist = None, mu = None, update = None, **kwargs):
@@ -85,6 +101,7 @@ class Optimization(object):
         if gsystem is None:
             if self.gsystem is None :
                 raise AttributeError("Must provide global system")
+            gsystem = self.gsystem
         else:
             self.gsystem = gsystem
 
@@ -112,6 +129,7 @@ class Optimization(object):
             else :
                 self.gsystem.update_density(item, restart = False)
         totalrho = self.gsystem.density.copy()
+        # io.write('total.xsf', totalrho, self.gsystem.ions)
 
         mu_list = [[] for _ in range(len(self.opt_drivers))]
         func_list = [[] for _ in range(len(self.opt_drivers) + 1)]
@@ -179,7 +197,8 @@ class Optimization(object):
             if self.check_converge(energy_history):
                 print("#### Subsytem Density Optimization Converged ####")
                 break
-        self.energy = energy
+        # self.energy = energy
+        self.energy = self.get_energy_all(totalrho, totalfunc, olevel = 0)[0]
         self.density = totalrho
         self.subdens = denlist
         return

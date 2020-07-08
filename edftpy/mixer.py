@@ -59,10 +59,11 @@ class SpecialPrecondition :
             self._mask = np.zeros(self.grid.nrG, dtype = 'bool')
             if self._ecut is not None :
                 if self._ecut < 2 :
-                    gmax = max(gg[:, 0, 0].max(), gg[0, :, 0].max(), gg[0, 0, :].max())
-                    self._mask[gg > gmax + 2] = True
+                    gmax = max(gg[:, 0, 0].max(), gg[0, :, 0].max(), gg[0, 0, :].max()) + 2
                 else :
-                    self._mask[gg > 2.0 * self._ecut] = True
+                    gmax = 2.0 * self._ecut
+                self._mask[gg > gmax] = True
+                print('Density mixing gmax', gmax, self._ecut)
         return self._mask
 
     def kerker(self):

@@ -2,7 +2,7 @@ import numpy as np
 import copy
 from dftpy.math_utils import ecut2nr, bestFFTsize
 
-from edftpy.utils.common import Field, Grid, Atoms
+from edftpy.utils.common import Field, Grid, Atoms, Coord
 from ..utils.math import gaussian
 from numpy import linalg as LA
 
@@ -79,34 +79,45 @@ class SubCell(object):
             index = np.ones(ions.nat, dtype = 'bool')
         pos = ions.pos.to_cart()[index].copy()
         spacings = grid.spacings.copy()
-        shift = np.zeros(3, dtype = 'int32')
+        shift = np.zeros(3, dtype = 'int')
+        origin = np.zeros(3)
         nr = grid.nr.copy()
 
-        origin = np.min(pos, axis = 0)
-        cell_size = np.max(pos, axis = 0)-origin
-
-        pbc = np.ones(3, dtype = 'int32')
+        cell_size = np.ptp(pos, axis = 0)
+        pbc = np.ones(3, dtype = 'int')
+        max_prime = 5
         for i in range(3):
             latp0 = np.linalg.norm(lattice[:, i])
             latp = np.linalg.norm(lattice_sub[:, i])
             if cellcut[i] > 1E-6 :
                 pbc[i] = False
                 cell_size[i] += cellcut[i] * 2.0
-                if cell_size[i] > (latp0 - spacings[i]):
+                if cell_size[i] > (latp0 - (max_prime + 1) * spacings[i]):
                     origin[i] = 0.0
                     continue
-                origin[i] -= cellcut[i]
-                shift[i] = int(origin[i]/spacings[i])
-                origin[i] = shift[i] * spacings[i]
+                origin[i] = 0.5
                 nr[i] = int(cell_size[i]/spacings[i])
                 #-----------------------------------------------------------------------
                 if optfft :
-                    nr[i] = bestFFTsize(nr[i])
+                    nr[i] = bestFFTsize(nr[i], scale = 1, max_prime = max_prime)
                 lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
             else :
                 origin[i] = 0.0
+
+        c1 = Coord(origin, lattice_sub, basis = 'Crystal').to_cart()
+
+        c0 = np.mean(pos, axis = 0)
+        center = Coord(c0, lattice, basis = 'Cartesian').to_crys()
+        center[origin < 1E-6] = 0.0
+        c0 = Coord(center, lattice, basis = 'Crystal').to_cart()
+
+        origin = np.array(c0) - np.array(c1)
+        shift[:] = np.array(Coord(origin, lattice, basis = 'Cartesian').to_crys()) * grid.nr
+        origin[:] = shift / grid.nr
+        origin[:] = Coord(origin, lattice, basis = 'Crystal').to_cart()
         pos -= origin
         print('subcell grid', nr)
+        print('subcell shift', shift)
 
         ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = lattice_sub, basis = 'Cartesian', origin = origin)
         grid_sub = Grid(lattice=lattice_sub, nr=nr, full=full, direct = True, origin = origin, pbc = pbc)
@@ -129,8 +140,10 @@ class SubCell(object):
         for key, option in options.items() :
             rcut = option.get('rcut', 5.0)
             sigma = option.get('sigma', 0.4)
-            scale = option.get('scale', 1.0)
+            scale = option.get('scale', 0.0)
             # scale = option.get('scale', self.ions.Zval[key])
+            if scale is None or abs(scale) < 1E-10 :
+                continue
             border = (rcut / gaps).astype(np.int32) + 1
             border = np.minimum(border, nr//2)
             ixyzA = np.mgrid[-border[0]:border[0]+1, -border[1]:border[1]+1, -border[2]:border[2]+1].reshape((3, -1))
@@ -162,8 +175,6 @@ class SubCell(object):
         print('fake01', np.sum(self._gaussian_density) * self.grid.dV)
         self._gaussian_density *= factor
         print('fake02', np.sum(self._gaussian_density) * self.grid.dV)
-        # rho_g = self._gaussian_density.fft()
-        # self._gaussian_density = rho_g.ifft()
 
 class GlobalCell(object):
     def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, **kwargs):
@@ -204,7 +215,7 @@ class GlobalCell(object):
     def _gen_grid(self, ecut = 22, spacing = None, full = False, nr = None, optfft = True, **kwargs):
         lattice = self.ions.pos.cell.lattice
         if nr is None :
-            nr = ecut2nr(ecut, lattice, optfft = optfft, spacing = spacing)
+            nr = ecut2nr(ecut, lattice, optfft = optfft, spacing = spacing, scale = 1, max_prime = 5)
         else :
             nr = np.asarray(nr)
         grid = Grid(lattice=lattice, nr=nr, full=full, direct = True, **kwargs)
