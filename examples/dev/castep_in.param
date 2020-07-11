@@ -20,3 +20,4 @@ MIXING_SCHEME      : Pulay
 IPRINT             : 1
 MIX_CHARGE_AMP     : 0.1
 MAX_SCF_CYCLES     : 60
+RAND_SEED          : 88888888

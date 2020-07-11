@@ -217,3 +217,10 @@ class DFTpyOF(AbsDFT):
         if key is not None :
             energy = evaluator.funcdicts[key](density, calcType = ['E']).energy
         return energy
+
+    def get_forces(self, **kwargs):
+        forces = np.zeros((self.subcell.ions.nat, 3))
+        return forces
+
+    def get_stress(self, **kwargs):
+        pass

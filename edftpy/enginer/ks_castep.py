@@ -1,10 +1,11 @@
 import numpy as np
 from scipy import signal
 import copy
+import os
 from dftpy.formats.ase_io import ions2ase
 import caspytep
-import ase.io.castep as ase_io_castep
-import ase.calculators.castep as ase_calc_castep
+import ase.io.castep as ase_io_driver
+from ase.calculators.castep import Castep as ase_calc_driver
 
 from ..mixer import LinearMixer, PulayMixer
 from ..utils.common import AbsDFT, Grid
@@ -14,7 +15,7 @@ from ..density import normalization_density
 class CastepKS(AbsDFT):
     """description"""
     def __init__(self, evaluator = None, subcell = None, prefix = 'castep_in_sub', params = None, cell_params = None, 
-            exttype = 3, castep_in_file = None, mixer = None, ncharge = None, **kwargs):
+            exttype = 3, base_in_file = None, castep_in_file = None, mixer = None, ncharge = None, **kwargs):
         '''
         exttype :
                     1 : only pseudo                  : 001 
@@ -37,11 +38,16 @@ class CastepKS(AbsDFT):
         self.perform_mix = False
         self.mdl = None
         self.ncharge = ncharge
-        self._build_ase_atoms(params, cell_params, castep_in_file)
-        self._write_cell(self.prefix + '.cell', params = cell_params)
-        self._write_params(self.prefix + '.param', params = params)
+        if base_in_file is None :
+            base_in_file = castep_in_file
+        if self.prefix :
+            self._build_ase_atoms(params, cell_params, base_in_file)
+            self._write_cell(self.prefix + '.cell', params = cell_params)
+            self._write_params(self.prefix + '.param', params = params)
+        else :
+            self.prefix = os.path.splitext(base_in_file)[0]
 
-        self._castep_initialise()
+        self._driver_initialise()
         self._iter = 0
         self._filter = None
         self.mixer = mixer
@@ -51,17 +57,17 @@ class CastepKS(AbsDFT):
             self.grid_driver = self.get_grid_driver(self.subcell.grid)
         #-----------------------------------------------------------------------
         self.init_density()
-        self.subcell.density[:] = self._format_density_invert(self.mdl.den, self.subcell.grid)
-        # self.density = self.subcell.density
-        self.prev_density = copy.deepcopy(self.mdl.den)
+        self.subcell.density[:] = self._format_density_invert(self.charge, self.subcell.grid)
+        self.density = self.subcell.density
+        self.prev_charge = copy.deepcopy(self.charge)
         #-----------------------------------------------------------------------
         if self.mixer is None :
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-            rho0 = np.mean(self.density)
+            rho0 = np.mean(self.subcell.density)
             kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
         if self.grid_driver is not None :
-            print('CastepKS has two grids :{} and {}'.format(self.grid.nr, self.grid_driver.nr))
+            print('{} has two grids :{} and {}'.format(self.__class__.__name__, self.grid.nr, self.grid_driver.nr))
 
     @property
     def grid(self):
@@ -80,9 +86,9 @@ class CastepKS(AbsDFT):
             grid_driver = None
         return grid_driver
 
-    def _build_ase_atoms(self, params = None, cell_params = None, castep_in_file = None):
+    def _build_ase_atoms(self, params = None, cell_params = None, base_in_file = None):
         ase_atoms = ions2ase(self.subcell.ions)
-        ase_atoms.set_calculator(ase_calc_castep.Castep())
+        ase_atoms.set_calculator(ase_calc_driver())
         self.ase_atoms = ase_atoms
         ase_cell = self.ase_atoms.calc.cell
         if cell_params is not None :
@@ -96,11 +102,13 @@ class CastepKS(AbsDFT):
                 else :
                     ase_cell.__setattr__(k1, v1)
 
-        if castep_in_file is not None :
-            calc = ase_io_castep.read_param(castep_in_file)
+        if base_in_file is not None :
+            fileobj = open(base_in_file, 'r')
+            calc = ase_io_driver.read_param(fd=fileobj)
+            fileobj.close()
             self.ase_atoms.calc.param = calc.param
 
-        castep_params = self.ase_atoms.calc.param
+        driver_params = self.ase_atoms.calc.param
 
         if params is not None :
             for k1, v1 in params.items() :
@@ -108,11 +116,11 @@ class CastepKS(AbsDFT):
                     value = []
                     for k2, v2 in v1.items() :
                         value.append((k2, v2))
-                    castep_params.__setattr__(k1, value)
+                    driver_params.__setattr__(k1, value)
                 else :
-                    castep_params.__setattr__(k1, v1)
+                    driver_params.__setattr__(k1, v1)
 
-    def _castep_initialise(self, **kwargs):
+    def _driver_initialise(self, **kwargs):
         caspytep.cell.cell_read(self.prefix)
 
         current_cell = caspytep.cell.get_current_cell()
@@ -155,9 +163,15 @@ class CastepKS(AbsDFT):
         #-----------------------------------------------------------------------
         if rho_ini is not None :
             self._format_density(rho_ini, sym = False)
-        self.density = self._format_density_invert(self.mdl.den, self.grid)
-        self.density = normalization_density(self.density, ncharge = self.ncharge, grid = self.grid)
-        self._format_density(self.density, sym = False)
+
+        self.charge = self.mdl.den.real_charge
+
+        density = self._format_density_invert(self.charge, self.grid)
+        density = normalization_density(density, ncharge = self.ncharge, grid = self.grid)
+        self._format_density(density, sym = False)
+        # self.charge = self._format_density_invert(self.mdl.den, self.grid)
+        # self.charge = normalization_density(self.charge, ncharge = self.ncharge, grid = self.grid)
+        # self._format_density(self.charge, sym = False)
         #-----------------------------------------------------------------------
         # self.mdl.den.real_charge[self.mdl.den.real_charge < 1E-30] = 1E-30
         # print('sum', np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
@@ -167,30 +181,31 @@ class CastepKS(AbsDFT):
 
     def _write_cell(self, outfile, pbc = None, params = None, **kwargs):
         ase_atoms = self.ase_atoms
-        ase_io_castep.write_cell(outfile, ase_atoms, force_write = True)
+        ase_io_driver.write_cell(outfile, ase_atoms, force_write = True)
         return
 
     def _write_params(self, outfile, params = None, **kwargs):
-        castep_params = self.ase_atoms.calc.param
-        ase_io_castep.write_param(outfile, castep_params, force_write = True)
+        driver_params = self.ase_atoms.calc.param
+        ase_io_driver.write_param(outfile, driver_params, force_write = True)
         return
 
-    def _format_density(self, density, dv = None, sym = True, **kwargs):
+    def _format_density(self, density, volume = None, sym = True, **kwargs):
         #-----------------------------------------------------------------------
-        if dv is None :
-            dv = density.grid.dV
+        if volume is None :
+            volume = density.grid.volume
         if self.grid_driver is not None :
-            charge = grid_map_data(density, grid = self.grid_driver) * (np.size(density) * dv)
+            charge = grid_map_data(density, grid = self.grid_driver) * volume
         else :
-            charge = density * (np.size(density) * dv)
+            charge = density * volume
         #-----------------------------------------------------------------------
         self.mdl.den.real_charge[:] = charge.ravel(order = 'F')
         if sym :
             caspytep.density.density_symmetrise(self.mdl.den)
             caspytep.density.density_augment(self.mdl.wvfn,self.mdl.occ,self.mdl.den)
+        self.charge = self.mdl.den.real_charge
         return
 
-    def _format_density_invert(self, charge, grid, **kwargs):
+    def _format_density_invert(self, charge = None, grid = None, **kwargs):
         from edftpy.utils.common import Field
 
         if hasattr(charge, 'real_charge'):
@@ -198,16 +213,23 @@ class CastepKS(AbsDFT):
         else :
             density = charge.copy()
 
+        # if charge is None :
+            # charge = self.charge
+        # density = charge.copy()
+
+        if grid is None :
+            grid = self.grid
+
         if self.grid_driver is not None and np.any(self.grid_driver.nr != grid.nr):
-            density /= (self.grid_driver.dV*np.size(density))
+            density /= grid.volume
             density = Field(grid=self.grid_driver, direct=True, data = density, order = 'F')
             rho = grid_map_data(density, grid = grid)
         else :
-            density /= (grid.dV*np.size(density))
+            density /= grid.volume
             rho = Field(grid=grid, rank=1, direct=True, data = density, order = 'F')
         return rho
 
-    def _get_extpot(self, charge, grid, **kwargs):
+    def _get_extpot(self, charge = None, grid = None, **kwargs):
         rho = self._format_density_invert(charge, grid, **kwargs)
         # func = self.evaluator(rho, embed = False)
         # # func.potential *= self.filter
@@ -259,22 +281,25 @@ class CastepKS(AbsDFT):
 
         self._format_density(density, sym = sym)
 
-        # self.prev_density = copy.deepcopy(self.mdl.den.real_charge[:])
-        #-----------------------------------------------------------------------
-        extpot, extene = self._get_extpot(self.mdl.den, density.grid)
+        extpot, extene = self._get_extpot(self.charge, density.grid)
+        self.prev_charge = self.charge.copy()
+
         if self._iter > 0 :
             # print('perform_mix', self.exttype,self.perform_mix)
             self.mdl.converged = caspytep.electronic.electronic_minimisation_edft_ext(
                 self.mdl, extpot, extene, self.exttype, self.perform_mix)
         else :
             self.mdl.converged = caspytep.electronic.electronic_minimisation(self.mdl)
-        self.prev_density = copy.deepcopy(self.mdl.den.real_charge[:])
+        # self.prev_charge = self.mdl.den.real_charge.copy()
 
         caspytep.density.density_calculate_soft(self.mdl.wvfn,self.mdl.occ, self.mdl.den)
         if sym :
             caspytep.density.density_symmetrise(self.mdl.den)
             caspytep.density.density_augment(self.mdl.wvfn,self.mdl.occ,self.mdl.den)
-        rho = self._format_density_invert(self.mdl.den, density.grid)
+
+        self.charge = self.mdl.den.real_charge
+        rho = self._format_density_invert(self.charge, density.grid)
+        # rho = self._format_density_invert(self.mdl.den, density.grid)
         print('KS_Chemical_potential ', self.get_fermi_level())
         return rho
 
@@ -350,8 +375,9 @@ class CastepKS(AbsDFT):
                 grid = self.grid_driver
             else :
                 grid = self.grid
-            prev_density = self._format_density_invert(self.prev_density, grid)
-            density = self._format_density_invert(self.mdl.den, grid)
+            prev_density = self._format_density_invert(self.prev_charge, grid)
+            density = self._format_density_invert(self.charge, grid)
+            # density = self._format_density_invert(self.mdl.den, grid)
             #-----------------------------------------------------------------------
             r = density - prev_density
             print('res_norm_ks', self._iter, np.max(abs(r)), np.sqrt(np.sum(r * r)/np.size(r)))
@@ -387,8 +413,18 @@ class CastepKS(AbsDFT):
         energy = caspytep.electronic.electronic_get_energy(key)
         return energy
 
-    def get_forces(self, **kwargs):
-        forces = np.empty((3, self.subcell.ions.nat))
-        caspytep.firstd.firstd_calculate_forces_edft_ext(self.mdl, forces, 2)
+    def get_forces(self, icalc = 2, **kwargs):
+        """
+        icalc :
+                0 : all
+                1 : no ewald
+                2 : no ewald and local_potential
+        """
+        extpot, extene = self._get_extpot(self.mdl.den, self.grid)
+        forces = np.empty((3, self.subcell.ions.nat), order = 'F')
+        caspytep.firstd.firstd_calculate_forces_edft_ext(self.mdl, forces, extpot, extene, self.exttype, icalc)
         forces = np.transpose(forces)
         return forces
+
+    def get_stress(self, **kwargs):
+        pass

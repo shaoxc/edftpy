@@ -43,3 +43,10 @@ if not main_model.converged:
     raise RuntimeError('Electronic minimisation did not converge!')
 
 print('cutoff', current_params.cut_off_energy, 'energy', main_model.total_energy)
+
+# np.set_printoptions(precision=5, suppress=True)
+forces = np.empty((3, int(real_num_atoms)), order = 'F')
+caspytep.firstd.firstd_calculate_forces(main_model, forces)
+print('forces', forces.T)
+forces *= 27.21138/0.529177
+print('forces2', forces.T)

@@ -1,10 +1,11 @@
 import numpy as np
-import copy
+from numpy import linalg as LA
 from dftpy.math_utils import ecut2nr, bestFFTsize
+from dftpy.ewald import ewald
 
+from edftpy.pseudopotential import LocalPP
 from edftpy.utils.common import Field, Grid, Atoms, Coord
 from ..utils.math import gaussian
-from numpy import linalg as LA
 
 
 class SubCell(object):
@@ -15,6 +16,7 @@ class SubCell(object):
         self._grid_coarse = None
         self._density_coarse = None
         self._index_coarse = None
+        self._ions_index = None
 
         self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, full = full, coarse_grid_ecut = coarse_grid_ecut, **kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
@@ -59,6 +61,10 @@ class SubCell(object):
     @property
     def index_coarse(self):
         return self._index_coarse
+
+    @property
+    def ions_index(self):
+        return self._ions_index
 
     @density_coarse.setter
     def density_coarse(self, value):
@@ -125,6 +131,7 @@ class SubCell(object):
         self._grid = grid_sub
         self._ions = ions_sub
         self._shift = shift
+        self._ions_index = index
         if coarse_grid_ecut is not None :
             nr_coarse = ecut2nr(coarse_grid_ecut, lattice_sub, optfft = optfft)
             grid_coarse = Grid(lattice=lattice_sub, nr=nr_coarse, full=full, direct = True, origin = origin, pbc = pbc)
@@ -312,3 +319,21 @@ class GlobalCell(object):
     @property
     def gaussian_density(self):
         return self._gaussian_density
+
+    def get_forces(self, linearii= True, **kwargs):
+        for k, value in self.total_evaluator.funcdicts.items():
+            if isinstance(value, LocalPP):
+                forces_ie = value.force(self.density)
+                break
+        else :
+            print('!WARN : There is no `LocalPP` in total_evaluator')
+            forces_ie = 0.0
+        ewaldobj = ewald(rho=self.density, ions=self.ions, PME=linearii)
+        forces_ii = ewaldobj.forces
+        forces = forces_ie + forces_ii
+        print('ewald', forces_ii)
+        print('ie', forces_ie)
+        return forces
+
+    def get_stress(self, **kwargs):
+        pass

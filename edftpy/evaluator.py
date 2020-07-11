@@ -26,6 +26,7 @@ class Evaluator(AbsFunctional):
         for key, evalfunctional in self.funcdicts.items():
             obj = evalfunctional(density, calcType)
             # if hasattr(obj, 'energy'): print(key, obj.energy * 27.21138)
+            # if hasattr(obj, 'potential'): print(key, obj.potential[:3, 0, 0] * 2)
             if results is None :
                 results = obj
             else :
