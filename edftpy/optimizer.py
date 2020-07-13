@@ -197,6 +197,8 @@ class Optimization(object):
             if self.check_converge(energy_history):
                 print("#### Subsytem Density Optimization Converged ####")
                 break
+        if self.options['maxiter'] < 1 :
+            totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
         # self.energy = energy
         self.energy = self.get_energy_all(totalrho, totalfunc, olevel = 0)[0]
         self.density = totalrho
