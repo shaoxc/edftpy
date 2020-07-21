@@ -16,7 +16,7 @@ class AtomicDensity(object):
     This is a template class and should never be touched.
     """
 
-    def __init__(self, files =None, grid=None, ions=None, ftypes = None, direct = True, **kwargs):
+    def __init__(self, files =None, ftypes = None, direct = True, **kwargs):
 
         self.files = files
         if self.files is None:
@@ -46,6 +46,7 @@ class AtomicDensity(object):
                         raise Exception("density file not supported")
                     else :
                         ftype = "list"
+                        self.direct = False
 
             if ftype == 'psp' :
                 self._r[key], self._arho[key], self._info[key] = self.read_density_psp(infile)

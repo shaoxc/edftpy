@@ -1,6 +1,6 @@
 TASK               : Energy
 CUT_OFF_ENERGY     : 600 eV
-XC_FUNCTIONAL      : LDA
+XC_FUNCTIONAL      : PBE
 SPIN_POLARIZED     : false
 FIX_OCCUPANCY      : false
 #SMEARING_SCHEME   : Gaussian

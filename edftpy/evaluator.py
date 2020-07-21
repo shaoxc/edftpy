@@ -163,6 +163,7 @@ class EnergyEvaluatorMix(AbsFunctional):
                 if isinstance(value, KEDF):
                     key = k
                     break
+        # print('key', key, self.embed_evaluator.funcdicts.keys())
         if key is not None and gaussian_density is not None :
             remove_embed = {key : self.embed_evaluator.funcdicts[key]}
             ke_embed = self.embed_evaluator.funcdicts[key]

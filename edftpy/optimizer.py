@@ -17,9 +17,7 @@ class Optimization(object):
         self.gsystem = gsystem
 
         default_options = {
-            "maxfun": 50,
-            "maxiter": 20,
-            "maxls": 30,
+            "maxiter": 80,
             "econv": 1.0e-6,
             "ncheck": 2,
         }

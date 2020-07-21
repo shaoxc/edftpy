@@ -14,7 +14,7 @@ from ..density import normalization_density
 
 class PwscfKS(AbsDFT):
     """description"""
-    def __init__(self, evaluator = None, subcell = None, prefix = 'qe_in_sub.in', params = None, cell_params = None, 
+    def __init__(self, evaluator = None, subcell = None, prefix = 'qe_sub_in', params = None, cell_params = None, 
             exttype = 3, base_in_file = None, mixer = None, ncharge = None, **kwargs):
         '''
         Here, prefix is the name of the input file
@@ -28,7 +28,7 @@ class PwscfKS(AbsDFT):
                     7 : pseudo + hartree + xc        : 111
         '''
         self.evaluator = evaluator
-        self.prefix = prefix
+        self.prefix = prefix + '.in'
         self.exttype = exttype
         self.subcell = subcell
         self.rho = None
@@ -134,7 +134,8 @@ class PwscfKS(AbsDFT):
         for k2, v2 in cell_params['pseudopotentials'].items():
             value[k2] = os.path.basename(v2)
         cell_params['pseudopotentials'].update(value)
-        # print('cell_params', cell_params)
+        #For QE, all pseudopotentials should at same directory
+        params['control']['pseudo_dir'] = os.path.dirname(v2)
 
         fileobj = open(outfile, 'w')
         ase_io_driver.write_espresso_in(fileobj, self.ase_atoms, params, **cell_params)

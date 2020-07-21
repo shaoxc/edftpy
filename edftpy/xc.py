@@ -26,5 +26,15 @@ class XC(AbsFunctional):
                 new_density[1] += 0.5 * core_density
         else :
             new_density = density
+
+        xc = kwargs.get('xc', None)
+        if xc == 'PBE' :
+            xc_kwargs = {"x_str":"gga_x_pbe", "c_str":"gga_c_pbe"}
+        elif xc == 'LDA' :
+            xc_kwargs = {"x_str":"lda_x", "c_str":"lda_c_pz"}
+        else :
+            xc_kwargs = {}
+        kwargs.update(xc_kwargs)
+
         functional = LibXC(density=new_density, calcType = calcType, **self.options)
         return functional

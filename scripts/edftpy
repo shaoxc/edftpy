@@ -1,0 +1,30 @@
+#!python3
+import configparser
+import argparse
+import os
+from edftpy.interface import optimize_density_conf
+from edftpy.config import read_conf
+import time
+
+os.environ["PYTHONUNBUFFERED"] = "1"
+
+def RunJob():
+    parser = argparse.ArgumentParser(description='Process task')
+
+    parser.add_argument('-i', '--ini', '--input', dest='input', type=str, action='store',
+            default='config.ini', help='input file (default: config.ini)')
+
+    args = parser.parse_args()
+    config = read_conf(args.input)
+
+    print("Begin on :", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+    print("#" * 80)
+
+    optimize_density_conf(config)
+
+    print("#" * 80)
+    print("Finished on :", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+
+
+if __name__ == "__main__":
+    RunJob()

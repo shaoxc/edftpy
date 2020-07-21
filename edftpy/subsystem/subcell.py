@@ -78,11 +78,16 @@ class SubCell(object):
     def shift(self):
         return self._shift
 
-    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = True, full = False, coarse_grid_ecut = None):
+    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True, full = False, coarse_grid_ecut = None):
         lattice = ions.pos.cell.lattice.copy()
         lattice_sub = ions.pos.cell.lattice.copy()
         if index is None :
             index = np.ones(ions.nat, dtype = 'bool')
+        if isinstance(cellcut, (int, float)) or len(cellcut) == 1 :
+            cellcut = np.ones(3) * cellcut
+        if cellsplit is not None :
+            if isinstance(cellsplit, (int, float)) or len(cellsplit) == 1 :
+                cellsplit = np.ones(3) * cellsplit
         pos = ions.pos.to_cart()[index].copy()
         spacings = grid.spacings.copy()
         shift = np.zeros(3, dtype = 'int')
@@ -95,20 +100,29 @@ class SubCell(object):
         for i in range(3):
             latp0 = np.linalg.norm(lattice[:, i])
             latp = np.linalg.norm(lattice_sub[:, i])
-            if cellcut[i] > 1E-6 :
+            if cellsplit is not None :
+                pbc[i] = False
+                if cellsplit[i] > 1.0 :
+                    origin[i] = 0.0
+                    continue
+                cell_size[i] = cellsplit[i] * latp0
+                origin[i] = 0.5
+            elif cellcut[i] > 1E-6 :
                 pbc[i] = False
                 cell_size[i] += cellcut[i] * 2.0
                 if cell_size[i] > (latp0 - (max_prime + 1) * spacings[i]):
                     origin[i] = 0.0
                     continue
                 origin[i] = 0.5
-                nr[i] = int(cell_size[i]/spacings[i])
-                #-----------------------------------------------------------------------
-                if optfft :
-                    nr[i] = bestFFTsize(nr[i], scale = 1, max_prime = max_prime)
-                lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
             else :
                 origin[i] = 0.0
+
+            if origin[i] > 0.01 :
+                nr[i] = int(cell_size[i]/spacings[i])
+                if optfft :
+                    nr[i] = bestFFTsize(nr[i], scale = 1, max_prime = max_prime)
+                    nr[i] = min(nr[i], grid.nr[i])
+                lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
 
         c1 = Coord(origin, lattice_sub, basis = 'Crystal').to_cart()
 
