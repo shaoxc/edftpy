@@ -6,6 +6,7 @@ from dftpy.ewald import ewald
 from edftpy.pseudopotential import LocalPP
 from edftpy.utils.common import Field, Grid, Atoms, Coord
 from ..utils.math import gaussian
+from ..density import get_3d_value_recipe
 
 
 class SubCell(object):
@@ -24,6 +25,7 @@ class SubCell(object):
             self._gaussian_density = None
         else :
             self._gen_gaussian_density(gaussian_options)
+            # self._gen_gaussian_density_recip(gaussian_options)
             print('gaussian density', np.sum(self._gaussian_density) * self.grid.dV)
 
     @property
@@ -196,6 +198,25 @@ class SubCell(object):
         print('fake01', np.sum(self._gaussian_density) * self.grid.dV)
         self._gaussian_density *= factor
         print('fake02', np.sum(self._gaussian_density) * self.grid.dV)
+
+    def _gen_gaussian_density_recip(self, options={}):
+        self._gaussian_density = Field(self.grid)
+        ncharge = 0.0
+        r_g = {}
+        arho_g = {}
+        for key, option in options.items() :
+            sigma = option.get('sigma', 0.3)
+            scale = option.get('scale', 0.0)
+            if scale is None or abs(scale) < 1E-10 :
+                continue
+            for i in range(self.ions.nat):
+                if self.ions.labels[i] != key:
+                    continue
+                ncharge += scale
+            r_g[key] = np.linspace(0, 30, 10000)
+            arho_g[key] = np.exp(-0.5 * sigma ** 2 * r_g[key] ** 2) * scale
+        self._gaussian_density[:]=get_3d_value_recipe(r_g, arho_g, self.ions, self.grid, ncharge = ncharge, direct=True, pme=True, order=10)
+        print('fake01', np.sum(self._gaussian_density) * self.grid.dV)
 
 class GlobalCell(object):
     def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, **kwargs):

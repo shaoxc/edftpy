@@ -9,11 +9,13 @@ from .hamiltonian import Hamiltonian
 
 from dftpy.optimization import Optimization
 from dftpy.formats.io import write
+from dftpy.external_potential import ExternalPotential
 
 
 class DFTpyOF(AbsDFT):
     """description"""
-    def __init__(self, evaluator = None, subcell = None, options = None, mixer = None, **kwargs):
+    def __init__(self, evaluator = None, subcell = None, options = None, mixer = None,
+            grid = None, evaluator_of = None, **kwargs):
         default_options = {
             "opt_method" : 'full',
             "method" :'CG-HS',
@@ -35,7 +37,6 @@ class DFTpyOF(AbsDFT):
 
         self.evaluator = evaluator
         self.fermi = None
-        self.prev_density = None
         self.calc = None
         self._iter = 0
         self.phi = None
@@ -45,9 +46,59 @@ class DFTpyOF(AbsDFT):
         self.mixer = mixer
         if self.mixer is None :
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
         #-----------------------------------------------------------------------
         self.density = self.subcell.density
+        self.grid_driver = grid
+        self.evaluator_of = evaluator_of
+
+    @property
+    def grid(self):
+        return self.subcell.grid
+
+    def init_density(self, rho_ini = None):
+        pass
+
+    def _format_density(self, density, volume = None, sym = True, **kwargs):
+        if self.grid_driver is not None :
+            self.charge = grid_map_data(density, grid = self.grid_driver)
+        else :
+            self.charge = density.copy()
+
+    def _format_density_invert(self, charge = None, grid = None, **kwargs):
+        if charge is None :
+            charge = self.charge
+
+        if grid is None :
+            grid = self.grid
+
+        if self.grid_driver is not None :
+            rho = grid_map_data(charge, grid = grid)
+        else :
+            rho = charge.copy()
+        return rho
+
+    def _get_extpot(self, charge= None, grid = None, with_global = False, first = False, **kwargs):
+        rho = self._format_density_invert(charge, grid) # Fine grid
+        self.evaluator.get_embed_potential(rho, gaussian_density = self.subcell.gaussian_density, with_global = with_global, with_ke = True)
+        extpot = self.evaluator.embed_potential
+        # extene = (extpot * rho).integral()
+        #-----------------------------------------------------------------------
+        # if first :
+            # pot = self.evaluator.gsystem.total_evaluator.funcdicts['PSEUDO']._vreal
+            # if self.grid_driver is not None :
+                # pot = grid_map_data(pot, grid = self.evaluator_of.gsystem.grid)
+            # ext = ExternalPotential(pot)
+            # add = {'EXT' : ext}
+            # self.evaluator_of.update_functional(add = add)
+        #-----------------------------------------------------------------------
+        self.evaluator_of.rest_rho = self.evaluator.rest_rho
+        self.evaluator_of.embed_potential = extpot
+        if self.grid_driver is not None :
+            self.evaluator_of.gsystem.density = grid_map_data(self.evaluator.gsystem.density, grid = self.evaluator_of.gsystem.grid)
+        else :
+            self.evaluator_of.gsystem.density = self.evaluator.gsystem.density
+        #-----------------------------------------------------------------------
+        return
 
     def get_density(self, density, res_max = None, **kwargs):
         self._iter += 1
@@ -67,96 +118,83 @@ class DFTpyOF(AbsDFT):
         econv = self.options['econv0'] * norm
         if econv < self.options['econv'] :
             self.options['econv'] = econv
-            # if self.options['econv'] < self.options['econv0'] / 1E4 :
-                # self.options['econv'] = self.options['econv0'] / 1E4
-            # if self.options['econv'] < 1E-12 * self.subcell.ions.nat : self.options['econv'] = 1E-12 * self.subcell.ions.nat
         if norm < 1E-8 :
             self.options['maxiter'] = 4
-        #-----------------------------------------------------------------------
         print('econv', self.options['econv'])
-        self.prev_density = density.copy()
-        if self.options['opt_method'] == 'part' :
-            results = self.get_density_embed(density, **kwargs)
-        elif self.options['opt_method'] == 'full' :
-            results = self.get_density_full_opt(density, **kwargs)
+        #-----------------------------------------------------------------------
+        if self.options['opt_method'] == 'full' :
+            hamil = False
+        else :
+            hamil = True
+        self._format_density(density)
+        self._get_extpot(self.charge, density.grid, with_global = hamil)
+        if self.evaluator_of.sub_evaluator and hamil:
+            self.evaluator_of.embed_potential += self.evaluator_of.sub_evaluator(self.charge, calcType = ['V']).potential
+        self.prev_charge = self.charge.copy()
+        #-----------------------------------------------------------------------
+        if self.options['opt_method'] == 'full' :
+            self.get_density_full_opt(density, **kwargs)
+        elif self.options['opt_method'] == 'part' :
+            self.get_density_embed(density, **kwargs)
         elif self.options['opt_method'] == 'hamiltonian' :
-            results = self.get_density_hamiltonian(density)
-        return results
+            self.get_density_hamiltonian(density)
+        #-----------------------------------------------------------------------
+        rho = self._format_density_invert(self.charge, density.grid)
+        return rho
 
     def get_density_full_opt(self, density, **kwargs):
-        self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_global = False, with_sub = False, with_ke = True)
+        remove_global = {}
+        embed_evaluator = self.evaluator.embed_evaluator
+        total_evaluator = self.evaluator.gsystem.total_evaluator
+        if self.evaluator_of.gsystem is self.evaluator.gsystem :
+            if embed_evaluator is not None :
+                keys_emb = embed_evaluator.funcdicts.keys()
+                keys_global = total_evaluator.funcdicts.keys()
+                keys = [key for key in keys_global for key in keys_emb]
+                for key in keys :
+                    remove_global[key] = total_evaluator.funcdicts[key]
+            total_evaluator.update_functional(remove = remove_global)
+        #-----------------------------------------------------------------------
         if 'method' in self.options :
             optimization_method = self.options['method']
         else :
             optimization_method = 'CG-HS'
 
-        if self.evaluator.grid_coarse is None :
-            rho = density
-            evaluator = self.evaluator.compute_embed
-            self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=rho, optimization_options=self.options, optimization_method = optimization_method)
-            self.calc.optimize_rho()
-            self.density = self.calc.rho
-            # self.density.grid = density.grid
-        else :
-            rho = grid_map_data(density, grid = self.evaluator.grid_coarse)
-            evaluator = self.evaluator.compute_embed_coarse
-            self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=rho, optimization_options=self.options, optimization_method = optimization_method)
-            self.calc.optimize_rho(guess_phi = self.phi)
-            self.density = grid_map_data(self.calc.rho, grid = density.grid)
-            self.density *= np.sum(density)/np.sum(self.density)
-            self.phi = self.calc.phi.copy()
+        evaluator = partial(self.evaluator_of.compute, calcType=["E","V"], with_global = True, with_ke = True, with_embed = True)
+        self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=self.charge, optimization_options=self.options, optimization_method = optimization_method)
+        self.calc.optimize_rho()
+
+        self.charge = self.calc.rho
         self.fermi_level = self.calc.mu
-        return self.density
+        total_evaluator.update_functional(add = remove_global)
+        return
 
-    def get_density_embed(self, density, lphi = False, **kwargs):
-
+    def get_density_embed(self, density, **kwargs):
         if 'method' in self.options :
             optimization_method = self.options['method']
         else :
             optimization_method = 'CG-HS'
-        # if self._iter > 20 :
-            # self.options['econv'] = self.options['econv0'] * self.residual_norm /1E2
-            # # self.options['econv'] = self.options['econv0'] * self.residual_norm /1E4
-            # if self.options['econv'] < 1E-14 * self.subcell.ions.nat : self.options['econv'] = 1E-14 * self.subcell.ions.nat
-        self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_global = True)
-        # # evaluator = partial(self.evaluator.compute, with_global = False)
-        evaluator = self.evaluator.compute_only_ke
+
+        evaluator = partial(self.evaluator_of.compute, with_global = False, with_embed = True, with_ke = True, with_sub = False)
         self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options, optimization_method = optimization_method)
-        self.calc.optimize_rho(guess_rho = density)
+        self.calc.optimize_rho()
 
-        # self.calc.optimize_rho(guess_rho = density, lphi = True)
-        # self.calc.optimize_rho(guess_rho = density, guess_phi = self.phi, lphi = lphi)
-        # self.calc.optimize_rho(guess_rho = density, guess_phi = self.phi, lphi = True)
-        # if self.calc.converged > 0 :
-            # print('Saved phi make DFTpy not converged, try turn off lphi')
-            # self.calc.optimize_rho(guess_rho = density, guess_phi = self.phi, lphi = False)
-        # if self.calc.converged > 0 :
-            # print('Saved phi make DFTpy not converged, try new phi')
-            # self.calc.optimize_rho(guess_rho = density, lphi = lphi)
-        # if self.calc.converged > 0 :
-            # print('Saved phi make DFTpy not converged, try new all')
-            # self.calc.optimize_rho(guess_rho = density)
-        # if self.calc.converged == 1 :
-            # print("!WARN: DFTpy not converged")
-            # raise AttributeError("!!!ERROR : DFTpy not converged")
-        self.density = self.calc.rho
+        # self.phi = self.calc.phi.copy()
+        self.charge = self.calc.rho
         self.fermi_level = self.calc.mu
-        self.phi = self.calc.phi.copy()
-        return self.density
+        return 
 
     def get_density_hamiltonian(self, density, **kwargs):
-        self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_global = True)
-        # potential = self.evaluator(density).potential
-        potential = self.evaluator.embed_potential
+        potential = self.evaluator_of.embed_potential
         hamiltonian = Hamiltonian(potential, grid = self.subcell.grid)
         eigens = hamiltonian.eigens()
         eig = eigens[0][0]
         print('eig', eig)
         print('min wave', np.min(eigens[0][1]))
         rho = eigens[0][1] ** 2
-        self.density = rho * np.sum(density) / np.sum(rho)
         self.fermi_level = eig
-        return self.density
+        self.charge = rho * np.sum(density) / np.sum(rho)
+        return 
 
     def get_kinetic_energy(self, **kwargs):
         pass
@@ -164,59 +202,32 @@ class DFTpyOF(AbsDFT):
     def get_energy(self, density = None, **kwargs):
         if density is None :
             density = self.density
-        energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False).energy
-        # energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True).energy
-        return energy
+        obj = self.evaluator_of.compute(density, calcType = ['E'], with_sub = True, with_global = False, with_embed = False, with_ke = False)
+        return obj.energy
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, **kwargs):
-        if self.options['opt_method'] == 'full' :
-            # func = self.evaluator(density, calcType = calcType, with_global = False, embed = False)
-            if olevel == 0 :
-                func = self.evaluator.compute(density, calcType = calcType, with_global = False)
-            elif olevel == 1 :
-                func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False)
-            elif olevel == 2 :
-                func = self.evaluator.compute_embed(density, calcType = calcType, with_global = False)
-        else :
-            # func = self.evaluator(density, calcType = ['E'], with_global = False, embed = False, only_ke = True)
-            func = self.evaluator.compute_only_ke(density, calcType = calcType, with_global = False, embed = False)
+        if olevel == 0 :
+            func = self.evaluator.compute(density, calcType = calcType, with_global = False)
+        elif olevel == 1 :
+            func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False)
+        elif olevel == 2 :
+            func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False, with_embed = True)
+        func += self.evaluator_of.compute(density, calcType = ['E'], with_sub = True, with_global = False, with_embed = False, with_ke = True)
         print('sub_energy_of', func.energy)
         return func
 
     def update_density(self, **kwargs):
-        r = self.density - self.prev_density
+        r = self.charge - self.prev_charge
         self.residual_norm = np.sqrt(np.sum(r * r)/np.size(r))
         print('res_norm_of', self._iter, np.max(abs(r)), np.sqrt(np.sum(r * r)/np.size(r)))
-        self.density = self.mixer(self.prev_density, self.density, **kwargs)
-        # print('max',self.density.max(), self.density.min(), self.density.integral())
-        # write(str(self._iter) + '.xsf', self.density, self.subcell.ions)
-        return self.density
+        rho = self.mixer(self.prev_charge, self.charge, **kwargs)
+        if self.grid_driver is not None :
+            rho = grid_map_data(rho, grid = self.grid)
+        return rho
 
     def get_fermi_level(self, **kwargs):
         results = self.fermi_level
         return results
-
-    def get_energy_part(self, ename, density = None, **kwargs):
-        evaluator = self.evaluator.gsystem.total_evaluator # Later will replace with sub_evaluator
-        # evaluator = self.evaluator.sub_evaluator 
-        key = None
-        if ename == 'TOTAL' :
-            energy = evaluator(density, calcType = ['E'], with_global = False).energy
-        elif ename == 'XC' :
-            key = 'XC'
-        elif ename == 'KEDF' :
-            key = 'KEDF'
-        elif ename == 'LOCAL' :
-            key = 'PSEUDO'
-        elif ename == 'HARTREE' :
-            key = 'HARTREE'
-        elif ename == 'EWALD' :
-            raise AttributeError("!ERROR : not contains this energy", ename)
-        else :
-            raise AttributeError("!ERROR : not contains this energy", ename)
-        if key is not None :
-            energy = evaluator.funcdicts[key](density, calcType = ['E']).energy
-        return energy
 
     def get_forces(self, **kwargs):
         forces = np.zeros((self.subcell.ions.nat, 3))

@@ -118,6 +118,10 @@
 				"type": "str",
 				"default": "exc",
 				"comment": "Same config of `DFTpy`"
+			},
+			"xc": {
+				"type": "str",
+				"default": null
 			}
 		},
 		"kedf": {
@@ -293,6 +297,10 @@
 				"type": "str",
 				"default": "exc",
 				"comment": "Same config of `DFTpy`"
+			},
+			"xc": {
+				"type": "str",
+				"default": null
 			}
 		},
 		"kedf": {

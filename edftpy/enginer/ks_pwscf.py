@@ -8,7 +8,7 @@ import ase.io.espresso as ase_io_driver
 from ase.calculators.espresso import Espresso as ase_calc_driver
 
 from ..mixer import LinearMixer, PulayMixer
-from ..utils.common import AbsDFT, Grid
+from ..utils.common import AbsDFT, Grid, Field
 from ..utils.math import grid_map_data
 from ..density import normalization_density
 
@@ -160,8 +160,6 @@ class PwscfKS(AbsDFT):
         return
 
     def _format_density_invert(self, charge = None, grid = None, **kwargs):
-        from edftpy.utils.common import Field
-
         if charge is None :
             charge = self.charge
 
@@ -181,7 +179,7 @@ class PwscfKS(AbsDFT):
 
     def _get_extpot(self, charge = None, grid = None, **kwargs):
         rho = self._format_density_invert(charge, grid, **kwargs)
-        # func = self.evaluator(rho, embed = False)
+        # func = self.evaluator(rho, with_embed = False)
         # # func.potential *= self.filter
         # extpot = func.potential.ravel(order = 'F')
         # extene = func.energy
@@ -234,7 +232,7 @@ class PwscfKS(AbsDFT):
         return energy
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
-        func = self.evaluator(density, calcType = ['E'], with_global = False, embed = False)
+        func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = False)
         if self.exttype == 0 :
             func.energy = 0.0
         if 'E' in calcType :

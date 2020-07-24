@@ -118,7 +118,7 @@ class Test(unittest.TestCase):
         # params = {}
         # mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = [0.7], predecut = None, delay = 1, restarted = False)
         mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2, 0.8], maxm = 7, coef = [0.7], predecut = None, delay = 1, restarted = False)
-        ks_enginer_a = PwscfKS(prefix = 'qe_sub.in', subcell = subsys_a, cell_params = cell_params, params = params, exttype = 3,
+        ks_enginer_a = PwscfKS(prefix = 'qe_sub_in', subcell = subsys_a, cell_params = cell_params, params = params, exttype = 3,
                 base_in_file = 'qe_in.in', mixer = mixer)
         opt_options = {}
         driver_a = OptDriver(energy_evaluator = energy_evaluator, calculator = ks_enginer_a, options = opt_options)

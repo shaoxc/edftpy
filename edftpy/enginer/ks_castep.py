@@ -8,7 +8,7 @@ import ase.io.castep as ase_io_driver
 from ase.calculators.castep import Castep as ase_calc_driver
 
 from ..mixer import LinearMixer, PulayMixer
-from ..utils.common import AbsDFT, Grid
+from ..utils.common import AbsDFT, Grid, Field
 from ..utils.math import grid_map_data
 from ..density import normalization_density
 
@@ -206,7 +206,6 @@ class CastepKS(AbsDFT):
         return
 
     def _format_density_invert(self, charge = None, grid = None, **kwargs):
-        from edftpy.utils.common import Field
 
         if hasattr(charge, 'real_charge'):
             density = charge.real_charge.copy()
@@ -231,7 +230,7 @@ class CastepKS(AbsDFT):
 
     def _get_extpot(self, charge = None, grid = None, **kwargs):
         rho = self._format_density_invert(charge, grid, **kwargs)
-        # func = self.evaluator(rho, embed = False)
+        # func = self.evaluator(rho, with_embed = False)
         # # func.potential *= self.filter
         # extpot = func.potential.ravel(order = 'F')
         # extene = func.energy
@@ -312,12 +311,12 @@ class CastepKS(AbsDFT):
         ion_ion_energy0 = caspytep.electronic.electronic_get_energy('ion_ion_energy0')
         if density is None :
             density = self._format_density_invert(self.mdl.den, self.grid)
-        energy = self.evaluator(density, calcType = ['E'], with_global = False, embed = False).energy
+        energy = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = False).energy
         energy += total_energy - ion_ion_energy0
         return energy
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
-        func = self.evaluator(density, calcType = ['E'], with_global = False, embed = False)
+        func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = False)
         etype = 1
         if 'E' in calcType :
             if etype == 1 :
