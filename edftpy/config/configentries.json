@@ -301,6 +301,14 @@
 			"xc": {
 				"type": "str",
 				"default": null
+			},
+			"x_str": {
+				"type": "str",
+				"default": null
+			},
+			"c_ctr": {
+				"type": "str",
+				"default": null
 			}
 		},
 		"kedf": {

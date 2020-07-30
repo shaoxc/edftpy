@@ -71,3 +71,18 @@ def smooth_interpolating_potential(density, potential, a = 5E-2, b = 3):
     # fab = sp.erfc(density/a)
     potential *= fab
     return potential
+
+def interpolation_3d(data, nr = None, direct = True, index = None, grid = None):
+    if nr is None :
+        nr = grid.nr
+    nr0 = np.array(data.shape)
+    h = 1.0/nr
+    x, y, z = np.mgrid[0:1:h[0], 0:1:h[1], 0:1:h[2]]
+    x *= nr0[0]
+    y *= nr0[1]
+    z *= nr0[2]
+    results = ndimage.map_coordinates(data, (x, y, z), order=3, mode="nearest")
+    if grid is None :
+        grid = Grid(data.grid.lattice, nr, direct = True)
+    results = Field(grid, data=results)
+    return results

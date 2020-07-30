@@ -44,7 +44,7 @@ class DFTpyOF(AbsDFT):
         self.subcell = subcell
         #-----------------------------------------------------------------------
         self.mixer = mixer
-        if self.mixer is None :
+        if self.mixer is None and self.options['opt_method'] != 'full' :
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
         #-----------------------------------------------------------------------
         self.density = self.subcell.density
@@ -71,33 +71,34 @@ class DFTpyOF(AbsDFT):
         if grid is None :
             grid = self.grid
 
-        if self.grid_driver is not None :
+        if self.grid_driver is not None and np.any(self.grid_driver.nr != grid.nr):
             rho = grid_map_data(charge, grid = grid)
         else :
             rho = charge.copy()
         return rho
 
-    def _get_extpot(self, charge= None, grid = None, with_global = False, first = False, **kwargs):
-        rho = self._format_density_invert(charge, grid) # Fine grid
-        self.evaluator.get_embed_potential(rho, gaussian_density = self.subcell.gaussian_density, with_global = with_global, with_ke = True)
-        extpot = self.evaluator.embed_potential
-        # extene = (extpot * rho).integral()
-        #-----------------------------------------------------------------------
-        # if first :
-            # pot = self.evaluator.gsystem.total_evaluator.funcdicts['PSEUDO']._vreal
-            # if self.grid_driver is not None :
-                # pot = grid_map_data(pot, grid = self.evaluator_of.gsystem.grid)
-            # ext = ExternalPotential(pot)
-            # add = {'EXT' : ext}
-            # self.evaluator_of.update_functional(add = add)
-        #-----------------------------------------------------------------------
-        self.evaluator_of.rest_rho = self.evaluator.rest_rho
-        self.evaluator_of.embed_potential = extpot
+    def _get_extpot(self, density = None, charge= None, grid = None, with_global = False, first = False, **kwargs):
+        self._map_gsystem(charge, grid)
+        # rho = self._format_density_invert(charge, grid) # Fine grid
+        self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_global = with_global, with_ke = True)
         if self.grid_driver is not None :
+            self.evaluator_of.embed_potential = grid_map_data(self.evaluator.embed_potential, grid = self.grid_driver)
+        else :
+            self.evaluator_of.embed_potential = self.evaluator.embed_potential
+        return
+
+    def _map_gsystem(self, charge = None, grid = None):
+        if self.evaluator_of.gsystem is None :
+            self.evaluator_of.gsystem = self.evaluator.gsystem
+        elif self.grid_driver is not None :
             self.evaluator_of.gsystem.density = grid_map_data(self.evaluator.gsystem.density, grid = self.evaluator_of.gsystem.grid)
+        elif self.evaluator_of.gsystem is self.evaluator.gsystem :
+            pass
         else :
             self.evaluator_of.gsystem.density = self.evaluator.gsystem.density
         #-----------------------------------------------------------------------
+        self.evaluator_of.rest_rho = self.evaluator_of.gsystem.sub_value(self.evaluator_of.gsystem.density, charge) - charge 
+        # self.evaluator_of.rest_rho = self.evaluator.rest_rho
         return
 
     def get_density(self, density, res_max = None, **kwargs):
@@ -126,8 +127,10 @@ class DFTpyOF(AbsDFT):
             hamil = False
         else :
             hamil = True
+        # if not hamil or self._iter == 1 :
+            # self._format_density(density)
         self._format_density(density)
-        self._get_extpot(self.charge, density.grid, with_global = hamil)
+        self._get_extpot(density, self.charge, density.grid, with_global = hamil)
         if self.evaluator_of.sub_evaluator and hamil:
             self.evaluator_of.embed_potential += self.evaluator_of.sub_evaluator(self.charge, calcType = ['V']).potential
         self.prev_charge = self.charge.copy()
@@ -145,15 +148,15 @@ class DFTpyOF(AbsDFT):
     def get_density_full_opt(self, density, **kwargs):
         remove_global = {}
         embed_evaluator = self.evaluator.embed_evaluator
-        total_evaluator = self.evaluator.gsystem.total_evaluator
-        if self.evaluator_of.gsystem is self.evaluator.gsystem :
-            if embed_evaluator is not None :
-                keys_emb = embed_evaluator.funcdicts.keys()
-                keys_global = total_evaluator.funcdicts.keys()
-                keys = [key for key in keys_global for key in keys_emb]
-                for key in keys :
-                    remove_global[key] = total_evaluator.funcdicts[key]
-            total_evaluator.update_functional(remove = remove_global)
+        total_evaluator = self.evaluator_of.gsystem.total_evaluator
+        # if self.evaluator_of.gsystem is self.evaluator.gsystem :
+        if embed_evaluator is not None :
+            keys_emb = embed_evaluator.funcdicts.keys()
+            keys_global = total_evaluator.funcdicts.keys()
+            keys = [key for key in keys_global if key in keys_emb]
+            for key in keys :
+                remove_global[key] = total_evaluator.funcdicts[key]
+        total_evaluator.update_functional(remove = remove_global)
         #-----------------------------------------------------------------------
         if 'method' in self.options :
             optimization_method = self.options['method']
@@ -212,7 +215,8 @@ class DFTpyOF(AbsDFT):
             func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False)
         elif olevel == 2 :
             func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False, with_embed = True)
-        func += self.evaluator_of.compute(density, calcType = ['E'], with_sub = True, with_global = False, with_embed = False, with_ke = True)
+        func_driver = self.evaluator_of.compute(self.charge, calcType = ['E'], with_sub = True, with_global = False, with_embed = False, with_ke = True)
+        func.energy += func_driver.energy
         print('sub_energy_of', func.energy)
         return func
 
@@ -220,7 +224,10 @@ class DFTpyOF(AbsDFT):
         r = self.charge - self.prev_charge
         self.residual_norm = np.sqrt(np.sum(r * r)/np.size(r))
         print('res_norm_of', self._iter, np.max(abs(r)), np.sqrt(np.sum(r * r)/np.size(r)))
-        rho = self.mixer(self.prev_charge, self.charge, **kwargs)
+        if self.options['opt_method'] == 'full' :
+            rho = self.charge
+        else :
+            rho = self.mixer(self.prev_charge, self.charge, **kwargs)
         if self.grid_driver is not None :
             rho = grid_map_data(rho, grid = self.grid)
         return rho

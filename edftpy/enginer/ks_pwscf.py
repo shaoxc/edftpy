@@ -28,9 +28,9 @@ class PwscfKS(AbsDFT):
                     7 : pseudo + hartree + xc        : 111
         '''
         self.evaluator = evaluator
-        self.prefix = prefix + '.in'
         self.exttype = exttype
         self.subcell = subcell
+        self.prefix = prefix
         self.rho = None
         self.wfs = None
         self.occupations = None
@@ -39,8 +39,9 @@ class PwscfKS(AbsDFT):
         self.perform_mix = False
         self.ncharge = ncharge
         if self.prefix :
-            in_params = self._build_ase_atoms(params, cell_params, base_in_file)
-            self._write_params(self.prefix, params = in_params, cell_params = cell_params)
+            self.prefix += '.in'
+            in_params, cards = self._build_ase_atoms(params, cell_params, base_in_file)
+            self._write_params(self.prefix, params = in_params, cell_params = cell_params, cards = cards)
         else :
             self.prefix = base_in_file
 
@@ -106,7 +107,7 @@ class PwscfKS(AbsDFT):
             for k2, v2 in v1.items() :
                 in_params[k1][k2] = v2
 
-        return in_params
+        return in_params, card_lines
 
     def _driver_initialise(self, infile = None, **kwargs):
         pwscfpy.pwpy_pwscf(infile)
@@ -126,7 +127,7 @@ class PwscfKS(AbsDFT):
         density = normalization_density(density, ncharge = self.ncharge, grid = self.grid)
         self._format_density(density, sym = False)
 
-    def _write_params(self, outfile, params = None, cell_params = None, **kwargs):
+    def _write_params(self, outfile, params = None, cell_params = None, cards = None, **kwargs):
         cell_params.update(kwargs)
         if 'pseudopotentials' not in cell_params :
             raise AttributeError("!!!ERROR : Must give the pseudopotentials")
@@ -139,7 +140,23 @@ class PwscfKS(AbsDFT):
 
         fileobj = open(outfile, 'w')
         ase_io_driver.write_espresso_in(fileobj, self.ase_atoms, params, **cell_params)
+        self._write_params_cards(fileobj, params, cards)
         fileobj.close()
+        return
+
+    def _write_params_cards(self, fd, params = None, cards = None, **kwargs):
+        if cards is None or len(cards) == 0 :
+            return
+        lines = iter(cards)
+        items = ['CONSTRAINTS', 'OCCUPATIONS', 'ATOMIC_FORCES']
+        for line in lines :
+            if line.split()[0] in items :
+                fd.write('\n' + line + '\n')
+                for line in lines :
+                    if not line[0] == '#' and line.split()[0].isupper():
+                        break
+                    else :
+                        fd.write(line + '\n')
         return
 
     def _format_density(self, density, volume = None, sym = True, **kwargs):

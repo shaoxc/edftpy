@@ -81,6 +81,7 @@ class SubCell(object):
         return self._shift
 
     def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True, full = False, coarse_grid_ecut = None):
+        tol = 1E-8
         lattice = ions.pos.cell.lattice.copy()
         lattice_sub = ions.pos.cell.lattice.copy()
         if index is None :
@@ -104,7 +105,7 @@ class SubCell(object):
             latp = np.linalg.norm(lattice_sub[:, i])
             if cellsplit is not None :
                 pbc[i] = False
-                if cellsplit[i] > 1.0 :
+                if cellsplit[i] > (1.0-tol) :
                     origin[i] = 0.0
                     continue
                 cell_size[i] = cellsplit[i] * latp0
@@ -264,16 +265,16 @@ class GlobalCell(object):
         self._grid = grid
         print('GlobalCell grid', nr)
 
-    def update_density(self, subrho, grid = None, restart = False, fake = False, index = None):
+    def update_density(self, subrho, grid = None, restart = False, fake = False, index = None, tol = 0.0):
         if index is None :
             index = self.get_sub_index(subrho, grid)
         if fake :
             if restart :
-                self._gaussian_density[:] = 1E-30
+                self._gaussian_density[:] = tol
             self._gaussian_density[index[0], index[1], index[2]] += subrho.ravel()
         else :
             if restart :
-                self._density[:] = 1E-30
+                self._density[:] = tol
             self._density[index[0], index[1], index[2]] += subrho.ravel()
         return self._density
 
@@ -299,15 +300,15 @@ class GlobalCell(object):
             self._density[index[0], index[1], index[2]] = subrho.ravel()
             return self._density
 
-    def update_density_bound(self, subrho, grid = None, restart = False, fake = False):
+    def update_density_bound(self, subrho, grid = None, restart = False, fake = False, tol = 0.0):
         indl, indr = self.get_boundary(subrho, grid)
         if fake :
             if restart :
-                self._gaussian_density[:] = 1E-30
+                self._gaussian_density[:] = tol
             self._gaussian_density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
         else :
             if restart :
-                self._density[:] = 1E-30
+                self._density[:] = tol
             self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
         return self._density
 

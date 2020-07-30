@@ -13,7 +13,7 @@ from edftpy.kedf import KEDF
 from edftpy.hartree import Hartree
 from edftpy.xc import XC
 from edftpy.optimizer import Optimization
-from edftpy.evaluator import Evaluator, EnergyEvaluatorMix
+from edftpy.evaluator import Evaluator, EnergyEvaluatorMix, EvaluatorOF
 from edftpy.enginer.driver import OptDriver
 from edftpy.enginer.of_dftpy import DFTpyOF
 from edftpy.density.init_density import AtomicDensity
@@ -29,6 +29,9 @@ def optimize_density_conf(config, **kwargs):
     ewald_ = ewald(rho=rho, ions=ions, PME=True)
     print('Final energy (a.u.)', energy + ewald_.energy)
     print('Final energy (eV)', (energy + ewald_.energy) * ENERGY_CONV['Hartree']['eV'])
+    for i, driver in enumerate(opt.opt_drivers):
+        io.write('final_sub_' + str(i) + '.xsf', driver.density, driver.calculator.subcell.ions)
+    io.write('final.xsf', rho, ions)
     return
 
 def config2optimizer(config, **kwargs):
@@ -93,26 +96,28 @@ def config2optimizer(config, **kwargs):
     return opt
 
 def config2driver(config, keysys, ions, grid, pplist = None):
-    #-----------------------------------------------------------------------
+    emb_ke_kwargs = config['GSYSTEM']["kedf"]
+    emb_xc_kwargs = config['GSYSTEM']["exc"]
+    gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
+    full=config['GSYSTEM']["grid"]["gfull"]
+    pme = config["MATH"]["linearie"]
+
     # nr = config[keysys]["grid"]["nr"]
     # spacing = config[keysys]["grid"]["spacing"] * LEN_CONV["Angstrom"]["Bohr"]
     # print('keysys', keysys, config[keysys])
     # print_conf(config[keysys])
-    emb_ke_kwargs = config['GSYSTEM']["kedf"]
-    emb_xc_kwargs = config['GSYSTEM']["exc"]
-    gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
-    ecut = config[keysys]["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
 
+    ecut = config[keysys]["grid"]["ecut"]
     ke_kwargs = config[keysys]["kedf"]
     xc_kwargs = config[keysys]["exc"]
-    cellcut = np.array(config[keysys]["cell"]["cut"]) * LEN_CONV["Angstrom"]["Bohr"]
+    cellcut = config[keysys]["cell"]["cut"]
     cellsplit= config[keysys]["cell"]["split"]
     index = config[keysys]["cell"]["index"]
     embed = config[keysys]["embed"]
     initial = config[keysys]["density"]["initial"]
     infile = config[keysys]["density"]["file"]
     use_gaussians = config[keysys]["density"]["use_gaussians"]
-    gaussians_rcut = config[keysys]["density"]["gaussians_rcut"] * LEN_CONV["Angstrom"]["Bohr"]
+    gaussians_rcut = config[keysys]["density"]["gaussians_rcut"]
     gaussians_sigma = config[keysys]["density"]["gaussians_sigma"]
     gaussians_scale = config[keysys]["density"]["gaussians_scale"]
     technique = config[keysys]["technique"]
@@ -123,8 +128,14 @@ def config2driver(config, keysys, ions, grid, pplist = None):
     prefix = config[keysys]["prefix"]
     kpoints = config[keysys]["kpoints"]
     exttype = config[keysys]["exttype"]
-    pme = config["MATH"]["linearie"]
     atomicfiles = config[keysys]["density"]["atomic"]
+    #-----------------------------------------------------------------------
+    if ecut :
+        ecut *= ENERGY_CONV["eV"]["Hartree"]
+    if cellcut :
+        cellcut = np.array(cellcut) * LEN_CONV["Angstrom"]["Bohr"]
+    if gaussians_rcut :
+        gaussians_rcut *= LEN_CONV["Angstrom"]["Bohr"]
     #-----------------------------------------------------------------------
     gaussian_options = {}
     if use_gaussians :
@@ -139,6 +150,8 @@ def config2driver(config, keysys, ions, grid, pplist = None):
             gaussian_options[key] = {'rcut' : gaussians_rcut, 'sigma' : gaussians_sigma, 'scale' : scale}
     #-----------------------------------------------------------------------
     print('index', index)
+    if calculator == 'dftpy' and ecut and abs(ecut - gsystem_ecut) > 1.0 :
+        cellcut = [0.0, 0.0, 0.0]
     subsys = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options)
     if infile : # initial='Read'
         subsys.density[:] = io.read_density(infile)
@@ -150,13 +163,13 @@ def config2driver(config, keysys, ions, grid, pplist = None):
         subsys.density[:] = atomicd.guess_rho(subsys.ions, subsys.grid)
         dftpy_opt(subsys.ions, subsys.density, pplist)
     #Embedding Functional---------------------------------------------------
-    emb_funcdicts = {}
     if exttype is not None :
         embed = ['KE']
         if not exttype & 1 : embed.append('PSEUDO')
         if not exttype & 2 : embed.append('HARTREE')
         if not exttype & 4 : embed.append('XC')
     exttype = 7
+    emb_funcdicts = {}
     if 'KE' in embed :
         ke_emb = KEDF(**emb_ke_kwargs)
         emb_funcdicts['KE'] = ke_emb
@@ -203,7 +216,23 @@ def config2driver(config, keysys, ions, grid, pplist = None):
         if opt_options['opt_method'] == 'full' :
             mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
         opt_options['econv'] *= subsys.ions.nat
-        enginer = DFTpyOF(options = opt_options, subcell = subsys, mixer = mixer)
+
+        if ecut and abs(ecut - gsystem_ecut) > 1.0 :
+            gsystem_driver = GlobalCell(ions, ecut = ecut, full = full, optfft = True)
+            grid_driver = gsystem_driver.grid
+            pseudo_driver = LocalPP(grid = grid_driver, ions=ions,PP_list=pplist,PME=True)
+            hartree_driver = Hartree()
+            xc_driver = XC(**emb_xc_kwargs)
+            funcdicts = {'PSEUDO' :pseudo_driver, 'HARTREE' :hartree_driver, 'XC' :xc_driver}
+            total_evaluator = Evaluator(**funcdicts)
+            gsystem_driver.total_evaluator = total_evaluator
+            grid_sub = grid_driver
+            grid_sub.shift = np.zeros(3, dtype = 'int32')
+        else :
+            grid_sub = None
+            gsystem_driver = None
+        evaluator_of = EvaluatorOF(sub_evaluator = sub_evaluator, gsystem = gsystem_driver)
+        enginer = DFTpyOF(options = opt_options, subcell = subsys, mixer = mixer, evaluator_of = evaluator_of, grid = grid_sub)
         return enginer
 
     def get_castep_enginer():
@@ -234,7 +263,7 @@ def config2driver(config, keysys, ions, grid, pplist = None):
         params = {'system' : {}}
         if ecut :
             params['system']['ecutwfc'] = ecut * 2.0
-            if abs(8 * ecut - gsystem_ecut) < 1.0 :
+            if abs(4 * ecut - gsystem_ecut) < 1.0 :
                 params['system']['nr1'] = subsys.grid.nr[0]
                 params['system']['nr2'] = subsys.grid.nr[1]
                 params['system']['nr3'] = subsys.grid.nr[2]
@@ -252,7 +281,6 @@ def config2driver(config, keysys, ions, grid, pplist = None):
 
     driver = OptDriver(energy_evaluator = energy_evaluator, calculator = enginer)
     return driver
-
 
 def dftpy_opt(ions, rho, pplist):
     from dftpy.interface import OptimizeDensityConf
@@ -291,3 +319,32 @@ def get_forces(opt_drivers = None, gsystem = None, linearii=True):
 
 def get_stress():
     pass
+
+def get_total_density(gsystem, drivers = None, scale = 1):
+    results = []
+    if scale > 1 :
+        grid_global = Grid(gsystem.grid.lattice, gsystem.grid.nr * scale, direct = True)
+        gsystem_fine = GlobalCell(gsystem.ions, grid = grid_global)
+        for i, item in enumerate(drivers):
+            driver = item.calculator
+            grid_sub = Grid(driver.grid.lattice, driver.grid.nr * scale, direct = True)
+            grid_sub.shift = driver.grid.shift * scale
+            rho = driver._format_density_invert(charge = driver.charge, grid = grid_sub)
+            results.append(rho)
+            if i == 0 :
+                restart = True
+            else :
+                restart = False
+            gsystem_fine.update_density(rho, restart = restart)
+        results.insert(0, gsystem_fine.density)
+    else :
+        for i, driver in enumerate(drivers):
+            rho = driver.density
+            results.append(rho)
+            if i == 0 :
+                restart = True
+            else :
+                restart = False
+            gsystem.update_density(rho, restart = restart)
+        results.insert(0, gsystem.density)
+    return results

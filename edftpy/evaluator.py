@@ -189,20 +189,20 @@ class EnergyEvaluatorMix(AbsFunctional):
         return obj
 
 class EvaluatorOF(AbsFunctional):
-    def __init__(self, grid = None, sub_evaluator = None, ke_evaluator = None, gsystem = None, **kwargs):
+    def __init__(self, sub_evaluator = None, ke_evaluator = None, gsystem = None, **kwargs):
         """
         """
         self.sub_evaluator = sub_evaluator
         self._gsystem = gsystem
         self._ke_evaluator = ke_evaluator
-        self.grid = grid
 
     @property
     def gsystem(self):
-        if self._gsystem is not None:
-            return self._gsystem
-        else:
-            raise AttributeError("Must specify gsystem for EvaluatorOF")
+        return self._gsystem
+        # if self._gsystem is not None:
+            # return self._gsystem
+        # else:
+            # raise AttributeError("Must specify gsystem for EvaluatorOF")
 
     @gsystem.setter
     def gsystem(self, value):
@@ -225,10 +225,7 @@ class EvaluatorOF(AbsFunctional):
 
     @rest_rho.setter
     def rest_rho(self, value):
-        if value.size == self.grid.nnr :
-            self._rest_rho = value
-        else :
-            self._rest_rho = grid_map_data(value, self.grid.nr)
+        self._rest_rho = value
 
     @property
     def embed_potential(self):
@@ -239,10 +236,7 @@ class EvaluatorOF(AbsFunctional):
 
     @embed_potential.setter
     def embed_potential(self, value):
-        if value.size == self.grid.nnr :
-            self._embed_potential = value
-        else :
-            self._embed_potential = grid_map_data(value, self.grid.nr)
+        self._embed_potential = value
 
     def __call__(self, rho, calcType=["E","V"], with_global = True, with_ke = False, with_sub = True, with_embed = True, **kwargs):
         return self.compute(rho, calcType, with_global, with_ke, with_sub, with_embed, **kwargs)
@@ -253,6 +247,12 @@ class EvaluatorOF(AbsFunctional):
             obj = Functional(name = 'ZERO', energy=0.0, potential=potential)
         else :
             obj = self.sub_evaluator(rho, calcType = calcType)
+        #-----------------------------------------------------------------------
+        # if not np.all(rho.grid.nr == self.embed_potential.grid.nr) :
+            # self.embed_potential = grid_map_data(self.embed_potential, grid = rho.grid)
+        # if not np.all(rho.grid.nr == self.rest_rho.grid.nr) :
+            # self.rest_rho = grid_map_data(self.rest_rho, grid = rho.grid)
+        #-----------------------------------------------------------------------
         #Embedding potential
         if with_embed :
             if 'V' in calcType :

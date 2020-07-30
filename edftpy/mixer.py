@@ -177,16 +177,17 @@ class LinearMixer(AbstractMixer):
 
     def compute(self, nin, nout, coef = None):
         self._iter += 1
+        one = 1.0-1E-10
         if coef is None :
             coef = self.coef
-        if self._iter > self._delay :
+        if self._iter > self._delay and coef[0] < one:
             res = nout - nin
             res *= coef[0]
             results = self.pred(nin, nout, residual=res)
+            results = self.format_density(results, nin)
         else :
             results = nout.copy()
 
-        results = self.format_density(results, nin)
         return results
 
     def residual(self, nin, nout):

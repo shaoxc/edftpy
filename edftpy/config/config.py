@@ -22,25 +22,16 @@ def merge_dftpy_entries(entries):
                 del entries[k]
                 break
         if lsame :
-            entries.update(vn)
+            vnm = vn.copy()
+            for key in vn.keys():
+                if key in entries :
+                    del vnm[key]
+            entries.update(vnm)
         return entries
 
     dftpy_entries = dftpy_default_json()
     for k, v in entries.items() :
         entries[k] = recursive_merge(dftpy_entries, v)
-
-def merge_entries(entries, parent = None):
-    merged = {}
-    for k, v in entries.items() :
-        if parent :
-            k2 = parent + '-' + k
-        else :
-            k2 = k
-        if isinstance(v, dict):
-            merged.update(merge_entries(v, k))
-        else :
-            merged[k2] = v
-    return merged
 
 def entries2conf(entries):
     conf = {}
@@ -176,3 +167,17 @@ def read_conf_2(infile):
                 conf[section][key] = config.get(section, key)
     conf = option_format_2(conf)
     return conf
+
+def merge_entries(entries, parent = None):
+    merged = {}
+    for k, v in entries.items() :
+        if parent :
+            k2 = parent + '-' + k
+        else :
+            k2 = k
+        if isinstance(v, dict):
+            merged.update(merge_entries(v, k))
+        else :
+            merged[k2] = v
+    return merged
+

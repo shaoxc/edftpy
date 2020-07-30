@@ -54,7 +54,7 @@ class Test(unittest.TestCase):
             index_a = None
             subsys_a, driver_a = self.gen_sub_of(ions, grid, pplist, index_a, atomicd, xc_kwargs, ke_kwargs, emb_ke_kwargs = emb_ke_kwargs, gsystem = gsystem, method = method)
             opt_drivers = [driver_a]
-            optimization_options = {'econv' : 1e-8, 'maxiter' : 70}
+            optimization_options = {'econv' : 1e-6, 'maxiter' : 70}
             optimization_options["econv"] *= ions.nat
             opt = Optimization(opt_drivers = opt_drivers, options = optimization_options)
             opt.optimize(gsystem = gsystem)

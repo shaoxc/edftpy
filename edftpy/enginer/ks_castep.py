@@ -15,7 +15,8 @@ from ..density import normalization_density
 class CastepKS(AbsDFT):
     """description"""
     def __init__(self, evaluator = None, subcell = None, prefix = 'castep_in_sub', params = None, cell_params = None, 
-            exttype = 3, base_in_file = None, castep_in_file = None, mixer = None, ncharge = None, **kwargs):
+            exttype = 3, base_in_file = None, castep_in_file = None, mixer = None, ncharge = None, gsystem = None, 
+            **kwargs):
         '''
         exttype :
                     1 : only pseudo                  : 001 
@@ -38,8 +39,11 @@ class CastepKS(AbsDFT):
         self.perform_mix = False
         self.mdl = None
         self.ncharge = ncharge
+        self.gsystem_driver = gsystem
+        #Will remove 'castep_in_file' later 
         if base_in_file is None :
             base_in_file = castep_in_file
+        #-----------------------------------------------------------------------
         if self.prefix :
             self._build_ase_atoms(params, cell_params, base_in_file)
             self._write_cell(self.prefix + '.cell', params = cell_params)
@@ -68,10 +72,19 @@ class CastepKS(AbsDFT):
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
         if self.grid_driver is not None :
             print('{} has two grids :{} and {}'.format(self.__class__.__name__, self.grid.nr, self.grid_driver.nr))
+        self._grid_fine = None
 
     @property
     def grid(self):
         return self.subcell.grid
+
+    @property
+    def grid_fine(self):
+        if self._grid_fine is None :
+            scale = (self.gsystem_driver.grid.nr / self.evaluator.gsystem.grid.nr).astype('int')
+            self._grid_fine = Grid(self.grid.lattice, self.grid.nr * scale, direct = True)
+            self._grid_fine.shift = self.grid.shift * scale
+        return self._grid_fine
 
     def get_grid_driver(self, grid):
         current_basis = caspytep.basis.get_current_basis()
@@ -226,22 +239,36 @@ class CastepKS(AbsDFT):
         else :
             density /= grid.volume
             rho = Field(grid=grid, rank=1, direct=True, data = density, order = 'F')
+        print('min00', np.min(self.mdl.den.real_charge)/grid.volume)
+        print('rho00', np.min(rho))
         return rho
 
     def _get_extpot(self, charge = None, grid = None, **kwargs):
         rho = self._format_density_invert(charge, grid, **kwargs)
-        # func = self.evaluator(rho, with_embed = False)
-        # # func.potential *= self.filter
-        # extpot = func.potential.ravel(order = 'F')
-        # extene = func.energy
         #-----------------------------------------------------------------------
-        self.evaluator.get_embed_potential(rho, gaussian_density = self.subcell.gaussian_density, with_global = True)
+        if self.gsystem_driver is None :
+            self.evaluator.get_embed_potential(rho, gaussian_density = self.subcell.gaussian_density, with_global = True)
+            pot = None
+        else :
+            self.evaluator.get_embed_potential(rho, gaussian_density = self.subcell.gaussian_density, with_global = False)
+            self.gsystem_driver.density = grid_map_data(self.evaluator.gsystem.density, grid = self.gsystem_driver.grid)
+            pot = self.gsystem_driver.total_evaluator(self.gsystem_driver.density, calcType = ['V']).potential
+        #-----------------------------------------------------------------------
         extpot = self.evaluator.embed_potential
         extene = (extpot * rho).integral()
         if self.grid_driver is not None :
             extpot = grid_map_data(extpot, grid = self.grid_driver)
-        extpot = extpot.ravel(order = 'F')
         #-----------------------------------------------------------------------
+        if pot is not None :
+            pot_sub = self.gsystem_driver.sub_value(pot, self.grid_fine)
+            if self.grid_driver is not None :
+                grid_driver = self.grid_driver
+            else :
+                grid_driver = self.grid
+            extpot += grid_map_data(pot_sub, grid = grid_driver)
+            print('pot33', np.min(extpot), np.max(extpot))
+        #-----------------------------------------------------------------------
+        extpot = extpot.ravel(order = 'F')
         return extpot, extene
 
     def _windows_function(self, grid, alpha = 0.5, bd = [5, 5, 5], **kwargs):
