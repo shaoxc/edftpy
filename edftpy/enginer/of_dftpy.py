@@ -127,9 +127,9 @@ class DFTpyOF(AbsDFT):
             hamil = False
         else :
             hamil = True
-        # if not hamil or self._iter == 1 :
-            # self._format_density(density)
-        self._format_density(density)
+        if hamil or self._iter == 1 :
+            self._format_density(density)
+        # self._format_density(density)
         self._get_extpot(density, self.charge, density.grid, with_global = hamil)
         if self.evaluator_of.sub_evaluator and hamil:
             self.evaluator_of.embed_potential += self.evaluator_of.sub_evaluator(self.charge, calcType = ['V']).potential
