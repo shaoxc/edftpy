@@ -113,7 +113,7 @@ class DFTpyOF(AbsDFT):
             self.options['econv0'] = self.options['econv'] * 1E4
             self.options['econv'] = self.options['econv0']
             self.residual_norm = 1
-        elif self._iter < 2 :
+        elif self._iter < 3 :
             norm = max(0.1, self.residual_norm)
 
         econv = self.options['econv0'] * norm

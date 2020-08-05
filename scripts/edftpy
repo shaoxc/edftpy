@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-import configparser
-import argparse
 import os
+os.environ["PYTHONUNBUFFERED"] = "1"
+os.environ["DFTPY_SAVEFFT"] = "1"
+# import dftpy.constants
+# dftpy.constants.SAVEFFT = True
+
+import argparse
 from edftpy.interface import optimize_density_conf
 from edftpy.config import read_conf
 import time
 
-os.environ["PYTHONUNBUFFERED"] = "1"
 
 def RunJob():
     parser = argparse.ArgumentParser(description='Process task')
