@@ -134,7 +134,8 @@ class PwscfKS(AbsDFT):
         value = {}
         for k2, v2 in cell_params['pseudopotentials'].items():
             value[k2] = os.path.basename(v2)
-        cell_params['pseudopotentials'].update(value)
+        cell_params['pseudopotentials'] = value
+        # cell_params['pseudopotentials'].update(value)
         #For QE, all pseudopotentials should at same directory
         params['control']['pseudo_dir'] = os.path.dirname(v2)
 

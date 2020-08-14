@@ -42,21 +42,22 @@ class DFTpyOF(AbsDFT):
         self.phi = None
         self.residual_norm = 1
         self.subcell = subcell
+        self.grid_driver = grid
+        self.evaluator_of = evaluator_of
         #-----------------------------------------------------------------------
         self.mixer = mixer
         if self.mixer is None and self.options['opt_method'] != 'full' :
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
         #-----------------------------------------------------------------------
         self.density = self.subcell.density
-        self.grid_driver = grid
-        self.evaluator_of = evaluator_of
+        self.init_density()
 
     @property
     def grid(self):
         return self.subcell.grid
 
     def init_density(self, rho_ini = None):
-        pass
+        self._format_density(self.density)
 
     def _format_density(self, density, volume = None, sym = True, **kwargs):
         if self.grid_driver is not None :
@@ -143,6 +144,7 @@ class DFTpyOF(AbsDFT):
             self.get_density_hamiltonian(density)
         #-----------------------------------------------------------------------
         rho = self._format_density_invert(self.charge, density.grid)
+        self.density[:] = rho
         return rho
 
     def get_density_full_opt(self, density, **kwargs):
@@ -242,3 +244,37 @@ class DFTpyOF(AbsDFT):
 
     def get_stress(self, **kwargs):
         pass
+
+def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None):
+    from dftpy.interface import OptimizeDensityConf
+    from dftpy.config import DefaultOption, OptionFormat
+    from dftpy.system import System
+
+    from edftpy.pseudopotential import LocalPP
+    from edftpy.kedf import KEDF
+    from edftpy.hartree import Hartree
+    from edftpy.xc import XC
+    from edftpy.evaluator import Evaluator
+    #-----------------------------------------------------------------------
+    if xc_kwargs is None :
+        xc_kwargs = {"x_str":'gga_x_pbe','c_str':'gga_c_pbe'}
+    if ke_kwargs is None :
+        ke_kwargs = {'name' :'GGA', 'k_str' : 'REVAPBEK'}
+        # ke_kwargs = {'name' :'TFvW', 'y' :0.2}
+    #-----------------------------------------------------------------------
+    pseudo = LocalPP(grid = rho.grid, ions=ions, PP_list=pplist, PME=True)
+    hartree = Hartree()
+    xc = XC(**xc_kwargs)
+    ke = KEDF(**ke_kwargs)
+    funcdicts = {'KE' :ke, 'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
+    evaluator = Evaluator(**funcdicts)
+    #-----------------------------------------------------------------------
+    conf = DefaultOption()
+    conf['JOB']['calctype'] = 'Density'
+    conf['OUTPUT']['time'] = False
+    conf['OPT'] = {"method" :'CG-HS', "maxiter": 1000, "econv": 1.0e-6*ions.nat}
+    conf = OptionFormat(conf)
+    struct = System(ions, rho.grid, name='density', field=rho)
+    opt = OptimizeDensityConf(conf, struct, evaluator)
+    rho[:] = opt['density']
+    return rho

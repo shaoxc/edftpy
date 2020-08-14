@@ -5,7 +5,6 @@ import unittest
 
 from dftpy.constants import ENERGY_CONV
 from dftpy.formats import io
-from dftpy.ewald import ewald
 
 from edftpy.utils.common import Field, Grid, Atoms
 from edftpy.pseudopotential import LocalPP
@@ -58,10 +57,7 @@ class Test(unittest.TestCase):
             optimization_options["econv"] *= ions.nat
             opt = Optimization(opt_drivers = opt_drivers, options = optimization_options)
             opt.optimize(gsystem = gsystem)
-            rho = opt.density
             energy = opt.energy
-            ewald_ = ewald(rho=rho, ions=ions, PME=True)
-            energy += ewald_.energy
             return energy
 
         for method in ['full', 'part', 'hamiltonian'] :

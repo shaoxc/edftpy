@@ -1,6 +1,7 @@
 import numpy as np
 import configparser
 import copy
+import os
 from dftpy.constants import ENERGY_CONV, LEN_CONV
 from dftpy.config.config import ConfigEntry, readJSON, DefaultOptionFromEntries
 from dftpy.config.config import default_json as dftpy_default_json
@@ -91,7 +92,43 @@ def option_format(config, mapfunc = None, final = True):
         conf = conf_special_format(conf)
     return conf
 
+def dict_format(config):
+    conf = default_option()
+    #-----------------------------------------------------------------------
+    subkeys = [key for key in config if key.startswith('SUB')]
+    for key in subkeys:
+        conf[key] = copy.deepcopy(conf['SUB'])
+    #-----------------------------------------------------------------------
+    for section, dicts in config.items() :
+        for key, value in dicts.items():
+            keys = key.split('-')
+            dicts = conf[section]
+            for k2 in keys[:-1]:
+                tmp = dicts[k2]
+                if tmp is not None :
+                    dicts = tmp
+            dicts[keys[-1]] = value
+    conf = option_format(conf)
+    return conf
+
 def read_conf(infile):
+    config = configparser.ConfigParser()
+
+    if isinstance(infile, dict):
+        conf_read = infile
+    elif isinstance(infile, str):
+        if os.path.isfile(infile):
+            config.read(infile)
+        elif '=' in infile :
+            config.read_string(infile)
+        else :
+            raise AttributeError("!!!ERROR : %s not exist", infile)
+        conf_read = {section : dict(config.items(section)) for section in config.sections()}
+
+    conf = dict_format(conf_read)
+    return conf
+
+def read_conf_full(infile):
     config = configparser.ConfigParser()
     config.read(infile)
 

@@ -40,6 +40,10 @@ class SubCell(object):
             raise AttributeError("Must generate subcell firstly")
         return self._ions
 
+    @ions.setter
+    def ions(self, value):
+        self._ions = value
+
     @property
     def density(self):
         if self._density is None:
@@ -78,9 +82,9 @@ class SubCell(object):
 
     @property
     def shift(self):
-        return self._shift
+        return self.grid.shift
 
-    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True, full = False, coarse_grid_ecut = None):
+    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True, full = False, coarse_grid_ecut = None, grid_sub = None):
         tol = 1E-8
         lattice = ions.pos.cell.lattice.copy()
         lattice_sub = ions.pos.cell.lattice.copy()
@@ -143,11 +147,11 @@ class SubCell(object):
         print('subcell shift', shift)
 
         ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = lattice_sub, basis = 'Cartesian', origin = origin)
-        grid_sub = Grid(lattice=lattice_sub, nr=nr, full=full, direct = True, origin = origin, pbc = pbc)
+        if grid_sub is None :
+            grid_sub = Grid(lattice=lattice_sub, nr=nr, full=full, direct = True, origin = origin, pbc = pbc)
         grid_sub.shift = shift
         self._grid = grid_sub
         self._ions = ions_sub
-        self._shift = shift
         self._ions_index = index
         if coarse_grid_ecut is not None :
             nr_coarse = ecut2nr(coarse_grid_ecut, lattice_sub, optfft = optfft)
@@ -221,11 +225,23 @@ class SubCell(object):
 
 class GlobalCell(object):
     def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, **kwargs):
+        self.grid_kwargs = {
+                'ecut' : ecut,
+                'spacing' : spacing,
+                'nr' : nr,
+                'full' : full,
+                'optfft' : optfft,
+                }
+        self.grid_kwargs.update(kwargs)
+
+        self.restart(grid=grid, ions=ions)
+
+    def restart(self, grid=None, ions=None):
         self._ions = ions
         self._grid = grid
-
+        self._ewald = None
         if self._grid is None :
-            self._gen_grid(ecut = ecut, spacing = spacing, nr = nr, full = full, optfft = optfft, **kwargs)
+            self._gen_grid(**self.grid_kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
         self._gaussian_density = Field(grid=self.grid, rank=1, direct=True)
 
@@ -234,8 +250,18 @@ class GlobalCell(object):
         return self._grid
 
     @property
+    def ewald(self):
+        if self._ewald is None :
+            self._ewald = ewald(rho=self.density, ions=self.ions, PME=True)
+        return self._ewald
+
+    @property
     def ions(self):
         return self._ions
+
+    @ions.setter
+    def ions(self, value):
+        self._ions = value
 
     @property
     def density(self):
@@ -367,8 +393,8 @@ class GlobalCell(object):
         ewaldobj = ewald(rho=self.density, ions=self.ions, PME=linearii)
         forces_ii = ewaldobj.forces
         forces = forces_ie + forces_ii
-        print('ewald', forces_ii)
-        print('ie', forces_ie)
+        # print('ewald', forces_ii)
+        # print('ie', forces_ie)
         return forces
 
     def get_stress(self, **kwargs):

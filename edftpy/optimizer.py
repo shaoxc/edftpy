@@ -3,6 +3,7 @@ import time
 import copy
 from .hartree import Hartree
 from dftpy.formats import io
+from dftpy.ewald import ewald
 
 
 class Optimization(object):
@@ -33,6 +34,7 @@ class Optimization(object):
                 energy += func.energy
                 elist.append(func.energy)
         elist.append(energy)
+        energy += self.gsystem.ewald.energy
         return energy
 
     def get_energy_all(self, totalrho = None, totalfunc = None, olevel = 0, **kwargs):
@@ -47,7 +49,8 @@ class Optimization(object):
             driver(density =driver.density, gsystem = self.gsystem, calcType = ['E'], olevel = olevel)
             elist.append(driver.energy)
         elist = np.asarray(elist)
-        energy = [np.sum(elist), elist]
+        etotal = np.sum(elist) + self.gsystem.ewald.energy
+        energy = [etotal, elist]
         return energy
 
     def update_density(self, denlist = None, prev_denlist = None, mu = None, update = None, **kwargs):
@@ -94,7 +97,7 @@ class Optimization(object):
         totalrho = self.gsystem.density.copy()
         return totalrho, denlist
 
-    def optimize(self, gsystem = None, guess_rho = None, **kwargs):
+    def optimize(self, gsystem = None, guess_rho = None, olevel = 1, **kwargs):
         #-----------------------------------------------------------------------
         if gsystem is None:
             if self.gsystem is None :
@@ -170,7 +173,7 @@ class Optimization(object):
 
                 if update[i] :
                     self.gsystem.density[:] = totalrho
-                    driver(density = prev_denlist[i], gsystem = self.gsystem, calcType = ['O', 'E'])
+                    driver(density = prev_denlist[i], gsystem = self.gsystem, calcType = ['O', 'E'], olevel = olevel)
                     denlist[i] = driver.density
                     func_list[i] = driver.functional
                     mu_list[i] = driver.mu

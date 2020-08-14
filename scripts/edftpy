@@ -7,7 +7,7 @@ os.environ["DFTPY_SAVEFFT"] = "1"
 
 import argparse
 from edftpy.interface import optimize_density_conf
-from edftpy.config import read_conf
+from edftpy.config import read_conf, print_conf
 import time
 
 
@@ -19,6 +19,7 @@ def RunJob():
 
     args = parser.parse_args()
     config = read_conf(args.input)
+    print_conf(config)
 
     print("Begin on :", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
     print("#" * 80)
