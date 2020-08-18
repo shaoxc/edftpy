@@ -17,15 +17,19 @@ def optimize_density_conf(config, **kwargs):
     for i, driver in enumerate(opt.opt_drivers):
         io.write('final_sub_' + str(i) + '.xsf', driver.density, driver.calculator.subcell.ions)
     io.write('final.xsf', rho, ions)
+
+    # forces = get_forces(opt.opt_drivers, opt.gsystem)
+
     return
 
 def get_forces(opt_drivers = None, gsystem = None, linearii=True):
     forces = gsystem.get_forces(linearii = linearii)
+    print('Total forces0 : \n', forces)
     for i, driver in enumerate(opt_drivers):
         fs = driver.calculator.get_forces()
         ind = driver.calculator.subcell.ions_index
-        # print('ind', ind)
-        # print('fs', fs)
+        print('ind', ind)
+        print('fs', fs)
         forces[ind] += fs
     print('Total forces : \n', forces)
     return forces
