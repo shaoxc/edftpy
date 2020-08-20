@@ -17,9 +17,6 @@ def optimize_density_conf(config, **kwargs):
     for i, driver in enumerate(opt.opt_drivers):
         io.write('final_sub_' + str(i) + '.xsf', driver.density, driver.calculator.subcell.ions)
     io.write('final.xsf', rho, ions)
-
-    # forces = get_forces(opt.opt_drivers, opt.gsystem)
-
     return
 
 def get_forces(opt_drivers = None, gsystem = None, linearii=True):

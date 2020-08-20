@@ -448,13 +448,13 @@ class CastepKS(AbsDFT):
         """
         extpot, extene = self._get_extpot(self.mdl.den, self.grid)
         #-----------------------------------------------------------------------
-        nats = []
-        labels = self.subcell.ions.labels
+        # labels = self.subcell.ions.labels
+        labels = self.subcell.ions.Z
         u, index, counts = np.unique(labels, return_index=True, return_counts=True)
         sidx = np.argsort(index)
         nats = counts[sidx]
-        # keys = u[sidx]
         #-----------------------------------------------------------------------
+        # nats = []
         # keys = list(set(labels))
         # keys.sort(key = labels.index)
         # for key in keys :
@@ -462,12 +462,12 @@ class CastepKS(AbsDFT):
         #-----------------------------------------------------------------------
         ntyp = len(nats)
         nmax = max(nats)
-        fs = np.empty((3, nmax, ntyp), order = 'F')
+        fs = np.zeros((3, nmax, ntyp), order = 'F')
         caspytep.firstd.firstd_calculate_forces_edft_ext(self.mdl, fs, extpot, extene, self.exttype, icalc)
         forces = np.empty((self.subcell.ions.nat, 3), order = 'F')
         n = 0
         for i, item in enumerate(nats):
-            forces[n:n+item] = fs[:, :item, i].T
+            forces[n:n+item] = fs[:, :item, sidx[i]].T
             n += item
         return forces
 

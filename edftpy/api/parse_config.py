@@ -136,9 +136,10 @@ def config2evaluator(config, keysys, ions, grid, pplist = None, optimizer = None
         emb_funcdicts['PSEUDO'] = pseudo
     emb_evaluator = Evaluator(**emb_funcdicts)
     #Subsystem Functional---------------------------------------------------
-    ke_sub_kwargs = {'name' :'vW'}
-    ke_sub = KEDF(**ke_sub_kwargs)
-    sub_funcdicts = {'KE' :ke_sub}
+    # ke_sub_kwargs = {'name' :'vW'}
+    # ke_sub = KEDF(**ke_sub_kwargs)
+    # sub_funcdicts = {'KE' :ke_sub}
+    sub_funcdicts = {}
     if 'XC' in embed :
         xc_sub = XC(**xc_kwargs)
         sub_funcdicts['XC'] = xc_sub
@@ -150,8 +151,8 @@ def config2evaluator(config, keysys, ions, grid, pplist = None, optimizer = None
     if technique == 'KS' :
         sub_evaluator = None
         ke_evaluator = None
-    energy_evaluator = EnergyEvaluatorMix(embed_evaluator = emb_evaluator, ke_evaluator = ke_evaluator)
-    return (energy_evaluator, sub_evaluator)
+    # energy_evaluator = EnergyEvaluatorMix(embed_evaluator = emb_evaluator, ke_evaluator = ke_evaluator)
+    return (emb_evaluator, sub_evaluator, ke_evaluator)
 
 def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None, driver = None):
     gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
@@ -229,19 +230,20 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     else :
         raise AttributeError("!!!ERROR : NOT support ", mix_kwargs['scheme'])
     #-----------------------------------------------------------------------
-    energy_evaluator, sub_evaluator = config2evaluator(config, keysys, subsys.ions, subsys.grid, pplist = pplist, optimizer = optimizer, cell_change = cell_change)
+    embed_evaluator, sub_evaluator, ke_evaluator = config2evaluator(config, keysys, subsys.ions, subsys.grid, pplist = pplist, optimizer = optimizer, cell_change = cell_change)
+    ke_sub_kwargs = {'name' :'vW'}
+    ke_sub = KEDF(**ke_sub_kwargs)
+
     exttype = 7
-    if 'XC' in energy_evaluator.embed_evaluator.funcdicts :
+    if 'XC' in embed_evaluator.funcdicts :
         exttype -= 4
-    if 'HARTREE' in energy_evaluator.embed_evaluator.funcdicts :
+    if 'HARTREE' in embed_evaluator.funcdicts :
         exttype -= 2
-    if 'PSEUDO' in energy_evaluator.embed_evaluator.funcdicts :
+    if 'PSEUDO' in embed_evaluator.funcdicts :
         exttype -= 1
     print('exttype', exttype)
 
     def get_dftpy_enginer():
-        if opt_options['opt_method'] == 'full' :
-            mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
         opt_options['econv'] *= subsys.ions.nat
 
         if ecut and abs(ecut - gsystem_ecut) > 1.0 :
@@ -258,8 +260,31 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         else :
             grid_sub = None
             gsystem_driver = None
-        evaluator_of = EvaluatorOF(sub_evaluator = sub_evaluator, gsystem = gsystem_driver)
-        enginer = DFTpyOF(options = opt_options, subcell = subsys, mixer = mixer, evaluator_of = evaluator_of, grid = grid_sub)
+
+        add_ke = {}
+        if opt_options['opt_method'] == 'full' :
+            if ke_sub is not None : add_ke = {'KE' : ke_sub}
+        else :
+            if ke_evaluator is not None : add_ke = {'KE' :ke_evaluator}
+        sub_eval = sub_evaluator
+        if sub_eval is None :
+            sub_eval = Evaluator(**add_ke)
+        else :
+            sub_eval.update_functional(add = add_ke)
+
+        if opt_options['opt_method'] == 'full' :
+            mixer_of = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
+            add_ke = {'KE' : ke_sub}
+            sub_eval = sub_evaluator
+            if sub_eval is None :
+                sub_eval = Evaluator(**add_ke)
+            else :
+                sub_eval.update_functional(add = add_ke)
+            evaluator_of = EvaluatorOF(sub_evaluator = sub_eval, gsystem = gsystem_driver)
+        else :
+            evaluator_of = EvaluatorOF(sub_evaluator = sub_eval, gsystem = gsystem_driver, ke_evaluator = ke_sub)
+            mixer_of = mixer
+        enginer = DFTpyOF(options = opt_options, subcell = subsys, mixer = mixer_of, evaluator_of = evaluator_of, grid = grid_sub)
         return enginer
 
     def get_castep_enginer():
@@ -305,6 +330,10 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         enginer = get_pwscf_enginer()
     elif calculator == 'castep' :
         enginer = get_castep_enginer()
+
+    energy_evaluator = EnergyEvaluatorMix(embed_evaluator = embed_evaluator)
+    if calculator == 'dftpy' and opt_options['opt_method'] == 'full' :
+        energy_evaluator = EnergyEvaluatorMix(embed_evaluator = embed_evaluator, ke_evaluator = ke_evaluator)
 
     driver = OptDriver(energy_evaluator = energy_evaluator, calculator = enginer)
     return driver
