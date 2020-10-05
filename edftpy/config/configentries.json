@@ -46,7 +46,13 @@
 			"type": "str",
 			"default": "output",
 			"comment": "Same config of `DFTpy`"
+		},
+		"electrostatic_potential": {
+			"type": "str",
+			"default": null,
+			"comment": "Output of electrostatic_potential"
 		}
+		
 	},
 	"OPT": {
 		"method": {

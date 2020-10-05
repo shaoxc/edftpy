@@ -9,15 +9,13 @@ from edftpy.api.parse_config import config2optimizer
 def optimize_density_conf(config, **kwargs):
     opt = config2optimizer(config, **kwargs)
     opt.optimize()
-    rho = opt.density
     energy = opt.energy
-    ions = opt.gsystem.ions
     print('Final energy (a.u.)', energy)
     print('Final energy (eV)', energy * ENERGY_CONV['Hartree']['eV'])
-    for i, driver in enumerate(opt.opt_drivers):
-        io.write('final_sub_' + str(i) + '.xsf', driver.density, driver.calculator.subcell.ions)
-    io.write('final.xsf', rho, ions)
-    return
+    # for i, driver in enumerate(opt.opt_drivers):
+        # io.write('final_sub_' + str(i) + '.xsf', driver.density, driver.calculator.subcell.ions)
+    # io.write('final.xsf', opt.density, opt.gsystem.ions)
+    return opt
 
 def get_forces(opt_drivers = None, gsystem = None, linearii=True):
     forces = gsystem.get_forces(linearii = linearii)

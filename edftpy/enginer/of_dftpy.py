@@ -106,21 +106,23 @@ class DFTpyOF(AbsDFT):
         self._iter += 1
         #-----------------------------------------------------------------------
         if res_max is None :
-            norm = self.residual_norm
-        else :
-            norm = res_max
+            res_max = self.residual_norm
 
         if self._iter == 1 :
             self.options['econv0'] = self.options['econv'] * 1E4
             self.options['econv'] = self.options['econv0']
-            self.residual_norm = 1
-        elif self._iter < 3 :
-            norm = max(0.1, self.residual_norm)
+            res_max = 1.0
+
+        norm = res_max
+        if self._iter < 3 :
+            norm = max(0.1, res_max)
 
         econv = self.options['econv0'] * norm
+        # if econv / self.options['econv'] < 1E-2 :
+            # econv = self.options['econv'] * 1E-2
         if econv < self.options['econv'] :
             self.options['econv'] = econv
-        if norm < 1E-8 :
+        if norm < 1E-7 :
             self.options['maxiter'] = 4
         print('econv', self.options['econv'])
         #-----------------------------------------------------------------------
@@ -189,17 +191,21 @@ class DFTpyOF(AbsDFT):
         self.fermi_level = self.calc.mu
         return 
 
-    def get_density_hamiltonian(self, density, **kwargs):
+    def get_density_hamiltonian(self, density, num_eig = 2, **kwargs):
         potential = self.evaluator_of.embed_potential
         hamiltonian = Hamiltonian(potential, grid = self.subcell.grid)
-        eigens = hamiltonian.eigens()
+        self.options.update(kwargs)
+        if num_eig > 1 :
+            self.options['eig_tol'] = 1E-6
+        eigens = hamiltonian.eigens(num_eig, **self.options)
+        print('eigens', ' '.join(map(str, [ev[0] for ev in eigens]))) 
         eig = eigens[0][0]
         print('eig', eig)
         print('min wave', np.min(eigens[0][1]))
         rho = eigens[0][1] ** 2
         self.fermi_level = eig
         self.charge = rho * np.sum(density) / np.sum(rho)
-        return 
+        return eigens
 
     def get_kinetic_energy(self, **kwargs):
         pass

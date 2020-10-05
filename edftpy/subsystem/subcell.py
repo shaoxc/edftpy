@@ -84,7 +84,7 @@ class SubCell(object):
     def shift(self):
         return self.grid.shift
 
-    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True, full = False, coarse_grid_ecut = None, grid_sub = None):
+    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True, full = False, coarse_grid_ecut = None, grid_sub = None, max_prime = 5, scale = 1.0):
         tol = 1E-8
         lattice = ions.pos.cell.lattice.copy()
         lattice_sub = ions.pos.cell.lattice.copy()
@@ -103,7 +103,6 @@ class SubCell(object):
 
         cell_size = np.ptp(pos, axis = 0)
         pbc = np.ones(3, dtype = 'int')
-        max_prime = 5
         for i in range(3):
             latp0 = np.linalg.norm(lattice[:, i])
             latp = np.linalg.norm(lattice_sub[:, i])
@@ -127,7 +126,7 @@ class SubCell(object):
             if origin[i] > 0.01 :
                 nr[i] = int(cell_size[i]/spacings[i])
                 if optfft :
-                    nr[i] = bestFFTsize(nr[i], scale = 1, max_prime = max_prime)
+                    nr[i] = bestFFTsize(nr[i], scale = scale, max_prime = max_prime)
                     nr[i] = min(nr[i], grid.nr[i])
                 lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
 
@@ -281,10 +280,10 @@ class GlobalCell(object):
     def total_evaluator(self, value):
         self._total_evaluator = value
 
-    def _gen_grid(self, ecut = 22, spacing = None, full = False, nr = None, optfft = True, **kwargs):
+    def _gen_grid(self, ecut = 22, spacing = None, full = False, nr = None, optfft = True, max_prime = 5, scale = 1.0, **kwargs):
         lattice = self.ions.pos.cell.lattice
         if nr is None :
-            nr = ecut2nr(ecut, lattice, optfft = optfft, spacing = spacing, scale = 1, max_prime = 5)
+            nr = ecut2nr(ecut, lattice, optfft = optfft, spacing = spacing, scale = scale, max_prime = max_prime)
         else :
             nr = np.asarray(nr)
         grid = Grid(lattice=lattice, nr=nr, full=full, direct = True, **kwargs)

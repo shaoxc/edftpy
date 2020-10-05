@@ -43,11 +43,11 @@ class Hamiltonian(object):
         results = self.h_mul_phi(phi)
         return results.ravel()
 
-    def eigens(self, numeig = 1, which = 'SA', return_eigenvectors = True):
+    def eigens(self, num_eig = 1, which = 'SA', return_eigenvectors = True, eig_tol = 1E-10, **kwargs):
         dtype = np.float64
         size = self.grid.nnr
         amat = LinearOperator((size, size), dtype=dtype, matvec=self.matvec)
-        eigens = eigsh(amat, k=numeig, which=which, return_eigenvectors=return_eigenvectors)
+        eigens = eigsh(amat, k=num_eig, which=which, return_eigenvectors=return_eigenvectors, tol = eig_tol)
         if not return_eigenvectors :
             results = eigens
         else :
