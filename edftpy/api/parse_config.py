@@ -102,8 +102,12 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
         pseudo = LocalPP(grid = grid, ions=ions, PP_list=pplist, PME=pme)
         hartree = Hartree()
         xc = XC(**xc_kwargs)
-        ke = KEDF(**ke_kwargs)
-        funcdicts = {'KE' :ke, 'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
+        funcdicts = {'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
+        if ke_kwargs['kedf'] == 'None' :
+            pass
+        else :
+            ke = KEDF(**ke_kwargs)
+            funcdicts['KE'] = ke
         total_evaluator = Evaluator(**funcdicts)
     return total_evaluator
 
@@ -245,12 +249,13 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     ke_sub = KEDF(**ke_sub_kwargs)
 
     exttype = 7
-    if 'XC' in embed_evaluator.funcdicts :
-        exttype -= 4
-    if 'HARTREE' in embed_evaluator.funcdicts :
-        exttype -= 2
-    if 'PSEUDO' in embed_evaluator.funcdicts :
-        exttype -= 1
+    if embed_evaluator is not None :
+        if 'XC' in embed_evaluator.funcdicts :
+            exttype -= 4
+        if 'HARTREE' in embed_evaluator.funcdicts :
+            exttype -= 2
+        if 'PSEUDO' in embed_evaluator.funcdicts :
+            exttype -= 1
     print('exttype', exttype)
 
     def get_dftpy_enginer():
@@ -347,3 +352,11 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
 
     driver = OptDriver(energy_evaluator = energy_evaluator, calculator = enginer)
     return driver
+
+def _get_gap(config, optimizer):
+    for key in config :
+        if key.startswith('SUB'):
+            config[key]['opt']['opt_method'] = 'hamiltonian'
+    config['OPT']['maxiter'] = 10
+    optimizer = config2optimizer(config, optimizer.gsystem.ions, optimizer)
+    optimizer.optimize()
