@@ -1,14 +1,15 @@
 import numpy as np
-from ..utils.common import AbsDFT
 from ..mixer import LinearMixer
+from .driver import Driver
 
 from dftpy.td.hamiltonian import Hamiltonian
 
-class DFTpyKS(AbsDFT):
+class DFTpyKS(Driver):
     """
     Not finish !!!
     """
-    def __init__(self, evaluator = None, nbnd = None, **kwargs):
+    def __init__(self, evaluator = None, nbnd = None, options = None, **kwargs):
+        Driver.__init__(self, options = options)
         self.evaluator = evaluator
         self.hamiltonian = None
         self.nbnd = nbnd

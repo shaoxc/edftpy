@@ -1,7 +1,6 @@
 import numpy as np
 import time
 import copy
-from .hartree import Hartree
 from dftpy.formats import io
 from dftpy.ewald import ewald
 
@@ -113,7 +112,7 @@ class Optimization(object):
 
         self.gsystem.gaussian_density[:] = 0.0
         for driver in self.opt_drivers:
-            gaussian_density = driver.calculator.subcell.gaussian_density
+            gaussian_density = driver.subcell.gaussian_density
             if gaussian_density is not None :
                 self.gsystem.update_density(gaussian_density, restart = False, fake = True)
         #-----------------------------------------------------------------------
@@ -243,7 +242,7 @@ class Optimization(object):
         E = energy_history[-1]
         if econv is not None :
             if len(energy_history) - 1 < ncheck :
-                return 
+                return
             for i in range(ncheck):
                 dE = abs(energy_history[-2-i] - E)
                 if abs(dE) > econv :

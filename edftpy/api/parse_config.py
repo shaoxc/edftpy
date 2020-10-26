@@ -3,7 +3,7 @@ import os
 from dftpy.constants import LEN_CONV, ENERGY_CONV
 from dftpy.formats import ase_io, io
 
-from edftpy.config import read_conf, print_conf
+from edftpy.config import read_conf
 
 from edftpy.pseudopotential import LocalPP
 from edftpy.kedf import KEDF
@@ -11,7 +11,6 @@ from edftpy.hartree import Hartree
 from edftpy.xc import XC
 from edftpy.optimizer import Optimization
 from edftpy.evaluator import Evaluator, EnergyEvaluatorMix, EvaluatorOF
-from edftpy.enginer.driver import OptDriver
 from edftpy.enginer.of_dftpy import DFTpyOF
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
@@ -258,7 +257,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             exttype -= 1
     print('exttype', exttype)
 
-    def get_dftpy_enginer():
+    def get_dftpy_enginer(energy_evaluator):
         opt_options['econv'] *= subsys.ions.nat
 
         if ecut and abs(ecut - gsystem_ecut) > 1.0 :
@@ -299,10 +298,10 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         else :
             evaluator_of = EvaluatorOF(sub_evaluator = sub_eval, gsystem = gsystem_driver, ke_evaluator = ke_sub)
             mixer_of = mixer
-        enginer = DFTpyOF(options = opt_options, subcell = subsys, mixer = mixer_of, evaluator_of = evaluator_of, grid = grid_sub)
+        enginer = DFTpyOF(evaluator =energy_evaluator, options = opt_options, subcell = subsys, mixer = mixer_of, evaluator_of = evaluator_of, grid = grid_sub)
         return enginer
 
-    def get_castep_enginer():
+    def get_castep_enginer(energy_evaluator):
         from edftpy.enginer.ks_castep import CastepKS
         cell_params = {'species_pot' : pplist}
         if kpoints['grid'] is not None :
@@ -314,11 +313,11 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             if abs(ecut - gsystem_ecut) < 1.0 :
                 params['devel_code'] = 'STD_GRID={0} {1} {2}  FINE_GRID={0} {1} {2}'.format(*subsys.grid.nr)
 
-        enginer = CastepKS(prefix = prefix, subcell = subsys, cell_params = cell_params, params = params, exttype = exttype,
+        enginer = CastepKS(evaluator =energy_evaluator, prefix = prefix, subcell = subsys, cell_params = cell_params, params = params, exttype = exttype,
                 base_in_file = basefile, mixer = mixer)
         return enginer
 
-    def get_pwscf_enginer():
+    def get_pwscf_enginer(energy_evaluator):
         from edftpy.enginer.ks_pwscf import PwscfKS
 
         cell_params = {'pseudopotentials' : pplist}
@@ -335,23 +334,22 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
                 params['system']['nr2'] = subsys.grid.nr[1]
                 params['system']['nr3'] = subsys.grid.nr[2]
 
-        enginer = PwscfKS(prefix = prefix, subcell = subsys, cell_params = cell_params, params = params, exttype = exttype,
+        enginer = PwscfKS(evaluator =energy_evaluator, prefix = prefix, subcell = subsys, cell_params = cell_params, params = params, exttype = exttype,
                 base_in_file = basefile, mixer = mixer)
         return enginer
-
-    if calculator == 'dftpy' :
-        enginer = get_dftpy_enginer()
-    elif calculator == 'pwscf' :
-        enginer = get_pwscf_enginer()
-    elif calculator == 'castep' :
-        enginer = get_castep_enginer()
 
     energy_evaluator = EnergyEvaluatorMix(embed_evaluator = embed_evaluator)
     if calculator == 'dftpy' and opt_options['opt_method'] == 'full' :
         energy_evaluator = EnergyEvaluatorMix(embed_evaluator = embed_evaluator, ke_evaluator = ke_evaluator)
 
-    driver = OptDriver(energy_evaluator = energy_evaluator, calculator = enginer)
-    return driver
+    if calculator == 'dftpy' :
+        enginer = get_dftpy_enginer(energy_evaluator)
+    elif calculator == 'pwscf' :
+        enginer = get_pwscf_enginer(energy_evaluator)
+    elif calculator == 'castep' :
+        enginer = get_castep_enginer(energy_evaluator)
+
+    return enginer
 
 def _get_gap(config, optimizer):
     for key in config :

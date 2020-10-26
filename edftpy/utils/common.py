@@ -109,20 +109,6 @@ class AbsFunctional(ABC):
         pass
 
 
-class AbsOptDriver(ABC):
-    @abstractmethod
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    def __call__(self, calcType = ['O', 'E', 'V'], **kwargs):
-        pass
-
-    @abstractmethod
-    def compute(self, calcType = ['O', 'E', 'V'], **kwargs):
-        pass
-
-
 class AbsDFT(ABC):
     @abstractmethod
     def __init__(self):
@@ -147,3 +133,40 @@ class AbsDFT(ABC):
     @abstractmethod
     def get_fermi_level(self, **kwargs):
         pass
+
+    def __call__(self, density = None, gsystem = None, calcType = ['O', 'E'], ext_pot = None, **kwargs):
+        return self.compute(density, gsystem, calcType, ext_pot, **kwargs)
+
+    def compute(self, density = None, gsystem = None, calcType = ['O', 'E'], ext_pot = None, **kwargs):
+
+        if 'O' in calcType :
+            if density is None and self.prev_density is None:
+                raise AttributeError("Must provide a guess density")
+            elif density is not None :
+                self.prev_density = density
+
+            if gsystem is None and self.evaluator.gsystem is None :
+                raise AttributeError("Must provide global system")
+            else:
+                self.evaluator.gsystem = gsystem
+
+            rho_ini = self.prev_density.copy()
+            #-----------------------------------------------------------------------
+            self.evaluator.rest_rho = gsystem.sub_value(gsystem.density, rho_ini) - rho_ini
+            #-----------------------------------------------------------------------
+            self.density = self.get_density(rho_ini, **kwargs)
+            # self.density[:] = filter_density(self.density)
+            # self.calculator.get_density(rho_ini)
+            self.mu = self.get_fermi_level()
+
+        if 'E' in calcType or 'V' in calcType :
+            func = self.get_energy_potential(self.density, calcType, **kwargs)
+            self.functional = func
+
+        if 'E' in calcType :
+            self.energy = func.energy
+
+        if 'V' in calcType :
+            self.potential = func.potential
+
+        return

@@ -81,31 +81,3 @@ class Functional(dftpy_func):
     def __new__(cls, name=None, energy=None, potential=None, **kwargs):
         obj = super().__new__(cls, name = name, energy = energy, potential = potential, **kwargs)
         return obj
-
-
-class AbsFunctional(ABC):
-    @abstractmethod
-    def __init__(self, **kwargs):
-        pass
-
-    @abstractmethod
-    def __call__(self, density, **kwargs):
-        pass
-
-    @abstractmethod
-    def compute(self, density, **kwargs):
-        pass
-
-
-class AbsOptDriver(ABC):
-    @abstractmethod
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    def __call__(self, calcType = ['O', 'E', 'V'], **kwargs):
-        pass
-
-    @abstractmethod
-    def compute(self, calcType = ['O', 'E', 'V'], **kwargs):
-        pass

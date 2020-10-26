@@ -13,7 +13,6 @@ from edftpy.hartree import Hartree
 from edftpy.xc import XC
 from edftpy.optimizer import Optimization
 from edftpy.evaluator import Evaluator, EnergyEvaluatorMix, EvaluatorOF
-from edftpy.enginer.driver import OptDriver
 from edftpy.enginer.of_dftpy import DFTpyOF
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
@@ -119,9 +118,8 @@ class Test(unittest.TestCase):
             energy_evaluator = EnergyEvaluatorMix(embed_evaluator = emb_evaluator_a, **kwargs)
             evaluator_of = EvaluatorOF(grid = subsys_a.grid, sub_evaluator = sub_evaluator_a, ke_evaluator = ke_evaluator, gsystem = gsystem)
             mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.8], predecut = 0, delay = 1)
-        of_enginer_a = DFTpyOF(mixer = mixer, options = options, subcell = subsys_a, evaluator_of = evaluator_of)
-        driver_a = OptDriver(energy_evaluator = energy_evaluator, calculator = of_enginer_a)
-        return subsys_a, driver_a
+        of_enginer_a = DFTpyOF(evaluator = energy_evaluator, mixer = mixer, options = options, subcell = subsys_a, evaluator_of = evaluator_of)
+        return subsys_a, of_enginer_a
 
 
 if __name__ == "__main__":

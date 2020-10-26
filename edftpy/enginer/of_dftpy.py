@@ -3,16 +3,16 @@ import numpy as np
 from functools import partial
 
 from ..mixer import LinearMixer, PulayMixer
-from ..utils.common import AbsDFT
 from ..utils.math import grid_map_data
 from .hamiltonian import Hamiltonian
+from .driver import Driver
 
 from dftpy.optimization import Optimization
 from dftpy.formats.io import write
 from dftpy.external_potential import ExternalPotential
 
 
-class DFTpyOF(AbsDFT):
+class DFTpyOF(Driver):
     """description"""
     def __init__(self, evaluator = None, subcell = None, options = None, mixer = None,
             grid = None, evaluator_of = None, **kwargs):
@@ -34,6 +34,7 @@ class DFTpyOF(AbsDFT):
         self.options = default_options
         if options is not None :
             self.options.update(options)
+        Driver.__init__(self, options = self.options)
 
         self.evaluator = evaluator
         self.fermi = None
@@ -98,7 +99,7 @@ class DFTpyOF(AbsDFT):
         else :
             self.evaluator_of.gsystem.density = self.evaluator.gsystem.density
         #-----------------------------------------------------------------------
-        self.evaluator_of.rest_rho = self.evaluator_of.gsystem.sub_value(self.evaluator_of.gsystem.density, charge) - charge 
+        self.evaluator_of.rest_rho = self.evaluator_of.gsystem.sub_value(self.evaluator_of.gsystem.density, charge) - charge
         # self.evaluator_of.rest_rho = self.evaluator.rest_rho
         return
 
@@ -189,7 +190,7 @@ class DFTpyOF(AbsDFT):
         # self.phi = self.calc.phi.copy()
         self.charge = self.calc.rho
         self.fermi_level = self.calc.mu
-        return 
+        return
 
     def get_density_hamiltonian(self, density, num_eig = 2, **kwargs):
         potential = self.evaluator_of.embed_potential
@@ -198,7 +199,7 @@ class DFTpyOF(AbsDFT):
         if num_eig > 1 :
             self.options['eig_tol'] = 1E-6
         eigens = hamiltonian.eigens(num_eig, **self.options)
-        print('eigens', ' '.join(map(str, [ev[0] for ev in eigens]))) 
+        print('eigens', ' '.join(map(str, [ev[0] for ev in eigens])))
         eig = eigens[0][0]
         print('eig', eig)
         print('min wave', np.min(eigens[0][1]))

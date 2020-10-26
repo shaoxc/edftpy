@@ -8,18 +8,19 @@ import ase.io.espresso as ase_io_driver
 from ase.calculators.espresso import Espresso as ase_calc_driver
 
 from ..mixer import LinearMixer, PulayMixer
-from ..utils.common import AbsDFT, Grid, Field
+from ..utils.common import Grid, Field
 from ..utils.math import grid_map_data
 from ..density import normalization_density
+from .driver import Driver
 
-class PwscfKS(AbsDFT):
+class PwscfKS(Driver):
     """description"""
-    def __init__(self, evaluator = None, subcell = None, prefix = 'qe_sub_in', params = None, cell_params = None, 
-            exttype = 3, base_in_file = None, mixer = None, ncharge = None, **kwargs):
+    def __init__(self, evaluator = None, subcell = None, prefix = 'qe_sub_in', params = None, cell_params = None,
+            exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, **kwargs):
         '''
         Here, prefix is the name of the input file
         exttype :
-                    1 : only pseudo                  : 001 
+                    1 : only pseudo                  : 001
                     2 : only hartree                 : 010
                     3 : hartree + pseudo             : 011
                     4 : only xc                      : 100
@@ -27,6 +28,7 @@ class PwscfKS(AbsDFT):
                     6 : hartree + xc                 : 110
                     7 : pseudo + hartree + xc        : 111
         '''
+        Driver.__init__(self, options = options)
         self.evaluator = evaluator
         self.exttype = exttype
         self.subcell = subcell
@@ -167,7 +169,7 @@ class PwscfKS(AbsDFT):
         if self.grid_driver is not None :
             charge = grid_map_data(density, grid = self.grid_driver)
         else :
-            charge = density 
+            charge = density
         # charge *= volume
         #-----------------------------------------------------------------------
         charge = charge.reshape((-1, 1), order='F')

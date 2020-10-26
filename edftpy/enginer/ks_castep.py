@@ -8,18 +8,20 @@ import ase.io.castep as ase_io_driver
 from ase.calculators.castep import Castep as ase_calc_driver
 
 from ..mixer import LinearMixer, PulayMixer
-from ..utils.common import AbsDFT, Grid, Field
+from ..utils.common import Grid, Field
 from ..utils.math import grid_map_data
 from ..density import normalization_density
 
-class CastepKS(AbsDFT):
+from .driver import Driver
+
+class CastepKS(Driver):
     """description"""
-    def __init__(self, evaluator = None, subcell = None, prefix = 'castep_in_sub', params = None, cell_params = None, 
-            exttype = 3, base_in_file = None, castep_in_file = None, mixer = None, ncharge = None, gsystem = None, 
-            **kwargs):
+    def __init__(self, evaluator = None, subcell = None, prefix = 'castep_in_sub', params = None, cell_params = None,
+            exttype = 3, base_in_file = None, castep_in_file = None, mixer = None, ncharge = None, gsystem = None,
+            options = None, **kwargs):
         '''
         exttype :
-                    1 : only pseudo                  : 001 
+                    1 : only pseudo                  : 001
                     2 : only hartree                 : 010
                     3 : hartree + pseudo             : 011
                     4 : only xc                      : 100
@@ -27,6 +29,7 @@ class CastepKS(AbsDFT):
                     6 : hartree + xc                 : 110
                     7 : pseudo + hartree + xc        : 111
         '''
+        Driver.__init__(self, options = options)
         self.evaluator = evaluator
         self.prefix = prefix
         self.exttype = exttype
@@ -40,7 +43,7 @@ class CastepKS(AbsDFT):
         self.mdl = None
         self.ncharge = ncharge
         self.gsystem_driver = gsystem
-        #Will remove 'castep_in_file' later 
+        #Will remove 'castep_in_file' later
         if base_in_file is None :
             base_in_file = castep_in_file
         #-----------------------------------------------------------------------
