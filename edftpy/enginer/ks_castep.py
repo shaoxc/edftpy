@@ -58,19 +58,20 @@ class CastepKS(Driver):
         self._iter = 0
         self._filter = None
         self.mixer = mixer
-        if 'devel_code' in params :
-            self.grid_driver = None
-        else :
-            self.grid_driver = self.get_grid_driver(self.subcell.grid)
+        # if 'devel_code' in params :
+            # self.grid_driver = None
+        # else :
+            # self.grid_driver = self.get_grid_driver(self.subcell.grid)
+        self._grid = None
+        self.grid_driver = self.get_grid_driver(self.grid)
         #-----------------------------------------------------------------------
         self.init_density()
-        self.subcell.density[:] = self._format_density_invert(self.charge, self.subcell.grid)
-        self.density = self.subcell.density
+        self.density = self._format_density_invert(self.charge, self.grid)
         self.prev_charge = copy.deepcopy(self.charge)
         #-----------------------------------------------------------------------
         if self.mixer is None :
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-            rho0 = np.mean(self.subcell.density)
+            rho0 = np.mean(self.density)
             kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
         if self.grid_driver is not None :
@@ -79,15 +80,12 @@ class CastepKS(Driver):
 
     @property
     def grid(self):
-        return self.subcell.grid
-
-    @property
-    def grid_fine(self):
-        if self._grid_fine is None :
-            scale = (self.gsystem_driver.grid.nr / self.evaluator.gsystem.grid.nr).astype('int')
-            self._grid_fine = Grid(self.grid.lattice, self.grid.nr * scale, direct = True)
-            self._grid_fine.shift = self.grid.shift * scale
-        return self._grid_fine
+        if self._grid is None :
+            if np.all(self.subcell.grid.nrR == self.subcell.grid.nr):
+                self._grid = self.subcell.grid
+            else :
+                self._grid = Grid(self.subcell.grid.lattice, self.subcell.grid.nrR, direct = True)
+        return self._grid
 
     def get_grid_driver(self, grid):
         current_basis = caspytep.basis.get_current_basis()
@@ -248,29 +246,11 @@ class CastepKS(Driver):
 
     def _get_extpot(self, charge = None, grid = None, **kwargs):
         rho = self._format_density_invert(charge, grid, **kwargs)
-        #-----------------------------------------------------------------------
-        if self.gsystem_driver is None :
-            self.evaluator.get_embed_potential(rho, gaussian_density = self.subcell.gaussian_density, with_global = True)
-            pot = None
-        else :
-            self.evaluator.get_embed_potential(rho, gaussian_density = self.subcell.gaussian_density, with_global = False)
-            self.gsystem_driver.density = grid_map_data(self.evaluator.gsystem.density, grid = self.gsystem_driver.grid)
-            pot = self.gsystem_driver.total_evaluator(self.gsystem_driver.density, calcType = ['V']).potential
-        #-----------------------------------------------------------------------
+        self.evaluator.get_embed_potential(rho, gaussian_density = self.subcell.gaussian_density, with_global = True)
         extpot = self.evaluator.embed_potential
         extene = (extpot * rho).integral()
         if self.grid_driver is not None :
             extpot = grid_map_data(extpot, grid = self.grid_driver)
-        #-----------------------------------------------------------------------
-        if pot is not None :
-            pot_sub = self.gsystem_driver.sub_value(pot, self.grid_fine)
-            if self.grid_driver is not None :
-                grid_driver = self.grid_driver
-            else :
-                grid_driver = self.grid
-            extpot += grid_map_data(pot_sub, grid = grid_driver)
-            print('pot33', np.min(extpot), np.max(extpot))
-        #-----------------------------------------------------------------------
         extpot = extpot.ravel(order = 'F')
         return extpot, extene
 

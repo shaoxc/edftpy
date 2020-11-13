@@ -182,7 +182,7 @@ class SubCell(object):
                 posi = self.ions.pos[i].reshape((1, 3))
                 atomp = np.array(posi.to_crys()) * nr
                 atomp = atomp.reshape((3, 1))
-                ipoint = np.floor(atomp + 1E-8) 
+                ipoint = np.floor(atomp + 1E-8)
                 # ipoint = np.floor(atomp)
                 px = atomp - ipoint
                 l123A = np.mod(ipoint.astype(np.int32) - ixyzA, nr[:, None])
@@ -223,7 +223,7 @@ class SubCell(object):
         print('fake01', np.sum(self._gaussian_density) * self.grid.dV)
 
 class GlobalCell(object):
-    def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, **kwargs):
+    def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, graphtopo = None, **kwargs):
         self.grid_kwargs = {
                 'ecut' : ecut,
                 'spacing' : spacing,
@@ -232,6 +232,7 @@ class GlobalCell(object):
                 'optfft' : optfft,
                 }
         self.grid_kwargs.update(kwargs)
+        self.graphtopo = graphtopo
 
         self.restart(grid=grid, ions=ions)
 
@@ -280,6 +281,16 @@ class GlobalCell(object):
     def total_evaluator(self, value):
         self._total_evaluator = value
 
+    @property
+    def graphtopo(self):
+        if self._graphtopo is None :
+            raise AttributeError("Must give graphtopo")
+        return self._graphtopo
+
+    @graphtopo.setter
+    def graphtopo(self, value):
+        self._graphtopo = value
+
     def _gen_grid(self, ecut = 22, spacing = None, full = False, nr = None, optfft = True, max_prime = 5, scale = 1.0, **kwargs):
         lattice = self.ions.pos.cell.lattice
         if nr is None :
@@ -290,92 +301,27 @@ class GlobalCell(object):
         self._grid = grid
         print('GlobalCell grid', nr)
 
-    def update_density(self, subrho, grid = None, restart = False, fake = False, index = None, tol = 0.0):
-        if index is None :
-            index = self.get_sub_index(subrho, grid)
+    def update_density(self, subrho, isub = None, grid = None, restart = False, fake = False, tol = 0.0):
         if fake :
             if restart :
                 self._gaussian_density[:] = tol
-            self._gaussian_density[index[0], index[1], index[2]] += subrho.ravel()
+            self.graphtopo.sub_to_global(subrho, self._gaussian_density)
         else :
             if restart :
                 self._density[:] = tol
-            self._density[index[0], index[1], index[2]] += subrho.ravel()
-        return self._density
+            self.graphtopo.sub_to_global(subrho, self._density)
 
-    def sub_value(self, total, subrho, grid = None, index = None):
-        if grid is None :
-            if hasattr(subrho, 'grid'):
-                grid = subrho.grid
-            else :
-                grid = subrho
-        if index is None :
-            index = self.get_sub_index(subrho, grid = grid)
-        value = total[index[0], index[1], index[2]]
-        value = Field(grid=grid, data=value, direct=True)
-        return value 
-
-    def set_density(self, subrho, grid = None, restart = False, fake = False, index = None):
-        if index is None :
-            index = self.get_sub_index(subrho, grid)
+    def set_density(self, subrho, isub = None, grid = None, fake = False):
         if fake :
-            self._gaussian_density[index[0], index[1], index[2]] = subrho.ravel()
-            return self._gaussian_density
+            self.graphtopo.sub_to_global(subrho, self._gaussian_density, overwrite = True)
         else :
-            self._density[index[0], index[1], index[2]] = subrho.ravel()
-            return self._density
+            self.graphtopo.sub_to_global(subrho, self._density, overwrite = True)
 
-    def update_density_bound(self, subrho, grid = None, restart = False, fake = False, tol = 0.0):
-        indl, indr = self.get_boundary(subrho, grid)
-        if fake :
-            if restart :
-                self._gaussian_density[:] = tol
-            self._gaussian_density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
-        else :
-            if restart :
-                self._density[:] = tol
-            self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] += subrho
-        return self._density
+    def add_to_sub(self, total, subrho, isub = None, grid = None):
+        self.graphtopo.global_to_sub(total, subrho, isub = isub, grid = grid, add = True)
 
-    def sub_value_bound(self, total, subrho, grid = None):
-        indl, indr = self.get_boundary(subrho, grid)
-        value = total[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]].copy()
-        return value 
-
-    def set_density_bound(self, subrho, grid = None, restart = False, fake = False):
-        indl, indr = self.get_boundary(subrho, grid)
-        if fake :
-            self._gaussian_density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] = subrho
-            return self._gaussian_density
-        else :
-            self._density[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]] = subrho
-            return self._density
-
-    def get_boundary(self, subrho, grid = None):
-        if grid is None :
-            grid = subrho.grid
-        indl = grid.shift
-        nr_sub = grid.nr
-        indr = indl + nr_sub
-        return indl, indr
-
-    def get_sub_index(self, subrho = None, grid = None):
-        if grid is None :
-            if hasattr(subrho, 'grid'):
-                grid = subrho.grid
-            else :
-                grid = subrho
-        indl = grid.shift
-        nr_sub = grid.nr
-        indr = indl + nr_sub
-        index = np.mgrid[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]].reshape((3, -1))
-        nr = self.grid.nr
-        for i in range(3):
-            mask = index[i] < 0
-            index[i][mask] += nr[i]
-            mask2 = index[i] > nr[i] - 1
-            index[i][mask2] -= nr[i]
-        return index
+    def sub_value(self, total, subrho, **kwargs):
+        self.graphtopo.global_to_sub(total, subrho, **kwargs)
 
     @property
     def gaussian_density(self):

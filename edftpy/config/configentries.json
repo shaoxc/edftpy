@@ -99,6 +99,11 @@
 				"type": "str",
 				"default": "grid",
 				"comment": "Same config of `DFTpy`"
+			},
+			"optfft": {
+				"type": "bool",
+				"default": true,
+				"comment": "Optimize the number of grid points"
 			}
 		},
 		"density": {

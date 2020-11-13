@@ -13,7 +13,7 @@ def optimize_density_conf(config, **kwargs):
     print('Final energy (a.u.)', energy)
     print('Final energy (eV)', energy * ENERGY_CONV['Hartree']['eV'])
     # for i, driver in enumerate(opt.opt_drivers):
-        # io.write('final_sub_' + str(i) + '.xsf', driver.density, driver.calculator.subcell.ions)
+        # io.write('final_sub_' + str(i) + '.xsf', driver.density, driver.subcell.ions)
     # io.write('final.xsf', opt.density, opt.gsystem.ions)
     return opt
 
@@ -21,8 +21,8 @@ def get_forces(opt_drivers = None, gsystem = None, linearii=True):
     forces = gsystem.get_forces(linearii = linearii)
     print('Total forces0 : \n', forces)
     for i, driver in enumerate(opt_drivers):
-        fs = driver.calculator.get_forces()
-        ind = driver.calculator.subcell.ions_index
+        fs = driver.get_forces()
+        ind = driver.subcell.ions_index
         print('ind', ind)
         print('fs', fs)
         forces[ind] += fs
@@ -37,8 +37,7 @@ def get_total_density(gsystem, drivers = None, scale = 1):
     if scale > 1 :
         grid_global = Grid(gsystem.grid.lattice, gsystem.grid.nr * scale, direct = True)
         gsystem_fine = GlobalCell(gsystem.ions, grid = grid_global)
-        for i, item in enumerate(drivers):
-            driver = item.calculator
+        for i, driver in enumerate(drivers):
             grid_sub = Grid(driver.grid.lattice, driver.grid.nr * scale, direct = True)
             grid_sub.shift = driver.grid.shift * scale
             rho = driver._format_density_invert(charge = driver.charge, grid = grid_sub)

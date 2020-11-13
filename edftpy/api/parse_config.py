@@ -45,6 +45,7 @@ def config2optimizer(config, ions = None, optimizer = None, **kwargs):
     full=config[keysys]["grid"]["gfull"]
     max_prime = config[keysys]["grid"]["maxprime"]
     grid_scale = config[keysys]["grid"]["scale"]
+    optfft = config[keysys]["grid"]["optfft"]
     pplist = {}
     for key in config["PP"]:
         ele = key.capitalize()
@@ -56,7 +57,7 @@ def config2optimizer(config, ions = None, optimizer = None, **kwargs):
         gsystem.restart(grid=gsystem.grid, ions=ions)
     else :
         total_evaluator = None
-        gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = True, max_prime = max_prime, scale = grid_scale)
+        gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale)
     grid = gsystem.grid
     total_evaluator = config2total_evaluator(config, ions, grid, pplist = pplist, total_evaluator=total_evaluator, cell_change = cell_change)
     gsystem.total_evaluator = total_evaluator
@@ -107,7 +108,7 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
         else :
             ke = KEDF(**ke_kwargs)
             funcdicts['KE'] = ke
-        total_evaluator = Evaluator(**funcdicts)
+        total_evaluator = TotalEvaluator(**funcdicts)
     return total_evaluator
 
 def config2evaluator(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None):
@@ -224,7 +225,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     subsys = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale)
 
     if cell_change == 'position' :
-        subsys.density[:] = driver.calculator.subcell.density
+        subsys.density[:] = driver.density
     else :
         if infile : # initial='Read'
             subsys.density[:] = io.read_density(infile)

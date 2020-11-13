@@ -34,7 +34,7 @@ class DFTpyOF(Driver):
         self.options = default_options
         if options is not None :
             self.options.update(options)
-        Driver.__init__(self, options = self.options)
+        Driver.__init__(self, options = self.options, type = 'OF')
 
         self.evaluator = evaluator
         self.fermi = None
@@ -82,7 +82,13 @@ class DFTpyOF(Driver):
     def _get_extpot(self, density = None, charge= None, grid = None, with_global = False, first = False, **kwargs):
         self._map_gsystem(charge, grid)
         # rho = self._format_density_invert(charge, grid) # Fine grid
-        self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_global = with_global, with_ke = True)
+        gsystem = self.evaluator.gsystem
+        embed_keys = []
+        if self.evaluator.embed_evaluator is not None :
+            embed_keys = self.evaluator.embed_evaluator.funcdicts.keys()
+        gsystem.get_embed_potential(gsystem.density, gaussian_density = gsystem.gaussian_density, embed_keys = embed_keys, with_global = with_global)
+        self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_ke = True)
+        gsystem.add_to_sub(gsystem.embed_potential, self.evaluator_of.embed_potential)
         if self.grid_driver is not None :
             self.evaluator_of.embed_potential = grid_map_data(self.evaluator.embed_potential, grid = self.grid_driver)
         else :
@@ -99,8 +105,7 @@ class DFTpyOF(Driver):
         else :
             self.evaluator_of.gsystem.density = self.evaluator.gsystem.density
         #-----------------------------------------------------------------------
-        self.evaluator_of.rest_rho = self.evaluator_of.gsystem.sub_value(self.evaluator_of.gsystem.density, charge) - charge
-        # self.evaluator_of.rest_rho = self.evaluator.rest_rho
+        self.evaluator_of.set_rest_rho(charge)
         return
 
     def get_density(self, density, res_max = None, **kwargs):

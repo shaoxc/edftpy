@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 class Driver(ABC):
-    def __init__(self, options=None, **kwargs):
+    def __init__(self, options=None, type = 'KS', **kwargs):
         default_options = {
                 'update_delay' : 1,
                 'update_freq' : 1
@@ -9,6 +9,7 @@ class Driver(ABC):
         self.options = default_options
         if options is not None :
             self.options.update(options)
+        self.type = type
 
     @abstractmethod
     def get_density(self, **kwargs):
@@ -46,9 +47,6 @@ class Driver(ABC):
                 self.evaluator.gsystem = gsystem
 
             rho_ini = self.prev_density.copy()
-            #-----------------------------------------------------------------------
-            self.evaluator.rest_rho = gsystem.sub_value(gsystem.density, rho_ini) - rho_ini
-            #-----------------------------------------------------------------------
             # self.density[:] = filter_density(self.density)
             self.density = self.get_density(rho_ini, **kwargs)
             self.mu = self.get_fermi_level()

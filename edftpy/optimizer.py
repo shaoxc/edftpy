@@ -3,6 +3,7 @@ import time
 import copy
 from dftpy.formats import io
 from dftpy.ewald import ewald
+# from .utils.common import Field
 
 
 class Optimization(object):
@@ -90,9 +91,9 @@ class Optimization(object):
 
         for i, item in enumerate(denlist):
             if i == 0 :
-                self.gsystem.update_density(item, restart = True)
+                self.gsystem.update_density(item, isub = i, restart = True)
             else :
-                self.gsystem.update_density(item, restart = False)
+                self.gsystem.update_density(item, isub = i, restart = False)
         totalrho = self.gsystem.density.copy()
         return totalrho, denlist
 
@@ -111,10 +112,10 @@ class Optimization(object):
                 guess_rho.append(driver.density)
 
         self.gsystem.gaussian_density[:] = 0.0
-        for driver in self.opt_drivers:
+        for i, driver in enumerate(self.opt_drivers):
             gaussian_density = driver.subcell.gaussian_density
             if gaussian_density is not None :
-                self.gsystem.update_density(gaussian_density, restart = False, fake = True)
+                self.gsystem.update_density(gaussian_density, isub = i, restart = False, fake = True)
         #-----------------------------------------------------------------------
         self.nsub = len(self.opt_drivers)
         energy_history = []
@@ -131,8 +132,8 @@ class Optimization(object):
         totalrho = self.gsystem.density.copy()
         # io.write('total.xsf', totalrho, self.gsystem.ions)
 
-        mu_list = [[] for _ in range(len(self.opt_drivers))]
-        func_list = [[] for _ in range(len(self.opt_drivers) + 1)]
+        mu_list = [[] for _ in range(self.nsub)]
+        func_list = [[] for _ in range(self.nsub + 1)]
         energy_history = [0.0]
         # for i, driver in enumerate(self.opt_drivers):
             # self.gsystem.density[:] = totalrho
@@ -156,13 +157,48 @@ class Optimization(object):
         # dE = energy
         # fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(0, energy, dE, resN, 1, timecost - time_begin)
         # print(seq +'\n' + fmt +'\n' + seq)
-
-        update = [True for _ in range(len(self.opt_drivers))]
+        #-----------------------------------------------------------------------
+        driver_of = None
+        for i, driver in enumerate(self.opt_drivers):
+            if driver is not None :
+                if driver.type == 'OF' :
+                    driver_of = driver
+                else :
+                    embed_keys = driver.embed_evaluator.funcdicts.keys()
+                break
+        else :
+            embed_keys = []
+        #-----------------------------------------------------------------------
+        update = [True for _ in range(self.nsub)]
         for it in range(self.options['maxiter']):
             self.iter = it
             prev_denlist, denlist = denlist, prev_denlist
-            for i, driver in enumerate(self.opt_drivers):
-                #-----------------------------------------------------------------------
+            #-----------------------------------------------------------------------
+            if self.nsub == 1 and self.opt_drivers[0].type == 'OF' :
+                pass
+            else :
+                self.gsystem.get_embed_potential(totalrho, gaussian_density = self.gsystem.gaussian_density, embed_keys = embed_keys, with_global = True)
+            #-----------------------------------------------------------------------
+            for isub in range(self.nsub + 1):
+                if isub < self.nsub :
+                    driver = self.opt_drivers[i]
+                    if driver is not None  :
+                        if driver.type == 'OF' : continue
+                        i_of = isub
+                        # initial the global_potential
+                        if driver.evaluator.global_potential is None :
+                            driver.evaluator.global_potential = np.zeros(prev_denlist[i].grid.nrR)
+                        pot = driver.evaluator.global_potential
+                    else :
+                        pot = None
+                    self.gsystem.sub_value(self.gsystem.embed_potential, pot, isub = isub)
+                    i = isub
+                else :
+                    driver = driver_of
+                    i = i_of
+
+                if driver is None : continue
+
                 update_delay = driver.options['update_delay']
                 update_freq = driver.options['update_freq']
                 if it > update_delay and (it - update_delay) % update_freq > 0:

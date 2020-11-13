@@ -52,21 +52,22 @@ class PwscfKS(Driver):
         self._filter = None
         self.mixer = mixer
 
-        if 'system' in params :
-            fixnr = params['system'].get('nr1', None)
-        if fixnr :
-            self.grid_driver = None
-        else :
-            self.grid_driver = self.get_grid_driver(self.subcell.grid)
+        # if 'system' in params :
+            # fixnr = params['system'].get('nr1', None)
+        # if fixnr :
+            # self.grid_driver = None
+        # else :
+            # self.grid_driver = self.get_grid_driver(self.grid)
+        self._grid = None
+        self.grid_driver = self.get_grid_driver(self.grid)
         #-----------------------------------------------------------------------
         self.init_density()
-        self.subcell.density[:] = self._format_density_invert(self.charge, self.subcell.grid)
-        self.density = self.subcell.density
+        self.density = self._format_density_invert(self.charge, self.grid)
         self.prev_charge = copy.deepcopy(self.charge)
         #-----------------------------------------------------------------------
         if self.mixer is None :
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-            rho0 = np.mean(self.subcell.density)
+            rho0 = np.mean(self.density)
             kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
         if self.grid_driver is not None :
@@ -74,12 +75,17 @@ class PwscfKS(Driver):
 
     @property
     def grid(self):
-        return self.subcell.grid
+        if self._grid is None :
+            if np.all(self.subcell.grid.nrR == self.subcell.grid.nr):
+                self._grid = self.subcell.grid
+            else :
+                self._grid = Grid(self.subcell.grid.lattice, self.subcell.grid.nrR, direct = True)
+        return self._grid
 
     def get_grid_driver(self, grid):
         nr = np.zeros(3, dtype = 'int32')
         pwscfpy.pwpy_mod.pwpy_get_grid(nr)
-        if not np.all(grid.nr == nr):
+        if not np.all(grid.nrR == nr):
             grid_driver = Grid(grid.lattice, nr, direct = True)
         else :
             # grid_driver = grid
@@ -199,18 +205,12 @@ class PwscfKS(Driver):
 
     def _get_extpot(self, charge = None, grid = None, **kwargs):
         rho = self._format_density_invert(charge, grid, **kwargs)
-        # func = self.evaluator(rho, with_embed = False)
-        # # func.potential *= self.filter
-        # extpot = func.potential.ravel(order = 'F')
-        # extene = func.energy
-        #-----------------------------------------------------------------------
         self.evaluator.get_embed_potential(rho, gaussian_density = self.subcell.gaussian_density, with_global = True)
         extpot = self.evaluator.embed_potential
         extene = (extpot * rho).integral()
         if self.grid_driver is not None :
             extpot = grid_map_data(extpot, grid = self.grid_driver)
         extpot = extpot.ravel(order = 'F') * 2.0 # a.u. to Ry
-        #-----------------------------------------------------------------------
         return extpot, extene
 
     def get_density(self, density, vext = None, **kwargs):
