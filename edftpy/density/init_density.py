@@ -4,11 +4,7 @@ from scipy.interpolate import splrep, splev
 from numpy import linalg as LA
 from edftpy.utils.common import Field, RadialGrid
 from .density import get_3d_value_recipe
-# try:
-    # from edftpy.io.pp_xml import PPXmlGPAW as PPXml
-# except Exception :
-    # from edftpy.io.pp_xml import PPXml
-# from edftpy.io.pp_xml import PPXml
+from edftpy.mpi import sprint
 
 class AtomicDensity(object):
     """
@@ -28,7 +24,7 @@ class AtomicDensity(object):
         self._info= {}
         self._radial = {}
         for key, infile in files.items() :
-            print("AtomicDensity key: " + key)
+            # sprint("AtomicDensity key: " + key)
             if not os.path.isfile(infile):
                 raise Exception("Density file " + infile + " for atom type " + str(key) + " not found")
             else:
@@ -93,10 +89,10 @@ class AtomicDensity(object):
         data = [line.split()[1:3] for line in lines[ibegin:iend]]
         data = np.asarray(data, dtype = float)
 
-        r = data[:, 0] 
+        r = data[:, 0]
         v = data[:, 1]/(4.0 * np.pi)
         # v = data[:, 1]
-        # print('r, v', r, v)
+        # sprint('r, v', r, v)
         return r, v, info
 
     def read_density_xml(self, infile):
@@ -120,7 +116,7 @@ class AtomicDensity(object):
         data = [line.split()[0:2] for line in lines[ibegin:iend]]
         data = np.asarray(data, dtype = float)
 
-        r = data[:, 0] 
+        r = data[:, 0]
         v = data[:, 1]
         return r, v, info
 
@@ -148,7 +144,7 @@ class AtomicDensity(object):
             ncharge = 0.0
             for i in range(ions.nat) :
                 ncharge += ions.Zval[ions.labels[i]]
-        rho[:] = ncharge / (np.size(rho) * grid.dV)
+        rho[:] = ncharge / (rho.integral())
         return rho
 
     def guess_rho_atom(self, ions, grid, ncharge = None, rho = None, ndens = 2, dtol=1E-30, **kwargs):
@@ -167,7 +163,6 @@ class AtomicDensity(object):
             latp[i] = np.sqrt(metric[i, i])
         gaps = latp / nr
         for key in self._r :
-            print('kkkk', key)
             r = self._r[key]
             arho = self._arho[key]
             rcut = np.max(r)
@@ -184,7 +179,7 @@ class AtomicDensity(object):
                 posi = ions.pos[i].reshape((1, 3))
                 atomp = np.array(posi.to_crys()) * nr
                 atomp = atomp.reshape((3, 1))
-                ipoint = np.floor(atomp) 
+                ipoint = np.floor(atomp)
                 px = atomp - ipoint
                 l123A = np.mod(ipoint.astype(np.int32) - ixyzA, nr[:, None])
 
@@ -198,8 +193,9 @@ class AtomicDensity(object):
             ncharge = 0.0
             for i in range(ions.nat) :
                 ncharge += ions.Zval[ions.labels[i]]
-        print('Guess density : ', np.sum(rho) * grid.dV)
-        rho[:] *= ncharge / (np.sum(rho) * grid.dV)
+        nc = rho.integral()
+        sprint('Guess density : ', nc)
+        rho[:] *= ncharge / nc
         return rho
 
     def guess_rho_all(self, ions, grid, pbc = [1, 1, 1], dtol = 1E-30, **kwargs):
@@ -265,7 +261,7 @@ class AtomicDensity(object):
                             #-----------------------------------------------------------------------
                             atomp = np.array(pbcpos.to_crys()) * nr
                             atomp = atomp.reshape((3, 1))
-                            ipoint = np.floor(atomp) 
+                            ipoint = np.floor(atomp)
                             px = atomp - ipoint
                             l123A = np.mod(ipoint.astype(np.int32) - ixyzA, nr[:, None])
 
@@ -300,8 +296,8 @@ class AtomicDensity(object):
         if direct :
             rho = rho.ifft()
             rho[rho < dtol] = dtol
-        print('Guess density (Recipe): ', np.sum(rho) * rho.grid.dV)
-        print('Guess density (Recipe): ', rho.integral())
+        nc = rho.integral()
+        sprint('Guess density (Recipe): ', nc)
         if ncharge is None :
             ncharge = 0.0
             for i in range(ions.nat) :

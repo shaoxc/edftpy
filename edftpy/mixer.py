@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from .utils.common import Field
 from .utils.math import fermi_dirac
 from .density import normalization_density
+from edftpy.mpi import sprint
 
 __all__ = ["LinearMixer", "PulayMixer", "BroydenMixer"]
 
@@ -46,6 +47,10 @@ class SpecialPrecondition :
     def grid(self):
         return self._grid
 
+    @property
+    def comm(self):
+        self.grid.mp.comm
+
     @grid.setter
     def grid(self, value):
         self._grid = value
@@ -63,7 +68,7 @@ class SpecialPrecondition :
                 else :
                     gmax = 2.0 * self._ecut
                 self._mask[gg > gmax] = True
-                print('Density mixing gmax', gmax, self._ecut)
+                sprint('Density mixing gmax', gmax, self._ecut, comm=self.comm)
         return self._mask
 
     def kerker(self):
@@ -203,6 +208,7 @@ class PulayMixer(AbstractMixer):
         self.coef = coef
         self.restarted = restarted
         self.restart()
+        self.comm = None
 
     def __call__(self, nin, nout, coef = None):
         results = self.compute(nin, nout, coef)
@@ -223,34 +229,35 @@ class PulayMixer(AbstractMixer):
         """
         Ref : G. Kresse and J. Furthmuller, Comput. Mat. Sci. 6, 15-50 (1996).
         """
+        self.comm = nin.grid.mp.comm
         if coef is None :
             coef = self.coef
         self._iter += 1
 
-        print('ccccc', coef)
+        sprint('mixing parameters : ', coef, comm=self.comm)
         # rho0 = np.mean(nin)
         # kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
-        # print('kf', kf, self.pred.predcoef[1])
+        # sprint('kf', kf, self.pred.predcoef[1], comm=self.comm)
         # if self._iter == 20 :
         # if abs(kf - self.pred.predcoef[1]) > 0.1 :
             # self.pred.predcoef[1] = kf
             # self.pred._matrix = None
-            # print('Embed restart pulay coef')
+            # sprint('Embed restart pulay coef', comm=self.comm)
             # self.dr_mat = None
             # self.dn_mat = None
-            # print('Restart history of the mixer')
+            # sprint('Restart history of the mixer', comm=self.comm)
 
         r = nout - nin
         #-----------------------------------------------------------------------
         if self._iter == 1 and self._delay < 1 :
             res = r * coef[0]
-            print('!WARN : Change to linear mixer')
+            sprint('!WARN : Change to linear mixer', comm=self.comm)
             results = self.pred(nin, nout, residual=res)
         elif self._iter > self._delay :
             if self.restarted and (self._iter-self._delay) %(self.maxm+1)==0 :
                 self.dr_mat = None
                 self.dn_mat = None
-                print('Restart history of the mixer')
+                sprint('Restart history of the mixer', comm=self.comm)
             dn = nin - self.prev_density
             dr = r - self.prev_residual
             if self.dr_mat is None :
@@ -276,7 +283,7 @@ class PulayMixer(AbstractMixer):
 
             try:
                 x = linalg.solve(amat, b, assume_a = 'sym')
-                # print('x', x)
+                # sprint('x', x, comm=self.comm)
                 for i in range(ns):
                     if i == 0 :
                         drho = x[i] * self.dn_mat[i]
@@ -292,15 +299,15 @@ class PulayMixer(AbstractMixer):
                 results = self.pred(nin, nout, drho, res)
             except Exception :
                 res = r * coef[0]
-                print('!WARN : Change to linear mixer')
-                print('amat', amat)
+                sprint('!WARN : Change to linear mixer', comm=self.comm)
+                sprint('amat', amat, comm=self.comm)
                 results = self.pred(nin, nout, residual=res)
         else :
             # res = r * 0.8
             # results = self.pred(nin, nout, residual=res)
-            # print('delay : use linear mixer')
+            # sprint('delay : use linear mixer', comm=self.comm)
             results = nout.copy()
-            print('delay : use output density')
+            sprint('delay : use output density', comm=self.comm)
         #-----------------------------------------------------------------------
         results = self.format_density(results, nin)
         #-----------------------------------------------------------------------
@@ -321,7 +328,7 @@ class PulayMixer(AbstractMixer):
 
         try:
             x = linalg.solve(amat, b, assume_a = 'sym')
-            # print('x', x)
+            # sprint('x', x, comm=self.comm)
             for i in range(ns):
                 if i == 0 :
                     drho = x[i] * self.dn_mat[i]
@@ -331,14 +338,14 @@ class PulayMixer(AbstractMixer):
                     res += x[i] * self.dr_mat[i]
             return (res, drho)
         except Exception :
-            print('!WARN : Change to linear mixer')
-            print('amat', amat)
+            sprint('!WARN : Change to linear mixer', comm=self.comm)
+            sprint('amat', amat, comm=self.comm)
             return False
 
 
 class BroydenMixer(AbstractMixer):
     """
-    Not finished !!! 
+    Not finished !!!
     """
     def __init__(self, predtype = None, predcoef = [0.8, 0.1], maxm = 5, coef = [1.0], delay = 3):
         self.pred = SpecialPrecondition(predtype, predcoef)
@@ -367,6 +374,7 @@ class BroydenMixer(AbstractMixer):
         """
         Ref : G. Kresse and J. Furthmuller, Comput. Mat. Sci. 6, 15-50 (1996).
         """
+        self.comm = nin.grid.mp.comm
         if coef is None :
             coef = self.coef
         self._iter += 1
@@ -420,15 +428,3 @@ class BroydenMixer(AbstractMixer):
         self.prev_residual = r.copy()
 
         return results
-
-# def filter_density(density, mu = 0.5, kt = 0.01):
-    # ncharge = np.sum(density)
-    # recip_grid = density.grid.get_reciprocal()
-    # q = recip_grid.q
-    # mu *= np.max(q)
-    # kt *= mu
-    # _filter = fermi_dirac(q.real, mu = mu, kt = kt)
-    # den_g = density.fft() * _filter
-    # den = den_g.ifft(force_real=True)
-    # den *= ncharge/np.sum(den)
-    # return den

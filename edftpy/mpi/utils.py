@@ -1,10 +1,11 @@
-from .mpi import SMPI
+from .mpi import GraphTopo
+from dftpy.mpi import sprint as dftpy_sprint
 
-__all__ = ["smpi", "sprint"]
+__all__ = ["graphtopo", "sprint"]
 
-smpi = SMPI()
+graphtopo = GraphTopo()
 
 def sprint(*args, comm = None, **kwargs):
     kwargs['flush'] = True
-    if (comm is None and smpi.is_root) or (comm is not None and comm.rank == 0) :
-        print(*args, **kwargs)
+    comm = comm or graphtopo.comm
+    dftpy_sprint(*args, comm = comm, **kwargs)

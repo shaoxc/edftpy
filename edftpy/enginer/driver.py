@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 class Driver(ABC):
-    def __init__(self, options=None, type = 'KS', **kwargs):
+    def __init__(self, options=None, technique = 'KS', **kwargs):
         default_options = {
                 'update_delay' : 1,
                 'update_freq' : 1
@@ -9,7 +9,7 @@ class Driver(ABC):
         self.options = default_options
         if options is not None :
             self.options.update(options)
-        self.type = type
+        self.technique = technique
 
     @abstractmethod
     def get_density(self, **kwargs):

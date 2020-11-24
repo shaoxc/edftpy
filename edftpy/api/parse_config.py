@@ -10,18 +10,23 @@ from edftpy.kedf import KEDF
 from edftpy.hartree import Hartree
 from edftpy.xc import XC
 from edftpy.optimizer import Optimization
-from edftpy.evaluator import Evaluator, EnergyEvaluatorMix, EvaluatorOF
+from edftpy.evaluator import Evaluator, EnergyEvaluatorMix, EvaluatorOF, TotalEvaluator
 from edftpy.enginer.of_dftpy import DFTpyOF
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import LinearMixer, PulayMixer
 from edftpy.enginer.of_dftpy import dftpy_opt
+from edftpy.mpi import GraphTopo, MP
 
-def config2optimizer(config, ions = None, optimizer = None, **kwargs):
+
+# from .utils import graphtopo, sprint
+def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **kwargs):
     if isinstance(config, dict):
         pass
     elif isinstance(config, str):
         config = read_conf(config)
+    #-----------------------------------------------------------------------
+    graphtopo = config2graphtopo(config, graphtopo = graphtopo)
     #-----------------------------------------------------------------------
     cell_change = None
     ############################## Gsystem ##############################
@@ -37,6 +42,7 @@ def config2optimizer(config, ions = None, optimizer = None, **kwargs):
     elif optimizer is not None :
         if not np.allclose(optimizer.gsystem.ions.pos.cell.lattice, ions.pos.cell.lattice):
             cell_change = 'cell'
+            raise AttributeError("Not support cell change")
         else :
             cell_change = 'position'
     nr = config[keysys]["grid"]["nr"]
@@ -55,9 +61,11 @@ def config2optimizer(config, ions = None, optimizer = None, **kwargs):
         total_evaluator = optimizer.gsystem.total_evaluator
         gsystem = optimizer.gsystem
         gsystem.restart(grid=gsystem.grid, ions=ions)
+        mp_global = gsystem.grid.mp
     else :
         total_evaluator = None
-        gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale)
+        mp_global = MP(comm = graphtopo.comm, parallel = graphtopo.is_mpi)
+        gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo)
     grid = gsystem.grid
     total_evaluator = config2total_evaluator(config, ions, grid, pplist = pplist, total_evaluator=total_evaluator, cell_change = cell_change)
     gsystem.total_evaluator = total_evaluator
@@ -66,27 +74,59 @@ def config2optimizer(config, ions = None, optimizer = None, **kwargs):
     for key in config :
         if key.startswith('SUB'):
             subkeys.append(key)
-    subkeys.sort()
     # subkeys.sort(reverse = True)
     opt_drivers = []
-    ns = 0
-    for keysys in subkeys :
+    for i, keysys in enumerate(subkeys):
         if cell_change == 'position' :
-            driver = optimizer.opt_drivers[ns]
+            driver = optimizer.opt_drivers[i]
         else :
             driver = None
-        driver = config2driver(config, keysys, ions, grid, pplist, optimizer = optimizer, cell_change = cell_change, driver = driver)
+
+        if config[keysys]["technique"] != 'OF' and graphtopo.isub != i :
+            driver = None
+        else :
+            if config[keysys]["technique"] == 'OF' :
+                mp = mp_global
+            else :
+                mp = mp = MP()
+            driver = config2driver(config, keysys, ions, grid, pplist, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp)
         opt_drivers.append(driver)
-        ns += 1
+    #-----------------------------------------------------------------------
+    print('build_region -> ', graphtopo.rank)
+    graphtopo.build_region(grid=gsystem.grid, drivers=opt_drivers)
     #-----------------------------------------------------------------------
     for i in range(len(opt_drivers)):
-        ase_io.ase_write('edftpy_subcell_' + str(i) + '.vasp', opt_drivers[i].calculator.subcell.ions, format = 'vasp', direct = 'True', vasp5 = True)
-    ase_io.ase_write('edftpy_cell.vasp', ions, format = 'vasp', direct = 'True', vasp5 = True)
+        if (driver.technique == 'OF' and graphtopo.is_root) or graphtopo.isub == i :
+            ase_io.ase_write('edftpy_subcell_' + str(i) + '.vasp', opt_drivers[i].subcell.ions, format = 'vasp', direct = 'True', vasp5 = True)
+    if graphtopo.is_root :
+        ase_io.ase_write('edftpy_cell.vasp', ions, format = 'vasp', direct = 'True', vasp5 = True)
     #-----------------------------------------------------------------------
     optimization_options = config["OPT"].copy()
     optimization_options["econv"] *= ions.nat
     opt = Optimization(opt_drivers = opt_drivers, options = optimization_options, gsystem = gsystem)
     return opt
+
+def config2graphtopo(config, subkeys = None, graphtopo = None):
+    if graphtopo is None :
+        graphtopo = GraphTopo()
+    elif graphtopo.comm_sub is not None :
+        # already initialize the comm_sub
+        return graphtopo
+
+    if subkeys is None :
+        subkeys = []
+        for key in config :
+            if key.startswith('SUB'):
+                subkeys.append(key)
+    nprocs = []
+    for key in subkeys :
+        if config[key]["technique"] == 'OF' :
+            n = 0
+        else :
+            n = config[key]["nprocs"]
+        nprocs.append(n)
+    graphtopo.distribute_procs(nprocs)
+    return graphtopo
 
 def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= None, cell_change = None):
     keysys = "GSYSTEM"
@@ -159,7 +199,7 @@ def config2evaluator(config, keysys, ions, grid, pplist = None, optimizer = None
         ke_evaluator = None
     return (emb_evaluator, sub_evaluator, ke_evaluator)
 
-def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None, driver = None):
+def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None, driver = None, mp = None, comm = None):
     gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
     full=config['GSYSTEM']["grid"]["gfull"]
     pp_path = config["PATH"]["pp"]
@@ -219,10 +259,10 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     if calculator == 'dftpy' and ecut and abs(ecut - gsystem_ecut) > 1.0 :
         cellcut = [0.0, 0.0, 0.0]
     if cell_change == 'position' :
-        grid_sub = driver.calculator.subcell.grid
+        grid_sub = driver.subcell.grid
     else :
         grid_sub = None
-    subsys = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale)
+    subsys = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale, mp = mp)
 
     if cell_change == 'position' :
         subsys.density[:] = driver.density
@@ -256,18 +296,19 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             exttype -= 2
         if 'PSEUDO' in embed_evaluator.funcdicts :
             exttype -= 1
-    print('exttype', exttype)
 
     def get_dftpy_enginer(energy_evaluator):
         opt_options['econv'] *= subsys.ions.nat
 
         if ecut and abs(ecut - gsystem_ecut) > 1.0 :
+            if comm.size > 1 :
+                raise AttributeError("Different energy cutoff not supported for parallel version")
             if cell_change == 'position' :
                 total_evaluator = optimizer.evaluator_of.gsystem.total_evaluator
                 gsystem_driver = optimizer.evaluator_of.gsystem
             else :
                 total_evaluator = None
-                gsystem_driver = GlobalCell(ions, grid = None, ecut = ecut, full = full, optfft = True, max_prime = max_prime_global, scale = grid_scale_global)
+                gsystem_driver = GlobalCell(ions, grid = None, ecut = ecut, full = full, optfft = True, max_prime = max_prime_global, scale = grid_scale_global, mp = mp)
             total_evaluator = config2total_evaluator(config, ions, gsystem_driver.grid, pplist = pplist, total_evaluator=total_evaluator, cell_change = cell_change)
             gsystem_driver.total_evaluator = total_evaluator
             grid_sub = gsystem_driver.grid
@@ -315,7 +356,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
                 params['devel_code'] = 'STD_GRID={0} {1} {2}  FINE_GRID={0} {1} {2}'.format(*subsys.grid.nr)
 
         enginer = CastepKS(evaluator =energy_evaluator, prefix = prefix, subcell = subsys, cell_params = cell_params, params = params, exttype = exttype,
-                base_in_file = basefile, mixer = mixer)
+                base_in_file = basefile, mixer = mixer, comm = mp.comm)
         return enginer
 
     def get_pwscf_enginer(energy_evaluator):
@@ -336,7 +377,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
                 params['system']['nr3'] = subsys.grid.nr[2]
 
         enginer = PwscfKS(evaluator =energy_evaluator, prefix = prefix, subcell = subsys, cell_params = cell_params, params = params, exttype = exttype,
-                base_in_file = basefile, mixer = mixer)
+                base_in_file = basefile, mixer = mixer, comm = mp.comm)
         return enginer
 
     energy_evaluator = EnergyEvaluatorMix(embed_evaluator = embed_evaluator)

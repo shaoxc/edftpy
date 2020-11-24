@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.sparse.linalg import LinearOperator, eigsh, eigs
-from edftpy.utils.common import Field, Grid
+from edftpy.utils.common import Field
 
 class Hamiltonian(object):
 
@@ -55,7 +55,7 @@ class Hamiltonian(object):
             for i, eig in enumerate(eigens[0]):
                 phi = Field(self.grid, data = eigens[1][:, i])
                 results.append([eig, phi])
-                res = self.h_mul_phi(phi) - eig * phi
-                print('res', np.max(res), np.min(res), np.sum(res * res)*self.grid.dV)
+                # res = self.h_mul_phi(phi) - eig * phi
+                # print('res', np.max(res), np.min(res), np.sum(res * res)*self.grid.dV)
                 # print('phi', np.max(phi), np.min(phi), np.sum(phi * phi))
         return results

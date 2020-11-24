@@ -1,64 +1,11 @@
 import numpy as np
-from dftpy.mpi import MP
-
-class SerialComm :
-    def __init__(self, *args, **kwargs):
-        self.rank = 0
-        self.size = 1
-        self.root = True
-
-
-class SMPI:
-    def __init__(self, comm = None, parallel = False, **kwargs):
-        if comm is None :
-            if parallel :
-                from mpi4py import MPI
-                comm = MPI.COMM_WORLD
-            else :
-                comm = SerialComm(**kwargs)
-        self._comm = comm
-        self._default_vars()
-
-    def _default_vars(self):
-        self._is_mpi = False
-        self._is_root = False
-        self._graphtopo = None
-
-    @property
-    def is_mpi(self):
-        self._is_mpi = True
-        if isinstance(self._comm, SerialComm):
-            self._is_mpi = False
-        return self._is_mpi
-
-    @property
-    def is_root(self):
-        self._is_root = self.comm.rank == 0
-        return self._is_root
-
-    @property
-    def comm(self):
-        return self._comm
-
-    @comm.setter
-    def comm(self, value):
-        self._comm = value
-
-    @property
-    def graphtopo(self):
-        if self._graphtopo is None or self._mp.comm != self.comm :
-            self._graphtopo = GraphTopo(comm = self.comm, parallel = self.is_mpi)
-        return self._graphtopo
-
-    @graphtopo.setter
-    def graphtopo(self, value):
-        self._graphtopo = value
-
+from dftpy.mpi import SerialComm
 
 class Graph :
-    def __init__(self, nsub = 1, **kwargs):
+    def __init__(self, nsub = 1, grid = None, **kwargs):
         self.nsub = nsub
         self._default_vars()
+        self.grid = grid
 
     def _default_vars(self):
         self.sub_shift = np.zeros((self.nsub, 3), dtype = 'int')
@@ -68,7 +15,6 @@ class Graph :
         self.region_shift = np.zeros((self.nsub, 3), dtype = 'int')
         self._sub_index = [None, ] * self.nsub
         self._region_index = [None, ] * self.nsub # for processor in region
-        self.grid = None
         self.sub_ids = {}
 
     def sub_index(self, i):
@@ -112,7 +58,7 @@ class Graph :
 
 
 class GraphTopo:
-    def __init__(self, comm = None, parallel = False, grid = None, drivers = [], **kwargs):
+    def __init__(self, comm = None, parallel = False, **kwargs):
         MPI = None
         if comm is None :
             if parallel :
@@ -123,36 +69,29 @@ class GraphTopo:
         self._comm = comm
         self._is_mpi = parallel
         self._MPI = MPI
-        self._default_vars()
-        self.graph = Graph(self.nsub)
+        self.isub = None
+        self.comm_sub = None
+
+    def _set_default_vars(self, grid = None, drivers = None):
         self.grid = grid
         self.drivers = drivers
         self.nsub = len(self.drivers)
-
-    def _default_vars(self):
-        # save the rank of region
+        self.graph = Graph(self.nsub, grid)
+        # save the rank of regions and sub
         self.rank_region = np.zeros(self.nsub, dtype='int')
         self.rank_sub = np.zeros(self.nsub, dtype='int')
         self.comm_region= [None, ] * self.nsub
-        self.comm_sub = SerialComm()
         self.region_data = np.zeros(self.nsub)
-        self.isub = None
-        # self.sub_data = None
 
     def grid_to_region(self, grid=None):
-        if grid is None :
-            grid = self.grid
-        else :
-            self.grid = grid
-        ranks = np.zeros(self.comm.size, dtype = 'int') - 1
+        ranks = np.empty(self.comm.size, dtype = 'int')
         indl_local = grid.offsets
         indr_local = indl_local + grid.nr
         nrR = grid.nrR
         rpbc = np.mgrid[-1:2,-1:2,-1:2].reshape((3,-1)).T
 
-        self.graph.grid = grid
-
         for i in range(self.nsub):
+            ranks[:] = -1
             indl = self.graph.sub_shift[i]
             indr = indl + self.graph.sub_shape[i]
             # check the local data in the subsystem
@@ -164,21 +103,25 @@ class GraphTopo:
                 if np.all(mask): break
                 mask = (il < indr) & (ir > indr - 1)
                 if np.all(mask): break
+                mask = (ir < indr + 1) & (ir > indl - 1) & (il > indl - 1)
+                if np.all(mask): break
             else :
                 lflag = False
+            # print(self.rank, ' -> ', indl_local, indr_local, indl, indr, lflag)
+            # stop
 
             if lflag :
                 offsets = il - indl
                 ranks[self.rank] = self.rank
             else :
                 ranks[self.rank] = -1
-            self.comm.Allgather(self.MPI.IN_PLACE, ranks)
             if self.is_mpi :
+                self.comm.Allgather(self.MPI.IN_PLACE, ranks)
                 if ranks[self.rank] < 0 :
                     self.comm_region[i] = None
                 else :
-                    grp_region= self.group.Incl(ranks > -1)
-                    self.comm_region[i] = grp_region.Create(grp_region)
+                    grp_region= self.group.Incl(ranks[ranks > -1])
+                    self.comm_region[i] = self.comm.Create(grp_region)
 
                     self.comm_region[i].Allreduce(offsets, self.graph.region_shift[i], op=self.MPI.MIN)
                     self.graph.region_offsets[i] = offsets - self.graph.region_shift[i]
@@ -188,22 +131,56 @@ class GraphTopo:
             else :
                 self.graph.region_shape[i] = nrR
 
-    def build_region(self):
+    def distribute_procs(self, nprocs = None):
+        if not self.is_mpi :
+            self.comm_sub = SerialComm()
+            return
+        if sum(nprocs) != self.comm.size :
+            ns = np.count_nonzero(np.asarray(nprocs) > 0)
+            if ns == 0 :
+                self.comm_sub = SerialComm()
+                return
+            av = self.size // ns
+            res = self.size - av * ns
+            for i, n in enumerate(nprocs):
+                if n > 0 :
+                    if res > 0 :
+                        nprocs[i] = av + 1
+                        res -= 1
+                    else :
+                        nprocs[i] = av
+        ub = 0
+        for i, n in enumerate(nprocs):
+            ub += n
+            if self.rank < ub :
+                self.isub = i
+                break
+        self.comm_sub = self.comm.Split(self.isub, self.rank)
+
+    def build_region(self, grid = None, drivers = None, **kwargs):
+        self._set_default_vars(grid = grid, drivers = drivers, **kwargs)
+        of_id = {}
         for i, driver in enumerate(self.drivers):
             if driver is not None :
-                if driver.type == 'OF' : continue
-                self.isub = i
-                # self.sub_ids[id(driver.subcell.grid)] = i
-                self.sub_ids[id(driver.grid)] = i
-                if self.comm_sub.rank == 0 :
-                    self.rank_sub[i] = self.rank
-                    self.graph.sub_shape[i] = driver.subcell.grid.nrR
-                    self.graph.sub_shift[i] = driver.subcell.grid.shift
+                if driver.technique == 'OF' :
+                    of_id[id(driver.grid)] = i
+                    if self.rank == 0 :
+                        self.graph.sub_shape[i] = driver.subcell.grid.nrR
+                        self.graph.sub_shift[i] = driver.subcell.grid.shift
+                else :
+                    # self.graph.sub_ids[id(driver.subcell.grid)] = i
+                    self.graph.sub_ids[id(driver.grid)] = i
+                    if self.comm_sub.rank == 0 :
+                        self.rank_sub[i] = self.rank
+                        self.graph.sub_shape[i] = driver.subcell.grid.nrR
+                        self.graph.sub_shift[i] = driver.subcell.grid.shift
         if self.is_mpi :
             self.comm.Allreduce(self.MPI.IN_PLACE, self.rank_sub, op=self.MPI.SUM)
             self.comm.Allreduce(self.MPI.IN_PLACE, self.graph.sub_shape, op=self.MPI.SUM)
             self.comm.Allreduce(self.MPI.IN_PLACE, self.graph.sub_shift, op=self.MPI.SUM)
-            self.sub_ids = self.comm.allgather(self.sub_ids)
+            # self.graph.sub_ids = self.comm.allgather(self.graph.sub_ids)
+        self.graph.sub_ids.update(of_id)
+        # print(self.rank, ' -> ', self.graph.sub_shape,self.graph.sub_shift, driver.subcell.grid.nrR)
 
         self.grid_to_region(self.grid)
 
@@ -239,6 +216,11 @@ class GraphTopo:
     @comm.setter
     def comm(self, value):
         self._comm = value
+
+    @property
+    def is_root(self):
+        self._is_root = self.comm.rank == 0
+        return self._is_root
 
     @property
     def MPI(self):
@@ -312,7 +294,7 @@ class GraphTopo:
         if not self.is_mpi :
             self._sub_to_global_serial(i, sub_data, total, overwrite = overwrite)
             return
-        elif self.drivers[i].type == 'OF' :
+        elif self.drivers[i].technique == 'OF' :
             index = slice(None)
             self._sub_to_global_serial(i, sub_data, total, overwrite = overwrite, index = index)
             return
@@ -340,7 +322,7 @@ class GraphTopo:
         i = self.data_to_isub(sub_data, isub = isub, grid = grid)
         if not self.is_mpi :
             return self._global_to_sub_serial(i, total, sub_data, add=add)
-        elif self.drivers[i].type == 'OF' :
+        elif self.drivers[i].technique == 'OF' :
             index = slice(None)
             return self._global_to_sub_serial(i, total, sub_data, add=add, index=index)
         else :
@@ -360,5 +342,5 @@ class GraphTopo:
                 if not hasattr(sub_data, 'grid'):
                     raise AttributeError("Must given grid")
                 grid = sub_data.grid
-            isub = self.sub_ids[id(grid)]
+            isub = self.graph.sub_ids[id(grid)]
         return isub

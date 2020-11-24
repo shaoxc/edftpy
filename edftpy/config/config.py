@@ -2,11 +2,12 @@ import numpy as np
 import configparser
 import copy
 import os
+from collections import OrderedDict
 from dftpy.constants import ENERGY_CONV, LEN_CONV
 from dftpy.config.config import ConfigEntry, readJSON, DefaultOptionFromEntries
 from dftpy.config.config import default_json as dftpy_default_json
-
 from dftpy.config.config import PrintConf as print_conf
+from edftpy.mpi import sprint
 
 def merge_dftpy_entries(entries):
 
@@ -112,7 +113,7 @@ def dict_format(config):
     return conf
 
 def read_conf(infile):
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(dict_type = OrderedDict)
 
     if isinstance(infile, dict):
         conf_read = infile
@@ -199,7 +200,7 @@ def read_conf_2(infile):
     for section in config.sections():
         for key in config.options(section):
             if section != 'PP' and key not in conf[section]:
-                print('!WARN : "%s.%s" not in the dictionary' % (section, key))
+                sprint('!WARN : "%s.%s" not in the dictionary' % (section, key))
             else:
                 conf[section][key] = config.get(section, key)
     conf = option_format_2(conf)

@@ -7,26 +7,23 @@ from edftpy.pseudopotential import LocalPP
 from edftpy.utils.common import Field, Grid, Atoms, Coord
 from ..utils.math import gaussian
 from ..density import get_3d_value_recipe
+from edftpy.mpi import sprint
 
 
 class SubCell(object):
-    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, full = False, gaussian_options = None, coarse_grid_ecut = None, **kwargs):
+    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, full = False, gaussian_options = None, **kwargs):
         self._grid = None
         self._ions = None
         self._density = None
-        self._grid_coarse = None
-        self._density_coarse = None
-        self._index_coarse = None
         self._ions_index = None
 
-        self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, full = full, coarse_grid_ecut = coarse_grid_ecut, **kwargs)
+        self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, full = full, **kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
         if gaussian_options is None or len(gaussian_options)==0:
             self._gaussian_density = None
         else :
             self._gen_gaussian_density(gaussian_options)
             # self._gen_gaussian_density_recip(gaussian_options)
-            print('gaussian density', np.sum(self._gaussian_density) * self.grid.dV)
 
     @property
     def grid(self):
@@ -57,24 +54,8 @@ class SubCell(object):
         self._density[:] = value
 
     @property
-    def grid_coarse(self):
-        return self._grid_coarse
-
-    @property
-    def density_coarse(self):
-        return self._density_coarse
-
-    @property
-    def index_coarse(self):
-        return self._index_coarse
-
-    @property
     def ions_index(self):
         return self._ions_index
-
-    @density_coarse.setter
-    def density_coarse(self, value):
-        self._density_coarse[:] = value
 
     @property
     def gaussian_density(self):
@@ -84,7 +65,8 @@ class SubCell(object):
     def shift(self):
         return self.grid.shift
 
-    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True, full = False, coarse_grid_ecut = None, grid_sub = None, max_prime = 5, scale = 1.0):
+    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True,
+            full = False, grid_sub = None, max_prime = 5, scale = 1.0, mp = None):
         tol = 1E-8
         lattice = ions.pos.cell.lattice.copy()
         lattice_sub = ions.pos.cell.lattice.copy()
@@ -99,7 +81,7 @@ class SubCell(object):
         spacings = grid.spacings.copy()
         shift = np.zeros(3, dtype = 'int')
         origin = np.zeros(3)
-        nr = grid.nr.copy()
+        nr = grid.nrR.copy()
 
         cell_size = np.ptp(pos, axis = 0)
         pbc = np.ones(3, dtype = 'int')
@@ -127,7 +109,7 @@ class SubCell(object):
                 nr[i] = int(cell_size[i]/spacings[i])
                 if optfft :
                     nr[i] = bestFFTsize(nr[i], scale = scale, max_prime = max_prime)
-                    nr[i] = min(nr[i], grid.nr[i])
+                    nr[i] = min(nr[i], grid.nrR[i])
                 lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
 
         c1 = Coord(origin, lattice_sub, basis = 'Crystal').to_cart()
@@ -142,20 +124,18 @@ class SubCell(object):
         origin[:] = shift / grid.nr
         origin[:] = Coord(origin, lattice, basis = 'Crystal').to_cart()
         pos -= origin
-        print('subcell grid', nr)
-        print('subcell shift', shift)
 
         ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = lattice_sub, basis = 'Cartesian', origin = origin)
         if grid_sub is None :
-            grid_sub = Grid(lattice=lattice_sub, nr=nr, full=full, direct = True, origin = origin, pbc = pbc)
+            grid_sub = Grid(lattice=lattice_sub, nr=nr, full=full, direct = True, origin = origin, pbc = pbc, mp = mp)
         grid_sub.shift = shift
         self._grid = grid_sub
         self._ions = ions_sub
         self._ions_index = index
-        if coarse_grid_ecut is not None :
-            nr_coarse = ecut2nr(coarse_grid_ecut, lattice_sub, optfft = optfft)
-            grid_coarse = Grid(lattice=lattice_sub, nr=nr_coarse, full=full, direct = True, origin = origin, pbc = pbc)
-            self._grid_coarse = grid_coarse
+        self.comm = self._grid.mp.comm
+
+        sprint('subcell grid', nr, comm=self.comm)
+        sprint('subcell shift', shift, comm=self.comm)
 
     def _gen_gaussian_density(self, options={}):
         nr = self.grid.nr
@@ -199,9 +179,11 @@ class SubCell(object):
             factor = ncharge / (np.sum(self._gaussian_density) * self.grid.dV)
         else :
             factor = 0.0
-        print('fake01', np.sum(self._gaussian_density) * self.grid.dV)
+        nc = self._gaussian_density.integral()
+        sprint('fake01', nc, comm=self.comm)
         self._gaussian_density *= factor
-        print('fake02', np.sum(self._gaussian_density) * self.grid.dV)
+        nc = self._gaussian_density.integral()
+        sprint('fake02', nc, comm=self.comm)
 
     def _gen_gaussian_density_recip(self, options={}):
         self._gaussian_density = Field(self.grid)
@@ -220,7 +202,7 @@ class SubCell(object):
             r_g[key] = np.linspace(0, 30, 10000)
             arho_g[key] = np.exp(-0.5 * sigma ** 2 * r_g[key] ** 2) * scale
         self._gaussian_density[:]=get_3d_value_recipe(r_g, arho_g, self.ions, self.grid, ncharge = ncharge, direct=True, pme=True, order=10)
-        print('fake01', np.sum(self._gaussian_density) * self.grid.dV)
+        sprint('fake01', np.sum(self._gaussian_density) * self.grid.dV, comm=self.comm)
 
 class GlobalCell(object):
     def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, graphtopo = None, **kwargs):
@@ -232,7 +214,10 @@ class GlobalCell(object):
                 'optfft' : optfft,
                 }
         self.grid_kwargs.update(kwargs)
+        if graphtopo is None :
+            from edftpy.mpi import graphtopo
         self.graphtopo = graphtopo
+        self.comm = self.graphtopo.comm
 
         self.restart(grid=grid, ions=ions)
 
@@ -291,15 +276,15 @@ class GlobalCell(object):
     def graphtopo(self, value):
         self._graphtopo = value
 
-    def _gen_grid(self, ecut = 22, spacing = None, full = False, nr = None, optfft = True, max_prime = 5, scale = 1.0, **kwargs):
+    def _gen_grid(self, ecut = 22, spacing = None, full = False, nr = None, optfft = True, max_prime = 5, scale = 1.0, mp = None, **kwargs):
         lattice = self.ions.pos.cell.lattice
         if nr is None :
             nr = ecut2nr(ecut, lattice, optfft = optfft, spacing = spacing, scale = scale, max_prime = max_prime)
         else :
             nr = np.asarray(nr)
-        grid = Grid(lattice=lattice, nr=nr, full=full, direct = True, **kwargs)
+        grid = Grid(lattice=lattice, nr=nr, full=full, direct = True, mp = mp, **kwargs)
         self._grid = grid
-        print('GlobalCell grid', nr)
+        sprint('GlobalCell grid', nr, comm=self.comm)
 
     def update_density(self, subrho, isub = None, grid = None, restart = False, fake = False, tol = 0.0):
         if fake :
@@ -333,13 +318,13 @@ class GlobalCell(object):
                 forces_ie = value.force(self.density)
                 break
         else :
-            print('!WARN : There is no `LocalPP` in total_evaluator')
+            sprint('!WARN : There is no `LocalPP` in total_evaluator', comm=self.comm)
             forces_ie = 0.0
         ewaldobj = ewald(rho=self.density, ions=self.ions, PME=linearii)
         forces_ii = ewaldobj.forces
         forces = forces_ie + forces_ii
-        # print('ewald', forces_ii)
-        # print('ie', forces_ie)
+        # sprint('ewald', forces_ii)
+        # sprint('ie', forces_ie)
         return forces
 
     def get_stress(self, **kwargs):

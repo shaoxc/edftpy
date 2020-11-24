@@ -18,7 +18,7 @@ class CastepKS(Driver):
     """description"""
     def __init__(self, evaluator = None, subcell = None, prefix = 'castep_in_sub', params = None, cell_params = None,
             exttype = 3, base_in_file = None, castep_in_file = None, mixer = None, ncharge = None, gsystem = None,
-            options = None, **kwargs):
+            options = None, comm = None, **kwargs):
         '''
         exttype :
                     1 : only pseudo                  : 001

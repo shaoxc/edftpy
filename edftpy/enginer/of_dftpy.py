@@ -10,6 +10,7 @@ from .driver import Driver
 from dftpy.optimization import Optimization
 from dftpy.formats.io import write
 from dftpy.external_potential import ExternalPotential
+from edftpy.mpi import sprint
 
 
 class DFTpyOF(Driver):
@@ -34,7 +35,7 @@ class DFTpyOF(Driver):
         self.options = default_options
         if options is not None :
             self.options.update(options)
-        Driver.__init__(self, options = self.options, type = 'OF')
+        Driver.__init__(self, options = self.options, technique = 'OF')
 
         self.evaluator = evaluator
         self.fermi = None
@@ -52,6 +53,7 @@ class DFTpyOF(Driver):
         #-----------------------------------------------------------------------
         self.density = self.subcell.density
         self.init_density()
+        self.comm = self.subcell.grid.mp.comm
 
     @property
     def grid(self):
@@ -86,9 +88,9 @@ class DFTpyOF(Driver):
         embed_keys = []
         if self.evaluator.embed_evaluator is not None :
             embed_keys = self.evaluator.embed_evaluator.funcdicts.keys()
-        gsystem.get_embed_potential(gsystem.density, gaussian_density = gsystem.gaussian_density, embed_keys = embed_keys, with_global = with_global)
+        gsystem.total_evaluator.get_embed_potential(gsystem.density, gaussian_density = gsystem.gaussian_density, embed_keys = embed_keys, with_global = with_global)
         self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_ke = True)
-        gsystem.add_to_sub(gsystem.embed_potential, self.evaluator_of.embed_potential)
+        gsystem.add_to_sub(gsystem.total_evaluator.embed_potential, self.evaluator.embed_potential)
         if self.grid_driver is not None :
             self.evaluator_of.embed_potential = grid_map_data(self.evaluator.embed_potential, grid = self.grid_driver)
         else :
@@ -130,7 +132,7 @@ class DFTpyOF(Driver):
             self.options['econv'] = econv
         if norm < 1E-7 :
             self.options['maxiter'] = 4
-        print('econv', self.options['econv'])
+        sprint('econv', self.options['econv'], comm=self.comm)
         #-----------------------------------------------------------------------
         if self.options['opt_method'] == 'full' :
             hamil = False
@@ -204,10 +206,10 @@ class DFTpyOF(Driver):
         if num_eig > 1 :
             self.options['eig_tol'] = 1E-6
         eigens = hamiltonian.eigens(num_eig, **self.options)
-        print('eigens', ' '.join(map(str, [ev[0] for ev in eigens])))
+        sprint('eigens', ' '.join(map(str, [ev[0] for ev in eigens])), comm=self.comm)
         eig = eigens[0][0]
-        print('eig', eig)
-        print('min wave', np.min(eigens[0][1]))
+        sprint('eig', eig, comm=self.comm)
+        sprint('min wave', np.min(eigens[0][1]), comm=self.comm)
         rho = eigens[0][1] ** 2
         self.fermi_level = eig
         self.charge = rho * np.sum(density) / np.sum(rho)
@@ -230,14 +232,16 @@ class DFTpyOF(Driver):
         elif olevel == 2 :
             func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False, with_embed = True)
         func_driver = self.evaluator_of.compute(self.charge, calcType = ['E'], with_sub = True, with_global = False, with_embed = False, with_ke = True)
-        func.energy += func_driver.energy
-        print('sub_energy_of', func.energy)
+        func.energy += func_driver.energy/self.grid.mp.size
+        sub_energy_of = self.grid.mp.asum(func.energy)
+        sprint('sub_energy_of', sub_energy_of, comm=self.comm)
         return func
 
     def update_density(self, **kwargs):
         r = self.charge - self.prev_charge
-        self.residual_norm = np.sqrt(np.sum(r * r)/np.size(r))
-        print('res_norm_of', self._iter, np.max(abs(r)), np.sqrt(np.sum(r * r)/np.size(r)))
+        self.residual_norm = np.sqrt(self.grid.mp.asum(r * r)/self.grid.nnrR)
+        rmax = r.amax()
+        sprint('res_norm_of', self._iter, rmax, self.residual_norm, comm=self.comm)
         if self.options['opt_method'] == 'full' :
             rho = self.charge
         else :

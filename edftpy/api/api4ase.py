@@ -4,6 +4,7 @@ from dftpy.formats.ase_io import ase2ions
 
 from edftpy.utils.common import Field, Grid, Atoms, Coord
 from edftpy.interface import config2optimizer, get_forces
+from edftpy.mpi import sprint
 
 
 class eDFTpyCalculator(object):
@@ -37,7 +38,7 @@ class eDFTpyCalculator(object):
         if self.check_restart(atoms):
             self.update_optimizer(atoms)
         self._energy = self.optimizer.energy
-        print('Total energy :', self._energy * ENERGY_CONV["Hartree"]["eV"])
+        sprint('Total energy :', self._energy * ENERGY_CONV["Hartree"]["eV"])
         return self._energy * ENERGY_CONV["Hartree"]["eV"]
 
     def get_forces(self, atoms):

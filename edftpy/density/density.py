@@ -5,6 +5,7 @@ from numpy import linalg as LA
 from edftpy.utils.common import Field, RadialGrid
 from dftpy.pseudo import ReadPseudo
 from dftpy.ewald import CBspline
+from edftpy.mpi import sprint
 
 
 def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=1E-30, direct=True, pme=True, order=10, **kwargs):
@@ -34,7 +35,7 @@ def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=1E
                     qa = Bspline.get_PME_Qarray(i, qa)
             qarray = Field(grid=grid, data=qa, direct = True)
             rho += vlines[key] * qarray.fft()
-        rho *= Bspline.Barray * grid.nnr / grid.volume
+        rho *= Bspline.Barray * grid.nnrR / grid.volume
     else :
         for key in r:
             r0 = r[key]
@@ -49,13 +50,13 @@ def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=1E
     if direct :
         rho = rho.ifft()
         rho[rho < dtol] = dtol
-        print('Guess density (Real): ', rho.integral())
+        sprint('Guess density (Real): ', rho.integral(), comm=grid.mp.comm)
         if ncharge is None :
             ncharge = 0.0
             for i in range(ions.nat) :
                 ncharge += ions.Zval[ions.labels[i]]
         rho[:] *= ncharge / (rho.integral())
-        print('Guess density (Scale): ', rho.integral())
+        sprint('Guess density (Scale): ', rho.integral(), comm=grid.mp.comm)
     return rho
 
 def get_3d_value_real(r, arho, ions, grid, ncharge = None, rho = None, dtol=1E-30, direct=True, **kwargs):
@@ -81,48 +82,48 @@ def get_3d_value_real(r, arho, ions, grid, ncharge = None, rho = None, dtol=1E-3
     if direct :
         rho = rho.ifft()
         rho[rho < dtol] = dtol
-        print('Guess density (Real): ', rho.integral())
+        sprint('Guess density (Real): ', rho.integral(), comm=grid.mp.comm)
         if ncharge is None :
             ncharge = 0.0
             for i in range(ions.nat) :
                 ncharge += ions.Zval[ions.labels[i]]
         rho[:] *= ncharge / (rho.integral())
-        print('Guess density (Scale): ', rho.integral())
+        sprint('Guess density (Scale): ', rho.integral(), comm=grid.mp.comm)
     return rho
 
 def normalization_density(density, ncharge = None, grid = None, tol = 1E-300, method = 'shift'):
-    #-----------------------------------------------------------------------
-    # minn = np.min(density) - tol
-    # density -= minn
-    #-----------------------------------------------------------------------
-    print('min0', np.min(density))
-    print('total0', np.sum(density)*grid.dV)
+    if grid is None :
+        grid = density.grid
+    min_rho = grid.mp.amin(density)
+    sprint('min0', min_rho, comm=grid.mp.comm)
     if method == 'scale' :
         if ncharge is not None :
             ncharge = np.sum(density) * grid.dV
+        ncharge = grid.mp.asum(ncharge)
         density[density < tol] = tol
-        density *= ncharge / (np.sum(density) * grid.dV)
+        nc = grid.mp.asum(np.sum(density) * grid.dV)
+        density *= ncharge / nc
     else :
         if ncharge is not None :
-            if grid is None :
-                grid = density.grid
-            density += (ncharge-np.sum(density)*grid.dV)/np.size(density)
-    density = Field(grid, data=density, direct=True)
-    print('min1', np.min(density))
-    print('total1', np.sum(density)*grid.dV)
+            nc = grid.mp.asum(np.sum(density) * grid.dV)
+            density += (ncharge-nc)/grid.nnrR
+    if not hasattr(density, 'grid'):
+        density = Field(grid, data=density, direct=True)
+    min_rho = grid.mp.amin(density)
+    sprint('min1', min_rho, comm=grid.mp.comm)
     return density
 
-def filter_density(self, density, mu = 0.7, kt = 0.05):
-    self._filter = 1.0
+def filter_density(grid, density, mu = 0.7, kt = 0.05):
+    grid._filter = 1.0
     # Not use _filter
     ncharge = np.sum(density)
-    if self._filter is None :
+    if grid._filter is None :
         recip_grid = density.grid.get_reciprocal()
         q = recip_grid.q
         mu *= np.max(q)
         kt *= mu
-        self._filter = fermi_dirac(q.real, mu = mu, kt = kt)
-    den_g = density.fft() * self._filter
+        grid._filter = fermi_dirac(q.real, mu = mu, kt = kt)
+    den_g = density.fft() * grid._filter
     den = den_g.ifft(force_real=True)
     #-----------------------------------------------------------------------
     den = density

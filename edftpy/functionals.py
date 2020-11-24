@@ -29,8 +29,8 @@ class NonAdditiveKE(AbsFunctional):
         obj_sub = self.ke_sub(density/fac, calcType = calcType)
         obj = obj - obj_sub * fac
 
-        if 'E' in calcType :
-            print('NonAdditiveKE :', obj.energy, fac, self.nbnd, density.integral())
+        # if 'E' in calcType :
+            # print('NonAdditiveKE :', obj.energy, fac, self.nbnd, density.integral())
         return obj
 
 

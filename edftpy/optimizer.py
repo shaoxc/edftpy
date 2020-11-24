@@ -4,12 +4,12 @@ import copy
 from dftpy.formats import io
 from dftpy.ewald import ewald
 # from .utils.common import Field
+from edftpy.mpi import sprint
 
 
 class Optimization(object):
 
     def __init__(self, opt_drivers=None, gsystem = None, options=None):
-
         if opt_drivers is None:
             raise AttributeError("Must provide optimization driver (list)")
         else:
@@ -28,13 +28,11 @@ class Optimization(object):
 
     def get_energy(self, func_list = None, **kwargs):
         energy = 0.0
-        elist = []
         if func_list is not None :
             for func in func_list :
                 energy += func.energy
-                elist.append(func.energy)
-        elist.append(energy)
         energy += self.gsystem.ewald.energy
+        energy = self.gsystem.grid.mp.asum(energy)
         return energy
 
     def get_energy_all(self, totalrho = None, totalfunc = None, olevel = 0, **kwargs):
@@ -50,18 +48,19 @@ class Optimization(object):
             elist.append(driver.energy)
         elist = np.asarray(elist)
         etotal = np.sum(elist) + self.gsystem.ewald.energy
+        etotal = self.gsystem.grid.mp.asum(etotal)
         energy = [etotal, elist]
         return energy
 
     def update_density(self, denlist = None, prev_denlist = None, mu = None, update = None, **kwargs):
         #-----------------------------------------------------------------------
         diff_res = self.get_diff_residual()
-        print('diff_res', diff_res)
+        sprint('diff_res', diff_res)
         for i, driver in enumerate(self.opt_drivers):
             # coef = driver.calculator.mixer.coef.copy()
-            # print('coef',coef, 'i', i)
+            # sprint('coef',coef, 'i', i)
             # coef[0] = self.get_frag_coef(coef[0], diff_res[i], diff_res)
-            # print('outcoef',coef)
+            # sprint('outcoef',coef)
             coef = None
             if update[i] :
                 denlist[i] = driver.update_density(coef = coef)
@@ -70,7 +69,7 @@ class Optimization(object):
         #-----------------------------------------------------------------------
         # if mu is not None :
         if 0 :
-            print('mu', mu)
+            sprint('mu', mu)
             scale = 0.05
             mu = np.array(mu)
             mu_av = np.mean(mu)
@@ -81,11 +80,11 @@ class Optimization(object):
                 Ni[i] = rho_in.integral()
             d_Ni = d_mu / mu * Ni
             d_Ni -= np.sum(d_Ni)/len(d_Ni)
-            print('Ni', Ni)
-            print('d_Ni', d_Ni)
+            sprint('Ni', Ni)
+            sprint('d_Ni', d_Ni)
             if np.max(np.abs(d_Ni)) > 1E-2 :
                 Ni_new = Ni + d_Ni * scale
-                print('Ni_new', Ni_new)
+                sprint('Ni_new', Ni_new)
                 for i, rho_in in enumerate(denlist):
                     rho_in *= Ni_new[i]/Ni[i]
 
@@ -149,55 +148,49 @@ class Optimization(object):
         fmt = "           {:8s}{:24s}{:16s}{:16s}{:8s}{:16s}".format("Step", "Energy(a.u.)", "dE", "dP", "Nls", "Time(s)")
         resN = 9999
         #-----------------------------------------------------------------------
-        print(fmt)
+        sprint(fmt)
         seq = "-" * 100
         time_begin = time.time()
         timecost = time.time()
         # resN = np.einsum("..., ...->", residual, residual, optimize = 'optimal') * rho.grid.dV
         # dE = energy
         # fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(0, energy, dE, resN, 1, timecost - time_begin)
-        # print(seq +'\n' + fmt +'\n' + seq)
+        # sprint(seq +'\n' + fmt +'\n' + seq)
         #-----------------------------------------------------------------------
-        driver_of = None
+        embed_keys = []
+        of_ids = []
+        of_drivers = []
         for i, driver in enumerate(self.opt_drivers):
             if driver is not None :
-                if driver.type == 'OF' :
-                    driver_of = driver
+                if driver.technique== 'OF' :
+                    of_drivers.append(driver)
+                    of_ids.append(i)
                 else :
                     embed_keys = driver.embed_evaluator.funcdicts.keys()
-                break
-        else :
-            embed_keys = []
         #-----------------------------------------------------------------------
         update = [True for _ in range(self.nsub)]
         for it in range(self.options['maxiter']):
             self.iter = it
             prev_denlist, denlist = denlist, prev_denlist
             #-----------------------------------------------------------------------
-            if self.nsub == 1 and self.opt_drivers[0].type == 'OF' :
+            if self.nsub == len(of_drivers):
                 pass
             else :
                 self.gsystem.get_embed_potential(totalrho, gaussian_density = self.gsystem.gaussian_density, embed_keys = embed_keys, with_global = True)
             #-----------------------------------------------------------------------
-            for isub in range(self.nsub + 1):
+            for isub in range(self.nsub + len(of_drivers)):
                 if isub < self.nsub :
-                    driver = self.opt_drivers[i]
-                    if driver is not None  :
-                        if driver.type == 'OF' : continue
-                        i_of = isub
-                        # initial the global_potential
-                        if driver.evaluator.global_potential is None :
-                            driver.evaluator.global_potential = np.zeros(prev_denlist[i].grid.nrR)
-                        pot = driver.evaluator.global_potential
-                    else :
-                        pot = None
-                    self.gsystem.sub_value(self.gsystem.embed_potential, pot, isub = isub)
+                    driver = self.opt_drivers[isub]
+                    if driver is None : continue
+                    if driver.technique== 'OF' : continue
+                    # initial the global_potential
+                    if driver.evaluator.global_potential is None :
+                        driver.evaluator.global_potential = np.zeros(prev_denlist[isub].grid.nrR)
+                    self.gsystem.sub_value(self.gsystem.embed_potential, driver.evaluator.global_potential, isub = isub)
                     i = isub
                 else :
-                    driver = driver_of
-                    i = i_of
-
-                if driver is None : continue
+                    driver = of_drivers[isub - self.nsub]
+                    i = of_ids[isub - self.nsub]
 
                 update_delay = driver.options['update_delay']
                 update_freq = driver.options['update_freq']
@@ -229,9 +222,9 @@ class Optimization(object):
             resN = max(res_norm)
             fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(it, energy, dE, resN, 1, timecost - time_begin)
             fmt += "\n    Total: {:<8d}{:<24.12E}".format(it, totalfunc.energy)
-            print(seq +'\n' + fmt +'\n' + seq)
+            sprint(seq +'\n' + fmt +'\n' + seq)
             if self.check_converge(energy_history):
-                print("#### Subsytem Density Optimization Converged ####")
+                sprint("#### Subsytem Density Optimization Converged ####")
                 break
         if self.options['maxiter'] < 1 :
             totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
@@ -260,10 +253,10 @@ class Optimization(object):
         diff_res = []
         for i, driver in enumerate(self.opt_drivers):
             r = driver.density - driver.prev_density
-            res_norm = float(np.sqrt(np.sum(r * r)/np.size(r)))
+            res_norm = np.sqrt(driver.grid.mp.asum(r * r)/driver.grid.nnrR)
             diff_res.append(res_norm)
             # energy = Hartree.compute(driver.density.copy(), calcType=['E']).energy
-            # print('Hartree_i', i, energy)
+            # sprint('Hartree_i', i, energy)
             # ls = driver.get_energy_traj('HARTREE', density = driver.density)
             # if len(ls) > 1 :
                 # dr = abs(ls[-1]-ls[-2])

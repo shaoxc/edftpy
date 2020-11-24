@@ -76,7 +76,7 @@ class EnergyEvaluatorMix(AbsFunctional):
         #-----------------------------------------------------------------------
         if self.embed_evaluator is not None :
             if self.embed_potential is None :
-                self.embed_potential = self.embed_evaluator(rho, calcType = ['V']).potential
+                self.embed_potential = -self.embed_evaluator(rho, calcType = ['V']).potential
             else :
                 self.embed_potential -= self.embed_evaluator(rho, calcType = ['V']).potential
             self.embed_evaluator.update_functional(add = remove_embed)
@@ -89,6 +89,9 @@ class EnergyEvaluatorMix(AbsFunctional):
 
         if self.embed_potential is None :
             self.embed_potential = Field(grid=rho.grid, rank=1, direct=True)
+
+        if self.global_potential is not None :
+            self.embed_potential += self.global_potential
 
     @property
     def ke_evaluator(self):
@@ -207,6 +210,8 @@ class EvaluatorOF(AbsFunctional):
                 self.gsystem.add_to_sub(obj_global.potential, obj.potential)
             if 'E' in calcType :
                 obj.energy += obj_global.energy
+        if 'E' in calcType :
+            obj.energy = rho.mp.vsum(obj.energy)
         return obj
 
 class TotalEvaluator(Evaluator):
@@ -232,9 +237,9 @@ class TotalEvaluator(Evaluator):
             self.embed_potential = obj_global.potential
         #-----------------------------------------------------------------------
         if not with_global :
-            for key in self.gsystem.total_evaluator.funcdicts:
+            for key in self.funcdicts:
                 if key not in embed_keys :
-                    remove_global[key] = self.gsystem.total_evaluator.funcdicts[key]
+                    remove_global[key] = self.funcdicts[key]
         self.update_functional(remove = remove_global)
         obj_global = self.compute(rho, calcType = ['V'])
         if self.embed_potential is None :

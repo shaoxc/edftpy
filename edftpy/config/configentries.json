@@ -155,6 +155,11 @@
 			"default": "OF",
 			"comment": "The technique (OF|KS) of the driver"
 		},
+		"nprocs": {
+			"type": "int",
+			"default": 1,
+			"comment": "The number of processors for the subsystem"
+		},
 		"embed": {
 			"type": "strlist",
 			"default": "KE, XC",
