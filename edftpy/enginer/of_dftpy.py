@@ -54,19 +54,29 @@ class DFTpyOF(Driver):
         self.density = self.subcell.density
         self.init_density()
         self.comm = self.subcell.grid.mp.comm
+        self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
 
     @property
     def grid(self):
         return self.subcell.grid
 
     def init_density(self, rho_ini = None):
-        self._format_density(self.density)
-
-    def _format_density(self, density, volume = None, sym = True, **kwargs):
+        self.prev_density = self.density.copy()
         if self.grid_driver is not None :
-            self.charge = grid_map_data(density, grid = self.grid_driver)
+            self.charge = grid_map_data(self.density, grid = self.grid_driver)
+            self.prev_charge = self.charge.copy()
         else :
-            self.charge = density.copy()
+            self.charge = self.density
+            self.prev_charge = self.prev_density
+
+    def _format_density(self, sym = True, **kwargs):
+        self.prev_density[:] = self.density
+        if self.grid_driver is not None :
+            self.prev_charge, self.charge = self.charge, self.prev_charge
+            self.charge[:] = grid_map_data(self.density, grid = self.grid_driver)
+        else :
+            self.charge = self.density
+            self.prev_charge = self.prev_density
 
     def _format_density_invert(self, charge = None, grid = None, **kwargs):
         if charge is None :
@@ -76,20 +86,17 @@ class DFTpyOF(Driver):
             grid = self.grid
 
         if self.grid_driver is not None and np.any(self.grid_driver.nr != grid.nr):
-            rho = grid_map_data(charge, grid = grid)
-        else :
-            rho = charge.copy()
-        return rho
+            self.density[:]= grid_map_data(charge, grid = grid)
+        return self.density
 
-    def _get_extpot(self, density = None, charge= None, grid = None, with_global = False, first = False, **kwargs):
-        self._map_gsystem(charge, grid)
-        # rho = self._format_density_invert(charge, grid) # Fine grid
+    def _get_extpot(self, with_global = False, first = False, **kwargs):
+        self._map_gsystem()
         gsystem = self.evaluator.gsystem
         embed_keys = []
         if self.evaluator.embed_evaluator is not None :
             embed_keys = self.evaluator.embed_evaluator.funcdicts.keys()
         gsystem.total_evaluator.get_embed_potential(gsystem.density, gaussian_density = gsystem.gaussian_density, embed_keys = embed_keys, with_global = with_global)
-        self.evaluator.get_embed_potential(density, gaussian_density = self.subcell.gaussian_density, with_ke = True)
+        self.evaluator.get_embed_potential(self.density, gaussian_density = self.subcell.gaussian_density, with_ke = True)
         gsystem.add_to_sub(gsystem.total_evaluator.embed_potential, self.evaluator.embed_potential)
         if self.grid_driver is not None :
             self.evaluator_of.embed_potential = grid_map_data(self.evaluator.embed_potential, grid = self.grid_driver)
@@ -97,7 +104,7 @@ class DFTpyOF(Driver):
             self.evaluator_of.embed_potential = self.evaluator.embed_potential
         return
 
-    def _map_gsystem(self, charge = None, grid = None):
+    def _map_gsystem(self):
         if self.evaluator_of.gsystem is None :
             self.evaluator_of.gsystem = self.evaluator.gsystem
         elif self.grid_driver is not None :
@@ -107,10 +114,10 @@ class DFTpyOF(Driver):
         else :
             self.evaluator_of.gsystem.density = self.evaluator.gsystem.density
         #-----------------------------------------------------------------------
-        self.evaluator_of.set_rest_rho(charge)
+        self.evaluator_of.set_rest_rho(self.charge)
         return
 
-    def get_density(self, density, res_max = None, **kwargs):
+    def get_density(self, res_max = None, **kwargs):
         self._iter += 1
         #-----------------------------------------------------------------------
         if res_max is None :
@@ -139,25 +146,26 @@ class DFTpyOF(Driver):
         else :
             hamil = True
         if hamil or self._iter == 1 :
-            self._format_density(density)
-        # self._format_density(density)
-        self._get_extpot(density, self.charge, density.grid, with_global = hamil)
+            self._format_density()
+
+        self._get_extpot(with_global = hamil)
         if self.evaluator_of.sub_evaluator and hamil:
             self.evaluator_of.embed_potential += self.evaluator_of.sub_evaluator(self.charge, calcType = ['V']).potential
-        self.prev_charge = self.charge.copy()
+
+        self.prev_charge[:] = self.charge
+
         #-----------------------------------------------------------------------
         if self.options['opt_method'] == 'full' :
-            self.get_density_full_opt(density, **kwargs)
+            self.get_density_full_opt(**kwargs)
         elif self.options['opt_method'] == 'part' :
-            self.get_density_embed(density, **kwargs)
+            self.get_density_embed(**kwargs)
         elif self.options['opt_method'] == 'hamiltonian' :
-            self.get_density_hamiltonian(density)
+            self.get_density_hamiltonian(**kwargs)
         #-----------------------------------------------------------------------
-        rho = self._format_density_invert(self.charge, density.grid)
-        self.density[:] = rho
-        return rho
+        self._format_density_invert(self.charge, self.grid)
+        return self.density
 
-    def get_density_full_opt(self, density, **kwargs):
+    def get_density_full_opt(self, **kwargs):
         remove_global = {}
         embed_evaluator = self.evaluator.embed_evaluator
         total_evaluator = self.evaluator_of.gsystem.total_evaluator
@@ -179,27 +187,27 @@ class DFTpyOF(Driver):
         self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=self.charge, optimization_options=self.options, optimization_method = optimization_method)
         self.calc.optimize_rho()
 
-        self.charge = self.calc.rho
+        self.charge[:] = self.calc.rho
         self.fermi_level = self.calc.mu
         total_evaluator.update_functional(add = remove_global)
         return
 
-    def get_density_embed(self, density, **kwargs):
+    def get_density_embed(self, **kwargs):
         if 'method' in self.options :
             optimization_method = self.options['method']
         else :
             optimization_method = 'CG-HS'
 
         evaluator = partial(self.evaluator_of.compute, with_global = False, with_embed = True, with_ke = True, with_sub = False)
-        self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=density, optimization_options=self.options, optimization_method = optimization_method)
+        self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=self.charge, optimization_options=self.options, optimization_method = optimization_method)
         self.calc.optimize_rho()
 
         # self.phi = self.calc.phi.copy()
-        self.charge = self.calc.rho
+        self.charge[:] = self.calc.rho
         self.fermi_level = self.calc.mu
         return
 
-    def get_density_hamiltonian(self, density, num_eig = 2, **kwargs):
+    def get_density_hamiltonian(self, num_eig = 2, **kwargs):
         potential = self.evaluator_of.embed_potential
         hamiltonian = Hamiltonian(potential, grid = self.subcell.grid)
         self.options.update(kwargs)
@@ -212,7 +220,7 @@ class DFTpyOF(Driver):
         sprint('min wave', np.min(eigens[0][1]), comm=self.comm)
         rho = eigens[0][1] ** 2
         self.fermi_level = eig
-        self.charge = rho * np.sum(density) / np.sum(rho)
+        self.charge[:] = rho * self.charge.integral() / rho.integral()
         return eigens
 
     def get_kinetic_energy(self, **kwargs):
@@ -246,9 +254,9 @@ class DFTpyOF(Driver):
             rho = self.charge
         else :
             rho = self.mixer(self.prev_charge, self.charge, **kwargs)
-        if self.grid_driver is not None :
-            rho = grid_map_data(rho, grid = self.grid)
-        return rho
+        self.charge[:] = rho
+        self._format_density_invert(self.charge, self.grid)
+        return self.density
 
     def get_fermi_level(self, **kwargs):
         results = self.fermi_level

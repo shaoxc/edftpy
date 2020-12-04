@@ -82,22 +82,24 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
         else :
             driver = None
 
-        if config[keysys]["technique"] != 'OF' and graphtopo.isub != i :
+        print('graphtopo.isub', graphtopo.isub)
+        if config[keysys]["technique"] != 'OF' and graphtopo.isub != i and graphtopo.is_mpi:
             driver = None
         else :
             if config[keysys]["technique"] == 'OF' :
                 mp = mp_global
             else :
-                mp = mp = MP()
+                mp = MP(comm = graphtopo.comm_sub)
             driver = config2driver(config, keysys, ions, grid, pplist, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp)
         opt_drivers.append(driver)
     #-----------------------------------------------------------------------
     print('build_region -> ', graphtopo.rank)
     graphtopo.build_region(grid=gsystem.grid, drivers=opt_drivers)
     #-----------------------------------------------------------------------
-    for i in range(len(opt_drivers)):
-        if (driver.technique == 'OF' and graphtopo.is_root) or graphtopo.isub == i :
-            ase_io.ase_write('edftpy_subcell_' + str(i) + '.vasp', opt_drivers[i].subcell.ions, format = 'vasp', direct = 'True', vasp5 = True)
+    for i, driver in enumerate(opt_drivers):
+        if driver is None : continue
+        if (driver.technique == 'OF' and graphtopo.is_root) or (graphtopo.isub == i and graphtopo.comm_sub.rank == 0):
+            ase_io.ase_write('edftpy_subcell_' + str(i) + '.vasp', driver.subcell.ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
     if graphtopo.is_root :
         ase_io.ase_write('edftpy_cell.vasp', ions, format = 'vasp', direct = 'True', vasp5 = True)
     #-----------------------------------------------------------------------

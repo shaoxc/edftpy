@@ -13,6 +13,7 @@ from ..utils.math import grid_map_data
 from ..density import normalization_density
 
 from .driver import Driver
+from edftpy.mpi import sprint
 
 class CastepKS(Driver):
     """description"""
@@ -31,9 +32,9 @@ class CastepKS(Driver):
         '''
         Driver.__init__(self, options = options)
         self.evaluator = evaluator
-        self.prefix = prefix
         self.exttype = exttype
         self.subcell = subcell
+        self.prefix = prefix
         self.rho = None
         self.wfs = None
         self.occupations = None
@@ -58,16 +59,12 @@ class CastepKS(Driver):
         self._iter = 0
         self._filter = None
         self.mixer = mixer
-        # if 'devel_code' in params :
-            # self.grid_driver = None
-        # else :
-            # self.grid_driver = self.get_grid_driver(self.subcell.grid)
+
         self._grid = None
         self.grid_driver = self.get_grid_driver(self.grid)
         #-----------------------------------------------------------------------
         self.init_density()
-        self.density = self._format_density_invert(self.charge, self.grid)
-        self.prev_charge = copy.deepcopy(self.charge)
+        self._format_density_invert(self.charge, self.grid)
         #-----------------------------------------------------------------------
         if self.mixer is None :
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
@@ -75,7 +72,7 @@ class CastepKS(Driver):
             kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
         if self.grid_driver is not None :
-            print('{} has two grids :{} and {}'.format(self.__class__.__name__, self.grid.nr, self.grid_driver.nr))
+            sprint('{} has two grids :{} and {}'.format(self.__class__.__name__, self.grid.nr, self.grid_driver.nr))
         self._grid_fine = None
 
     @property
@@ -96,7 +93,6 @@ class CastepKS(Driver):
         if not np.all(grid.nr == nr):
             grid_driver = Grid(grid.lattice, nr, direct = True)
         else :
-            # grid_driver = grid
             grid_driver = None
         return grid_driver
 
@@ -203,20 +199,25 @@ class CastepKS(Driver):
         ase_io_driver.write_param(outfile, driver_params, force_write = True)
         return
 
-    def _format_density(self, density, volume = None, sym = True, **kwargs):
+    def _format_density(self, volume = None, sym = True, **kwargs):
         #-----------------------------------------------------------------------
         if volume is None :
             volume = density.grid.volume
+        # self.prev_density[:] = self.density
+        self.prev_charge, self.charge = self.charge, self.prev_charge
         if self.grid_driver is not None :
-            charge = grid_map_data(density, grid = self.grid_driver) * volume
+            charge = grid_map_data(self.density, grid = self.grid_driver) * volume
         else :
-            charge = density * volume
+            charge = self.density * volume
         #-----------------------------------------------------------------------
         self.mdl.den.real_charge[:] = charge.ravel(order = 'F')
         if sym :
             caspytep.density.density_symmetrise(self.mdl.den)
             caspytep.density.density_augment(self.mdl.wvfn,self.mdl.occ,self.mdl.den)
         self.charge = self.mdl.den.real_charge
+        #-----------------------------------------------------------------------
+        self.density[:] = self._format_density_invert(**kwargs)
+        self.prev_density[:] = self.density
         return
 
     def _format_density_invert(self, charge = None, grid = None, **kwargs):
@@ -240,8 +241,6 @@ class CastepKS(Driver):
         else :
             density /= grid.volume
             rho = Field(grid=grid, rank=1, direct=True, data = density, order = 'F')
-        print('min00', np.min(self.mdl.den.real_charge)/grid.volume)
-        print('rho00', np.min(rho))
         return rho
 
     def _get_extpot(self, charge = None, grid = None, **kwargs):

@@ -120,8 +120,8 @@ class SubCell(object):
         c0 = Coord(center, lattice, basis = 'Crystal').to_cart()
 
         origin = np.array(c0) - np.array(c1)
-        shift[:] = np.array(Coord(origin, lattice, basis = 'Cartesian').to_crys()) * grid.nr
-        origin[:] = shift / grid.nr
+        shift[:] = np.array(Coord(origin, lattice, basis = 'Cartesian').to_crys()) * grid.nrR
+        origin[:] = shift / grid.nrR
         origin[:] = Coord(origin, lattice, basis = 'Crystal').to_cart()
         pos -= origin
 
@@ -134,11 +134,11 @@ class SubCell(object):
         self._ions_index = index
         self.comm = self._grid.mp.comm
 
-        sprint('subcell grid', nr, comm=self.comm)
+        sprint('subcell grid', nr, self._grid.nr, comm=self.comm)
         sprint('subcell shift', shift, comm=self.comm)
 
     def _gen_gaussian_density(self, options={}):
-        nr = self.grid.nr
+        nr = self.grid.nrR
         dnr = (1.0/nr).reshape((3, 1))
         gaps = self.grid.spacings
         # latp = self.grid.latparas
@@ -172,11 +172,12 @@ class SubCell(object):
                 index = dists < rcut
                 prho[index] = gaussian(dists[index], sigma) * scale
                 # prho[index] = gaussian(dists[index], sigma, dim = 0) * scale
-                self._gaussian_density[l123A[0], l123A[1], l123A[2]] += prho.ravel()
+                mask = self.get_array_mask(l123A)
+                self._gaussian_density[l123A[0][mask], l123A[1][mask], l123A[2][mask]] += prho.ravel()[mask]
                 ncharge += scale
 
         if ncharge > 1E-3 :
-            factor = ncharge / (np.sum(self._gaussian_density) * self.grid.dV)
+            factor = ncharge / (self._gaussian_density.integral())
         else :
             factor = 0.0
         nc = self._gaussian_density.integral()
@@ -184,6 +185,21 @@ class SubCell(object):
         self._gaussian_density *= factor
         nc = self._gaussian_density.integral()
         sprint('fake02', nc, comm=self.comm)
+
+    def get_array_mask(self, l123A):
+        if self.comm.size == 1 :
+            return slice(None)
+        offsets = self.grid.offsets.reshape((3, 1))
+        nr = self.grid.nr
+        #-----------------------------------------------------------------------
+        l123A -= offsets
+        mask = np.logical_and(l123A[0] > -1, l123A[0] < nr[0])
+        mask1 = np.logical_and(l123A[1] > -1, l123A[1] < nr[1])
+        np.logical_and(mask, mask1, out = mask)
+        np.logical_and(l123A[2] > -1, l123A[2] < nr[2], out = mask1)
+        np.logical_and(mask, mask1, out = mask)
+        #-----------------------------------------------------------------------
+        return mask
 
     def _gen_gaussian_density_recip(self, options={}):
         self._gaussian_density = Field(self.grid)
@@ -290,23 +306,24 @@ class GlobalCell(object):
         if fake :
             if restart :
                 self._gaussian_density[:] = tol
-            self.graphtopo.sub_to_global(subrho, self._gaussian_density)
+            self.graphtopo.sub_to_global(subrho, self._gaussian_density, isub = isub, grid = grid)
         else :
             if restart :
                 self._density[:] = tol
-            self.graphtopo.sub_to_global(subrho, self._density)
+            # print(subrho.shape, self._density.shape)
+            self.graphtopo.sub_to_global(subrho, self._density, isub = isub, grid = grid)
 
     def set_density(self, subrho, isub = None, grid = None, fake = False):
         if fake :
-            self.graphtopo.sub_to_global(subrho, self._gaussian_density, overwrite = True)
+            self.graphtopo.sub_to_global(subrho, self._gaussian_density, overwrite = True, isub = isub, grid = grid)
         else :
-            self.graphtopo.sub_to_global(subrho, self._density, overwrite = True)
+            self.graphtopo.sub_to_global(subrho, self._density, overwrite = True, isub = isub, grid = grid)
 
     def add_to_sub(self, total, subrho, isub = None, grid = None):
         self.graphtopo.global_to_sub(total, subrho, isub = isub, grid = grid, add = True)
 
-    def sub_value(self, total, subrho, **kwargs):
-        self.graphtopo.global_to_sub(total, subrho, **kwargs)
+    def sub_value(self, total, subrho, isub = None, grid = None, **kwargs):
+        self.graphtopo.global_to_sub(total, subrho, isub = isub, grid = grid, **kwargs)
 
     @property
     def gaussian_density(self):

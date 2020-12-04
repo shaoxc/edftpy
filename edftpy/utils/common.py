@@ -11,6 +11,7 @@ from dftpy.math_utils import quartic_interpolation
 
 
 def Grid(lattice, nr, direct = True, origin=np.array([0.0, 0.0, 0.0]), units=None, full=False, uppergrid = None, **kwargs):
+    # kwargs['decomposition'] = 'Pencil'
     if direct :
         obj = DirectGrid(lattice, nr, origin = origin, units=units, full=full, uppergrid = uppergrid, **kwargs)
     else :
