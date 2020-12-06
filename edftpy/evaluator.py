@@ -21,6 +21,7 @@ class Evaluator(AbsFunctional):
         return self.compute(density, calcType, **kwargs)
 
     def compute(self, density, calcType=["E","V"], **kwargs):
+        # calcType = ['E', 'V']
         results = None
         for key, evalfunctional in self.funcdicts.items():
             obj = evalfunctional(density, calcType)

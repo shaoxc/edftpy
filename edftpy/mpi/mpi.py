@@ -28,12 +28,10 @@ class Graph :
         return self._region_index[i]
 
     def get_sub_index(self, i):
-        print('shift', self.sub_shift[i], self.region_shift[i])
         indl = self.sub_shift[i] - self.region_shift[i]
         indr = indl + self.sub_shape[i]
         ir = self.region_shape[i]
-        print('get_sub_index', indl, indr, ir)
-        # exit()
+        # print('get_sub_index', indl, indr, ir)
         if np.all(indl > -1) and np.all(indr < ir + 1) :
             index = np.s_[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]]
         else :
@@ -99,19 +97,6 @@ class GraphTopo:
             indr = indl + self.graph.sub_shape[i]
             # check the local data in the subsystem
             #-----------------------------------------------------------------------
-            # lflag = True
-            # for r in rpbc :
-                # il = indl_local + r * nrR
-                # ir = indr_local + r * nrR
-                # mask = (il < indl + 1) & (ir > indl)
-                # if np.all(mask): break
-                # mask = (il < indr) & (ir > indr - 1)
-                # if np.all(mask): break
-                # mask = (ir < indr + 1) & (ir > indl - 1) & (il > indl - 1)
-                # if np.all(mask): break
-            # else :
-                # lflag = False
-            #-----------------------------------------------------------------------
             lflag = False
             for r in rpbc :
                 il = indl_local + r * nrR
@@ -124,9 +109,7 @@ class GraphTopo:
                     lflag = True
                     break
             #-----------------------------------------------------------------------
-            # print(self.rank, ' -> ', indl_local, indr_local, indl, indr, lflag)
             # print('lflag', lflag, indl_local, indr_local, indl,indr, il, ir, self.rank)
-            # exit()
             if lflag :
                 offsets = il
                 ranks[self.rank] = self.rank
@@ -197,7 +180,6 @@ class GraphTopo:
             self.comm.Allreduce(self.MPI.IN_PLACE, self.rank_sub, op=self.MPI.SUM)
             self.comm.Allreduce(self.MPI.IN_PLACE, self.graph.sub_shape, op=self.MPI.SUM)
             self.comm.Allreduce(self.MPI.IN_PLACE, self.graph.sub_shift, op=self.MPI.SUM)
-            # self.graph.sub_ids = self.comm.allgather(self.graph.sub_ids)
         self.graph.sub_ids.update(of_id)
         # print(self.rank, ' sub -> ', self.graph.sub_shape,self.graph.sub_shift, driver.subcell.grid.nrR)
 
@@ -319,8 +301,7 @@ class GraphTopo:
             lflag = self.comm.allreduce(lflag, op=self.MPI.MAX)
         if not lflag : return
         #-----------------------------------------------------------------------
-        i = isub
-        # i = self.data_to_isub(sub_data, isub = isub, grid = grid)
+        i = self.data_to_isub(sub_data, isub = isub, grid = grid)
         if not self.is_mpi :
             self._sub_to_global_serial(i, sub_data, total, overwrite = overwrite)
             return
@@ -362,13 +343,11 @@ class GraphTopo:
                 self.creat_tmp_data(i)
                 index = self.graph.region_index(i)
                 # print('index', index, i, self.region_data[i].shape)
-                # exit()
                 self.region_data[i][index] = total
             self.region_to_sub(i, sub_data)
             # print('sub_data', sub_data.shape)
             if add and self.isub == i :
                 sub_data[:] += saved
-        # exit(0)
         return sub_data
 
     def data_to_isub(self, sub_data = None, isub = None, grid = None):
@@ -376,8 +355,9 @@ class GraphTopo:
             if grid is None and sub_data is None :
                 isub = -1
             else :
-                grid = grid & sub_data.grid
+                if grid is None :
+                    grid = sub_data.grid
                 isub = self.graph.sub_ids[id(grid)]
             if self.is_mpi :
-                self.comm.Allreduce(isub, isub, op=self.MPI.MAX)
+                isub=self.comm.allreduce(isub, op=self.MPI.MAX)
         return isub

@@ -75,14 +75,13 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
         if key.startswith('SUB'):
             subkeys.append(key)
     # subkeys.sort(reverse = True)
-    opt_drivers = []
+    drivers = []
     for i, keysys in enumerate(subkeys):
         if cell_change == 'position' :
-            driver = optimizer.opt_drivers[i]
+            driver = optimizer.drivers[i]
         else :
             driver = None
-
-        print('graphtopo.isub', graphtopo.isub)
+        # print('graphtopo.isub', graphtopo.isub)
         if config[keysys]["technique"] != 'OF' and graphtopo.isub != i and graphtopo.is_mpi:
             driver = None
         else :
@@ -91,12 +90,18 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
             else :
                 mp = MP(comm = graphtopo.comm_sub)
             driver = config2driver(config, keysys, ions, grid, pplist, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp)
-        opt_drivers.append(driver)
+            #-----------------------------------------------------------------------
+            #PSEUDO was evaluated on all processors, so directly remove from embedding
+            if 'PSEUDO' in driver.evaluator.embed_evaluator.funcdicts :
+                driver.evaluator.embed_evaluator.update_functional(remove = ['PSEUDO'])
+                gsystem.total_evaluator.update_functional(remove = ['PSEUDO'])
+            #-----------------------------------------------------------------------
+        drivers.append(driver)
     #-----------------------------------------------------------------------
-    print('build_region -> ', graphtopo.rank)
-    graphtopo.build_region(grid=gsystem.grid, drivers=opt_drivers)
+    # print('build_region -> ', graphtopo.rank)
+    graphtopo.build_region(grid=gsystem.grid, drivers=drivers)
     #-----------------------------------------------------------------------
-    for i, driver in enumerate(opt_drivers):
+    for i, driver in enumerate(drivers):
         if driver is None : continue
         if (driver.technique == 'OF' and graphtopo.is_root) or (graphtopo.isub == i and graphtopo.comm_sub.rank == 0):
             ase_io.ase_write('edftpy_subcell_' + str(i) + '.vasp', driver.subcell.ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
@@ -105,7 +110,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
     #-----------------------------------------------------------------------
     optimization_options = config["OPT"].copy()
     optimization_options["econv"] *= ions.nat
-    opt = Optimization(opt_drivers = opt_drivers, options = optimization_options, gsystem = gsystem)
+    opt = Optimization(drivers = drivers, options = optimization_options, gsystem = gsystem)
     return opt
 
 def config2graphtopo(config, subkeys = None, graphtopo = None):
@@ -121,6 +126,7 @@ def config2graphtopo(config, subkeys = None, graphtopo = None):
             if key.startswith('SUB'):
                 subkeys.append(key)
     nprocs = []
+    #OF driver set the procs to 0, make sure it use all resources
     for key in subkeys :
         if config[key]["technique"] == 'OF' :
             n = 0

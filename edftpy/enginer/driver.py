@@ -1,3 +1,5 @@
+import numpy as np
+from scipy import signal
 from abc import ABC, abstractmethod
 from edftpy.utils.common import Field
 
@@ -69,3 +71,22 @@ class Driver(ABC):
         else :
             gaussian_density = subcell.gaussian_density
         return gaussian_density
+
+    def _windows_function(self, grid, alpha = 0.5, bd = [5, 5, 5], **kwargs):
+        wf = []
+        for i in range(3):
+            if grid.pbc[i] :
+                wind = np.ones(grid.nr[i])
+            else :
+                wind = np.zeros(grid.nr[i])
+                n = grid.nr[i] - 2 * bd[i]
+                wind[bd[i]:n+bd[i]] = signal.tukey(n, alpha)
+            wf.append(wind)
+        array = np.einsum("i, j, k -> ijk", wf[0], wf[1], wf[2])
+        return array
+
+    @property
+    def filter(self):
+        if self._filter is None :
+            self._filter = self._windows_function(self.grid)
+        return self._filter

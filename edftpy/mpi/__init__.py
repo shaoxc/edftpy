@@ -4,4 +4,4 @@ import copy
 import sys
 from dftpy.mpi import MP
 from .utils import graphtopo, sprint
-from .mpi import GraphTopo
+from .mpi import GraphTopo, SerialComm

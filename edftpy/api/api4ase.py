@@ -45,7 +45,7 @@ class eDFTpyCalculator(object):
         if self.check_restart(atoms):
             self.update_optimizer(atoms)
         if self._forces is None :
-            self._forces = get_forces(self.optimizer.opt_drivers, self.optimizer.gsystem)
+            self._forces = get_forces(self.optimizer.drivers, self.optimizer.gsystem)
         return self._forces * FORCE_CONV["Ha/Bohr"]["eV/A"]
 
     def get_stress(self, atoms):

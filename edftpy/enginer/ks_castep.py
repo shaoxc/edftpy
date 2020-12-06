@@ -18,8 +18,7 @@ from edftpy.mpi import sprint
 class CastepKS(Driver):
     """description"""
     def __init__(self, evaluator = None, subcell = None, prefix = 'castep_in_sub', params = None, cell_params = None,
-            exttype = 3, base_in_file = None, castep_in_file = None, mixer = None, ncharge = None, gsystem = None,
-            options = None, comm = None, **kwargs):
+            exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None, **kwargs):
         '''
         exttype :
                     1 : only pseudo                  : 001
@@ -41,20 +40,15 @@ class CastepKS(Driver):
         self.eigs = None
         self.fermi = None
         self.perform_mix = False
-        self.mdl = None
         self.ncharge = ncharge
-        self.gsystem_driver = gsystem
-        #Will remove 'castep_in_file' later
-        if base_in_file is None :
-            base_in_file = castep_in_file
-        #-----------------------------------------------------------------------
+        self.comm = self.subcell.grid.mp.comm
         if self.prefix :
-            self._build_ase_atoms(params, cell_params, base_in_file)
-            self._write_cell(self.prefix + '.cell', params = cell_params)
-            self._write_params(self.prefix + '.param', params = params)
+            if self.comm.rank == 0 :
+                self.build_input(params, cell_params, base_in_file)
         else :
             self.prefix = os.path.splitext(base_in_file)[0]
 
+        if self.comm.size > 1 : self.comm.Barrier()
         self._driver_initialise()
         self._iter = 0
         self._filter = None
@@ -64,7 +58,6 @@ class CastepKS(Driver):
         self.grid_driver = self.get_grid_driver(self.grid)
         #-----------------------------------------------------------------------
         self.init_density()
-        self._format_density_invert(self.charge, self.grid)
         #-----------------------------------------------------------------------
         if self.mixer is None :
             # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
@@ -73,7 +66,7 @@ class CastepKS(Driver):
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
         if self.grid_driver is not None :
             sprint('{} has two grids :{} and {}'.format(self.__class__.__name__, self.grid.nr, self.grid_driver.nr))
-        self._grid_fine = None
+        self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
 
     @property
     def grid(self):
@@ -95,6 +88,11 @@ class CastepKS(Driver):
         else :
             grid_driver = None
         return grid_driver
+
+    def build_input(self, params, cell_params, base_in_file):
+        self._build_ase_atoms(params, cell_params, base_in_file)
+        self._write_cell(self.prefix + '.cell', params = cell_params)
+        self._write_params(self.prefix + '.param', params = params)
 
     def _build_ase_atoms(self, params = None, cell_params = None, base_in_file = None):
         ase_atoms = ions2ase(self.subcell.ions)
@@ -168,26 +166,27 @@ class CastepKS(Driver):
         self.mdl = mdl
 
     def init_density(self, rho_ini = None):
+        self.density = Field(grid=self.grid)
+        self.prev_density = Field(grid=self.grid)
         #-----------------------------------------------------------------------
         caspytep.density.density_symmetrise(self.mdl.den)
         #-----------------------------------------------------------------------
         if rho_ini is not None :
             self._format_density(rho_ini, sym = False)
 
-        self.charge = self.mdl.den.real_charge
+        if self.grid_driver is not None :
+            grid = self.grid_driver
+        else :
+            grid = self.grid
 
-        density = self._format_density_invert(self.charge, self.grid)
-        density = normalization_density(density, ncharge = self.ncharge, grid = self.grid)
-        self._format_density(density, sym = False)
-        # self.charge = self._format_density_invert(self.mdl.den, self.grid)
-        # self.charge = normalization_density(self.charge, ncharge = self.ncharge, grid = self.grid)
-        # self._format_density(self.charge, sym = False)
-        #-----------------------------------------------------------------------
-        # self.mdl.den.real_charge[self.mdl.den.real_charge < 1E-30] = 1E-30
-        # print('sum', np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
-        # self.mdl.den.real_charge *= real_charge/ (np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
-        # print('sum2', np.sum(self.mdl.den.real_charge)/np.size(self.mdl.den.real_charge))
-        #-----------------------------------------------------------------------
+        self.charge = np.empty((grid.nnr, 1), order = 'F')
+        self.prev_charge = np.empty((grid.nnr, 1), order = 'F')
+        self.charge[:] = self.mdl.den.real_charge
+
+        if self.comm.rank == 0 :
+            self.density[:] = self._format_density_invert()
+            self.density = normalization_density(self.density, ncharge = self.ncharge, grid = self.grid)
+        self._format_density(sym = False)
 
     def _write_cell(self, outfile, pbc = None, params = None, **kwargs):
         ase_atoms = self.ase_atoms
@@ -214,65 +213,44 @@ class CastepKS(Driver):
         if sym :
             caspytep.density.density_symmetrise(self.mdl.den)
             caspytep.density.density_augment(self.mdl.wvfn,self.mdl.occ,self.mdl.den)
-        self.charge = self.mdl.den.real_charge
+        self.charge[:] = self.mdl.den.real_charge
         #-----------------------------------------------------------------------
         self.density[:] = self._format_density_invert(**kwargs)
         self.prev_density[:] = self.density
         return
 
     def _format_density_invert(self, charge = None, grid = None, **kwargs):
-
-        if hasattr(charge, 'real_charge'):
-            density = charge.real_charge.copy()
-        else :
-            density = charge.copy()
-
-        # if charge is None :
-            # charge = self.charge
-        # density = charge.copy()
+        if charge is None :
+            charge = self.charge
 
         if grid is None :
             grid = self.grid
 
-        if self.grid_driver is not None and np.any(self.grid_driver.nr != grid.nr):
+        if self.grid_driver is not None and np.any(self.grid_driver.nrR != grid.nrR):
             density /= grid.volume
-            density = Field(grid=self.grid_driver, direct=True, data = density, order = 'F')
+            density = Field(grid=self.grid_driver, direct=True, data = charge, order = 'F')
             rho = grid_map_data(density, grid = grid)
         else :
             density /= grid.volume
-            rho = Field(grid=grid, rank=1, direct=True, data = density, order = 'F')
+            rho = Field(grid=grid, rank=1, direct=True, data = charge, order = 'F')
         return rho
 
-    def _get_extpot(self, charge = None, grid = None, **kwargs):
-        rho = self._format_density_invert(charge, grid, **kwargs)
-        self.evaluator.get_embed_potential(rho, gaussian_density = self.subcell.gaussian_density, with_global = True)
-        extpot = self.evaluator.embed_potential
-        extene = (extpot * rho).integral()
+    def _get_extpot(self, **kwargs):
+        if self.comm.rank == 0 :
+            self.evaluator.get_embed_potential(self.density, gaussian_density = self.gaussian_density)
+            extpot = self.evaluator.embed_potential
+            extene = (extpot * self.density).integral()
+        else :
+            extpot = np.empty(self.grid.nrR)
+            extene = 0.0
+        if self.comm.size > 1 :
+            extene = self.comm.bcast(extene, root = 0)
         if self.grid_driver is not None :
             extpot = grid_map_data(extpot, grid = self.grid_driver)
         extpot = extpot.ravel(order = 'F')
         return extpot, extene
 
-    def _windows_function(self, grid, alpha = 0.5, bd = [5, 5, 5], **kwargs):
-        wf = []
-        for i in range(3):
-            if grid.pbc[i] :
-                wind = np.ones(grid.nr[i])
-            else :
-                wind = np.zeros(grid.nr[i])
-                n = grid.nr[i] - 2 * bd[i]
-                wind[bd[i]:n+bd[i]] = signal.tukey(n, alpha)
-            wf.append(wind)
-        array = np.einsum("i, j, k -> ijk", wf[0], wf[1], wf[2])
-        return array
-
-    @property
-    def filter(self):
-        if self._filter is None :
-            self._filter = self._windows_function(self.grid)
-        return self._filter
-
-    def get_density(self, density, vext = None, **kwargs):
+    def get_density(self, vext = None, **kwargs):
         '''
         Must call first time
         '''
@@ -287,10 +265,10 @@ class CastepKS(Driver):
             caspytep.parameters.get_current_params().max_scf_cycles = 1
             self.perform_mix = False
 
-        self._format_density(density, sym = sym)
+        self._format_density(sym = sym)
+        extpot, extene = self._get_extpot()
 
-        extpot, extene = self._get_extpot(self.charge, density.grid)
-        self.prev_charge = self.charge.copy()
+        self.prev_charge[:] = self.charge
 
         if self._iter > 0 :
             # print('perform_mix', self.exttype,self.perform_mix)
@@ -298,18 +276,15 @@ class CastepKS(Driver):
                 self.mdl, extpot, extene, self.exttype, self.perform_mix)
         else :
             self.mdl.converged = caspytep.electronic.electronic_minimisation(self.mdl)
-        # self.prev_charge = self.mdl.den.real_charge.copy()
 
         caspytep.density.density_calculate_soft(self.mdl.wvfn,self.mdl.occ, self.mdl.den)
         if sym :
             caspytep.density.density_symmetrise(self.mdl.den)
             caspytep.density.density_augment(self.mdl.wvfn,self.mdl.occ,self.mdl.den)
 
-        self.charge = self.mdl.den.real_charge
-        rho = self._format_density_invert(self.charge, density.grid)
-        # rho = self._format_density_invert(self.mdl.den, density.grid)
-        print('KS_Chemical_potential ', self.get_fermi_level())
-        return rho
+        self.charge[:] = self.mdl.den.real_charge
+        self.density[:] = self._format_density_invert()
+        return self.density
 
     def get_kinetic_energy(self, **kwargs):
         energy = caspytep.electronic.electronic_get_energy('kinetic_energy')
@@ -370,30 +345,37 @@ class CastepKS(Driver):
         return func
 
     def update_density(self, **kwargs):
-        mix_grid = False
-        # mix_grid = True
         if self.mixer is None :
             if self._iter > 1 :
-                caspytep.dm.dm_mix_density(self.mdl.den, self.mdl.den)
-                # mixed, residual_norm = caspytep.dm.dm_mix_density(self.mdl.den, self.mdl.den)
-                # print('residual_norm', self._iter, residual_norm)
-            rho = self._format_density_invert(self.mdl.den, self.grid)
-        else :
+                self.residual_norm = 0.0
+                caspytep.dm.dm_mix_density(self.mdl.den, self.mdl.den, residual_norm = self.residual_norm)
+            self.density[:] = self._format_density_invert(self.mdl.den.real_charge, self.grid)
+            sprint('res_norm_ks', self._iter, self.residual_norm, self.residual_norm, comm=self.comm)
+            return self.density
+        if self.comm.rank == 0 :
+            mix_grid = False
+            # mix_grid = True
             if self.grid_driver is not None and mix_grid:
-                grid = self.grid_driver
+                prev_density = self._format_density_invert(self.prev_charge, self.grid_driver)
+                density = self._format_density_invert(self.charge, self.grid_driver)
             else :
-                grid = self.grid
-            prev_density = self._format_density_invert(self.prev_charge, grid)
-            density = self._format_density_invert(self.charge, grid)
-            # density = self._format_density_invert(self.mdl.den, grid)
+                prev_density = self.prev_density
+                density = self.density
             #-----------------------------------------------------------------------
             r = density - prev_density
-            print('res_norm_ks', self._iter, np.max(abs(r)), np.sqrt(np.sum(r * r)/np.size(r)))
+            self.residual_norm = np.sqrt(np.sum(r * r)/r.size)
+            rmax = r.amax()
+            sprint('res_norm_ks', self._iter, rmax, self.residual_norm, comm=self.comm)
             #-----------------------------------------------------------------------
             rho = self.mixer(prev_density, density, **kwargs)
             if self.grid_driver is not None and mix_grid:
                 rho = grid_map_data(rho, grid = self.grid)
-        return rho
+            self.density[:] = rho
+        else :
+            self.residual_norm = 100.0
+        if self.comm.size > 1 :
+            self.residual_norm = self.comm.bcast(self.residual_norm, root=0)
+        return self.density
 
     def get_fermi_level(self, **kwargs):
         results = self.mdl.fermi_energy

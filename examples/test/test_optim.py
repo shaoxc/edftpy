@@ -45,8 +45,7 @@ class Test(unittest.TestCase):
         evaluator = Evaluator(**funcdicts)
         optimization_options = {'econv' : 1e-6, 'maxfun' : 50, 'maxiter' : 100}
         optimization_options["econv"] *= ions.nat
-        opt = Optimization(EnergyEvaluator= evaluator, optimization_options = optimization_options, 
-                optimization_method = 'CG-HS')
+        opt = Optimization(EnergyEvaluator= evaluator, optimization_options = optimization_options, optimization_method = 'CG-HS')
         new_rho = opt.optimize_rho(guess_rho=rho_ini)
         ewald_ = ewald(rho=new_rho, ions=ions, PME=True)
         energy = opt.functional.energy + ewald_.energy

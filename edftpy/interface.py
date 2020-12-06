@@ -13,15 +13,15 @@ def optimize_density_conf(config, **kwargs):
     energy = opt.energy
     sprint('Final energy (a.u.)', energy)
     sprint('Final energy (eV)', energy * ENERGY_CONV['Hartree']['eV'])
-    # for i, driver in enumerate(opt.opt_drivers):
+    # for i, driver in enumerate(opt.drivers):
         # io.write('final_sub_' + str(i) + '.xsf', driver.density, driver.subcell.ions)
     # io.write('final.xsf', opt.density, opt.gsystem.ions)
     return opt
 
-def get_forces(opt_drivers = None, gsystem = None, linearii=True):
+def get_forces(drivers = None, gsystem = None, linearii=True):
     forces = gsystem.get_forces(linearii = linearii)
     sprint('Total forces0 : \n', forces)
-    for i, driver in enumerate(opt_drivers):
+    for i, driver in enumerate(drivers):
         fs = driver.get_forces()
         ind = driver.subcell.ions_index
         sprint('ind', ind)

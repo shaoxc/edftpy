@@ -2,7 +2,7 @@ image: registry.gitlab.com/pavanello-research-group/dftpy:latest
 
 Test:
   before_script:
-    - git clone https://gitlab.com/pavanello-research-group/dftpy.git
+    - git clone -b mpi2 https://gitlab.com/pavanello-research-group/dftpy.git
     - home=$( pwd )
     - cd dftpy
     - python setup.py install --user

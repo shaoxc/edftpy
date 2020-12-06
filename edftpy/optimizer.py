@@ -9,11 +9,11 @@ from edftpy.mpi import sprint
 
 class Optimization(object):
 
-    def __init__(self, opt_drivers=None, gsystem = None, options=None):
-        if opt_drivers is None:
+    def __init__(self, drivers=None, gsystem = None, options=None):
+        if drivers is None:
             raise AttributeError("Must provide optimization driver (list)")
         else:
-            self.opt_drivers = opt_drivers
+            self.drivers = drivers
 
         self.gsystem = gsystem
 
@@ -32,11 +32,8 @@ class Optimization(object):
             for func in func_list :
                 if func is not None :
                     energy += func.energy
-        # print('ssssssss', energy, self.gsystem.graphtopo.rank)
         energy += self.gsystem.ewald.energy
         energy = self.gsystem.grid.mp.asum(energy)
-        self.gsystem.graphtopo.comm.Barrier()
-        # exit()
         return energy
 
     def get_energy_all(self, totalrho = None, totalfunc = None, olevel = 0, **kwargs):
@@ -46,7 +43,7 @@ class Optimization(object):
                 totalrho = self.gsystem.density.copy()
             totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
         elist.append(totalfunc.energy)
-        for i, driver in enumerate(self.opt_drivers):
+        for i, driver in enumerate(self.drivers):
             if driver is None :
                 ene = 0.0
             else :
@@ -64,7 +61,7 @@ class Optimization(object):
         #-----------------------------------------------------------------------
         # diff_res = self.get_diff_residual()
         # sprint('diff_res', diff_res)
-        for i, driver in enumerate(self.opt_drivers):
+        for i, driver in enumerate(self.drivers):
             # coef = driver.calculator.mixer.coef.copy()
             # sprint('coef',coef, 'i', i)
             # coef[0] = self.get_frag_coef(coef[0], diff_res[i], diff_res)
@@ -74,7 +71,7 @@ class Optimization(object):
             if update[i] :
                 driver.update_density(coef = coef)
 
-        for i, driver in enumerate(self.opt_drivers):
+        for i, driver in enumerate(self.drivers):
             if driver is None :
                 density = None
             else :
@@ -96,7 +93,7 @@ class Optimization(object):
             self.gsystem = gsystem
 
         self.gsystem.gaussian_density[:] = 0.0
-        for i, driver in enumerate(self.opt_drivers):
+        for i, driver in enumerate(self.drivers):
             if driver is None :
                 density = None
                 gaussian_density = None
@@ -115,7 +112,7 @@ class Optimization(object):
         # if self.gsystem.graphtopo.rank == 0 :
             # io.write('a.xsf', value, ions = self.gsystem.ions)
         # exit(0)
-        self.nsub = len(self.opt_drivers)
+        self.nsub = len(self.drivers)
         energy_history = []
 
         mu_list = np.zeros(self.nsub)
@@ -137,7 +134,7 @@ class Optimization(object):
         embed_keys = []
         of_ids = []
         of_drivers = []
-        for i, driver in enumerate(self.opt_drivers):
+        for i, driver in enumerate(self.drivers):
             if driver is not None :
                 if driver.technique== 'OF' :
                     of_drivers.append(driver)
@@ -145,6 +142,8 @@ class Optimization(object):
                 else :
                     embed_keys = driver.evaluator.embed_evaluator.funcdicts.keys()
                     break
+        # print('embed_keys', embed_keys)
+        # exit()
         #-----------------------------------------------------------------------
         update = [True for _ in range(self.nsub)]
         for it in range(self.options['maxiter']):
@@ -156,7 +155,7 @@ class Optimization(object):
                 self.gsystem.total_evaluator.get_embed_potential(totalrho, gaussian_density = self.gsystem.gaussian_density, embed_keys = embed_keys, with_global = True)
             for isub in range(self.nsub + len(of_drivers)):
                 if isub < self.nsub :
-                    driver = self.opt_drivers[isub]
+                    driver = self.drivers[isub]
                     # initial the global_potential
                     if driver is None :
                         global_potential = None
@@ -170,7 +169,7 @@ class Optimization(object):
             #-----------------------------------------------------------------------
             for isub in range(self.nsub + len(of_drivers)):
                 if isub < self.nsub :
-                    driver = self.opt_drivers[isub]
+                    driver = self.drivers[isub]
                     if driver is None or driver.technique == 'OF' :
                         continue
                     i = isub
@@ -233,7 +232,7 @@ class Optimization(object):
 
     def get_diff_residual(self, **kwargs):
         diff_res = []
-        for i, driver in enumerate(self.opt_drivers):
+        for i, driver in enumerate(self.drivers):
             if driver is not None :
                 diff_res.append(driver.residual_norm)
         return diff_res
@@ -252,7 +251,7 @@ class Optimization(object):
         return True
 
     def _update_try(self, it, res_norm):
-        update = [True for _ in range(len(self.opt_drivers))]
+        update = [True for _ in range(len(self.drivers))]
         freq = 5
         for i, item in enumerate(res_norm):
             if i == 0 :
@@ -271,8 +270,8 @@ class Optimization(object):
 
                 if update[i] :
                     if it > freq :
-                        self.opt_drivers[ide].calculator.mixer.restart()
-                        self.opt_drivers[ide].calculator.mixer._delay = 0
+                        self.drivers[ide].calculator.mixer.restart()
+                        self.drivers[ide].calculator.mixer._delay = 0
         return update
 
     def _transfer_electron(self, denlist = None, mu = None, **kwargs):
@@ -297,7 +296,7 @@ class Optimization(object):
 
     def get_diff_residual_ene(self, **kwargs):
         diff_res = []
-        for i, driver in enumerate(self.opt_drivers):
+        for i, driver in enumerate(self.drivers):
             if driver is not None :
                 r = driver.density - driver.prev_density
                 res_norm = np.sqrt(driver.grid.mp.asum(r * r)/driver.grid.nnrR)

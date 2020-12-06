@@ -137,13 +137,13 @@ class AtomicDensity(object):
     def guess_rho_heg(self, ions, grid, ncharge = None, rho = None, ndens = 2, dtol=1E-30, **kwargs):
         """
         """
-        if rho is None :
-            rho = Field(grid)
-
         if ncharge is None :
             ncharge = 0.0
             for i in range(ions.nat) :
                 ncharge += ions.Zval[ions.labels[i]]
+        if rho is None :
+            rho = Field(grid)
+            rho[:] = 1.0
         rho[:] = ncharge / (rho.integral())
         return rho
 

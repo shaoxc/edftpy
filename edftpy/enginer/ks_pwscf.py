@@ -12,7 +12,7 @@ from ..utils.common import Grid, Field, Functional
 from ..utils.math import grid_map_data
 from ..density import normalization_density
 from .driver import Driver
-from edftpy.mpi import sprint
+from edftpy.mpi import sprint, SerialComm
 
 class PwscfKS(Driver):
     """description"""
@@ -45,14 +45,12 @@ class PwscfKS(Driver):
         if self.prefix :
             self.prefix += '.in'
             if self.comm.rank == 0 :
-                in_params, cards = self._build_ase_atoms(params, cell_params, base_in_file)
-                self._write_params(self.prefix, params = in_params, cell_params = cell_params, cards = cards)
+                self.build_input(params, cell_params, base_in_file)
         else :
             self.prefix = base_in_file
 
-        if self.comm.size > 1 :
-            self.comm.Barrier()
-        self._driver_initialise(self.prefix)
+        if self.comm.size > 1 : self.comm.Barrier()
+        self._driver_initialise()
         self._iter = 0
         self._filter = None
         self.mixer = mixer
@@ -69,11 +67,11 @@ class PwscfKS(Driver):
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
         if self.grid_driver is not None :
             sprint('{} has two grids :{} and {}'.format(self.__class__.__name__, self.grid.nr, self.grid_driver.nr), comm=self.comm)
-
-        kf = 0.1
-        self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.5], predecut = 0, delay = 1)
+        # kf = 0.1
+        # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.5], predecut = 0, delay = 1)
         #-----------------------------------------------------------------------
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
+        self.energy = 0.0
 
     @property
     def grid(self):
@@ -92,6 +90,10 @@ class PwscfKS(Driver):
         else :
             grid_driver = None
         return grid_driver
+
+    def build_input(self, params, cell_params, base_in_file):
+        in_params, cards = self._build_ase_atoms(params, cell_params, base_in_file)
+        self._write_params(self.prefix, params = in_params, cell_params = cell_params, cards = cards)
 
     def _build_ase_atoms(self, params = None, cell_params = None, base_in_file = None):
         ase_atoms = ions2ase(self.subcell.ions)
@@ -118,13 +120,13 @@ class PwscfKS(Driver):
 
         return in_params, card_lines
 
-    def _driver_initialise(self, infile = None, **kwargs):
-        if self.comm is None :
+    def _driver_initialise(self, **kwargs):
+        if self.comm is None or isinstance(self.comm, SerialComm):
             comm = None
         else :
             comm = self.comm.py2f()
             # print('comm00', comm, self.comm.size)
-        pwscfpy.pwpy_pwscf(infile, comm)
+        pwscfpy.pwpy_pwscf(self.prefix, comm)
 
     def init_density(self, rho_ini = None):
         self.density = Field(grid=self.grid)
@@ -143,7 +145,7 @@ class PwscfKS(Driver):
 
         if self.comm.rank == 0 :
             self.density[:] = self._format_density_invert()
-            print('ncharge', self.density.integral())
+            # print('ncharge', self.density.integral())
             self.density = normalization_density(self.density, ncharge = self.ncharge, grid = self.grid)
         self._format_density(sym = False)
 
@@ -162,8 +164,9 @@ class PwscfKS(Driver):
         if 'kpts' not in cell_params :
             self._update_kpoints(cell_params, cards)
         # outdir of qe
-        params['control']['outdir'] = self.prefix + '.tmp'
-        params['control']['prefix'] = self.prefix
+        prefix = os.path.splitext(self.prefix)[0]
+        params['control']['prefix'] = prefix
+        params['control']['outdir'] = prefix + '.tmp'
         ase_io_driver.write_espresso_in(fileobj, self.ase_atoms, params, **cell_params)
         self._write_params_cards(fileobj, params, cards)
         fileobj.close()
@@ -244,11 +247,13 @@ class PwscfKS(Driver):
         else :
             extpot = np.empty(self.grid.nrR)
             extene = 0.0
+            self.evaluator.get_embed_potential(self.density, gaussian_density = self.gaussian_density)
         if self.comm.size > 1 :
             extene = self.comm.bcast(extene, root = 0)
         if self.grid_driver is not None :
             extpot = grid_map_data(extpot, grid = self.grid_driver)
         extpot = extpot.ravel(order = 'F') * 2.0 # a.u. to Ry
+        extene *= -2.0
         return extpot, extene
 
     def get_density(self, vext = None, **kwargs):
@@ -271,15 +276,16 @@ class PwscfKS(Driver):
 
         self.prev_charge[:] = self.charge
 
+        # extene = 0.0
         if self._iter > 0 :
         # if self._iter > 100 :
-            pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, self.exttype, initial)
+            self.energy = pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, self.exttype, initial)
         else :
-            pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, 0, initial)
+            self.energy = pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, 0, initial)
 
         pwscfpy.pwpy_sum_band()
-        if sym :
-            pwscfpy.pwpy_sum_band_sym()
+        # if sym :
+            # pwscfpy.pwpy_sum_band_sym()
         pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
         self.density[:] = self._format_density_invert()
         return self.density
@@ -291,6 +297,7 @@ class PwscfKS(Driver):
     def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
         if 'E' in calcType :
             energy = self.get_energy()
+            # energy = self.energy
 
         if self.comm.rank == 0 :
             func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = False)
@@ -302,8 +309,8 @@ class PwscfKS(Driver):
 
         if 'E' in calcType :
             func.energy += energy
-
-        sprint('sub_energy_ks', func.energy, comm=self.comm)
+            sprint('sub_energy_ks', func.energy, comm=self.comm)
+            self.energy = func.energy
         return func
 
     def update_density(self, **kwargs):
