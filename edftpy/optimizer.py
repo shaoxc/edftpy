@@ -26,26 +26,19 @@ class Optimization(object):
         self.options = default_options
         self.options.update(options)
 
-    def get_energy(self, func_list = None, **kwargs):
-        energy = 0.0
-        if func_list is not None :
-            for func in func_list :
-                if func is not None :
-                    energy += func.energy
-        energy += self.gsystem.ewald.energy
-        energy = self.gsystem.grid.mp.asum(energy)
-        return energy
-
-    def get_energy_all(self, totalrho = None, totalfunc = None, olevel = 0, **kwargs):
+    def get_energy(self, totalrho = None, totalfunc = None, olevel = 0, **kwargs):
         elist = []
         if totalfunc is None :
             if totalrho is None :
                 totalrho = self.gsystem.density.copy()
             totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
-        elist.append(totalfunc.energy)
+        ene = totalfunc.energy / totalrho.mp.size
+        elist.append(ene)
         for i, driver in enumerate(self.drivers):
             if driver is None :
                 ene = 0.0
+            elif olevel < 0 : # use saved energy
+                ene = driver.energy
             else :
                 self.gsystem.density[:] = totalrho
                 driver(density =driver.density, gsystem = self.gsystem, calcType = ['E'], olevel = olevel)
@@ -54,10 +47,11 @@ class Optimization(object):
         elist = np.asarray(elist)
         etotal = np.sum(elist) + self.gsystem.ewald.energy
         etotal = self.gsystem.grid.mp.asum(etotal)
-        energy = [etotal, elist]
-        return energy
+        elist = self.gsystem.grid.mp.vsum(elist)
+        # print('elist', etotal, elist)
+        return (etotal, elist)
 
-    def update_density(self, update = None, mu = None, **kwargs):
+    def update_density(self, update = None, **kwargs):
         #-----------------------------------------------------------------------
         # diff_res = self.get_diff_residual()
         # sprint('diff_res', diff_res)
@@ -113,10 +107,6 @@ class Optimization(object):
             # io.write('a.xsf', value, ions = self.gsystem.ions)
         # exit(0)
         self.nsub = len(self.drivers)
-        energy_history = []
-
-        mu_list = np.zeros(self.nsub)
-        func_list = [None,] * (self.nsub + 1)
         energy_history = [0.0]
         #-----------------------------------------------------------------------
         fmt = "           {:8s}{:24s}{:16s}{:16s}{:8s}{:16s}".format("Step", "Energy(a.u.)", "dE", "dP", "Nls", "Time(s)")
@@ -143,7 +133,6 @@ class Optimization(object):
                     embed_keys = driver.evaluator.embed_evaluator.funcdicts.keys()
                     break
         # print('embed_keys', embed_keys)
-        # exit()
         #-----------------------------------------------------------------------
         update = [True for _ in range(self.nsub)]
         for it in range(self.options['maxiter']):
@@ -186,17 +175,14 @@ class Optimization(object):
 
                 if update[i] :
                     self.gsystem.density[:] = totalrho
-                    driver(gsystem = self.gsystem, calcType = ['O', 'E'], olevel = olevel)
-                    func_list[i] = driver.functional
-                    mu_list[i] = driver.mu
+                    driver(gsystem = self.gsystem, calcType = ['O'], olevel = olevel)
             # res_norm = self.get_diff_residual()
             #-----------------------------------------------------------------------
-            totalrho = self.update_density(mu = mu_list, update = update)
+            totalrho = self.update_density(update = update)
             res_norm = self.get_diff_residual()
 
             totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
-            func_list[i + 1] = totalfunc
-            energy = self.get_energy(func_list)
+            energy = self.get_energy(totalrho, totalfunc, olevel = olevel)[0]
             #-----------------------------------------------------------------------
             energy_history.append(energy)
             timecost = time.time()
@@ -208,10 +194,11 @@ class Optimization(object):
             if self.check_converge(energy_history):
                 sprint("#### Subsytem Density Optimization Converged ####")
                 break
+            # exit()
         if self.options['maxiter'] < 1 :
             totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
         # self.energy = energy
-        self.energy = self.get_energy_all(totalrho, totalfunc, olevel = 0)[0]
+        self.energy = self.get_energy(totalrho, totalfunc, olevel = 0)[0]
         self.density = totalrho
         return
 

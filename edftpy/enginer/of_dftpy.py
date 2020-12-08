@@ -240,9 +240,9 @@ class DFTpyOF(Driver):
         elif olevel == 2 :
             func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False, with_embed = True)
         func_driver = self.evaluator_of.compute(self.charge, calcType = ['E'], with_sub = True, with_global = False, with_embed = False, with_ke = True)
-        func.energy += func_driver.energy/self.grid.mp.size
-        sub_energy_of = self.grid.mp.asum(func.energy)
-        sprint('sub_energy_of', sub_energy_of, comm=self.comm)
+        func.energy += func_driver.energy
+        sprint('sub_energy_of', func.energy, comm=self.comm)
+        func.energy /= self.grid.mp.size
         return func
 
     def update_density(self, **kwargs):
@@ -300,5 +300,6 @@ def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None):
     conf = OptionFormat(conf)
     struct = System(ions, rho.grid, name='density', field=rho)
     opt = OptimizeDensityConf(conf, struct, evaluator)
-    rho[:] = opt['density']
-    return rho
+    # rho[:] =opt['density'] 
+    # return rho
+    return opt['density']

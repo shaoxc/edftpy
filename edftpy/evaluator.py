@@ -42,6 +42,8 @@ class Evaluator(AbsFunctional):
             else :
                 potential = None
             results = Functional(name = 'ZERO', energy=energy, potential=potential)
+        if 'E' in calcType :
+            results.energy = density.mp.vsum(results.energy)
         return results
 
     def update_functional(self, remove = [], add = {}):
@@ -113,6 +115,8 @@ class EnergyEvaluatorMix(AbsFunctional):
         elif self.embed_evaluator is not None :
             obj = self.embed_evaluator(rho, calcType = calcType)
             obj *= -1.0
+            if 'E' in calcType :
+                obj.energy /= rho.mp.size
         else :
             if 'V' in calcType :
                 potential = Field(grid=rho.grid, rank=1, direct=True)
@@ -122,6 +126,9 @@ class EnergyEvaluatorMix(AbsFunctional):
 
         if self.ke_evaluator is not None and with_ke:
             obj += self.ke_evaluator(rho, calcType = calcType)
+
+        if 'E' in calcType :
+            obj.energy = rho.mp.vsum(obj.energy)
         return obj
 
 class EvaluatorOF(AbsFunctional):
@@ -187,12 +194,8 @@ class EvaluatorOF(AbsFunctional):
             obj = Functional(name = 'ZERO', energy=0.0, potential=potential)
         else :
             obj = self.sub_evaluator(rho, calcType = calcType)
-        #-----------------------------------------------------------------------
-        # if not np.all(rho.grid.nr == self.embed_potential.grid.nr) :
-            # self.embed_potential = grid_map_data(self.embed_potential, grid = rho.grid)
-        # if not np.all(rho.grid.nr == self.rest_rho.grid.nr) :
-            # self.rest_rho = grid_map_data(self.rest_rho, grid = rho.grid)
-        #-----------------------------------------------------------------------
+            if 'E' in calcType :
+                obj.energy /= rho.mp.size
         #Embedding potential
         if with_embed :
             if 'V' in calcType :
@@ -210,6 +213,7 @@ class EvaluatorOF(AbsFunctional):
             if 'V' in calcType :
                 self.gsystem.add_to_sub(obj_global.potential, obj.potential)
             if 'E' in calcType :
+                obj_global.energy /= self.gsystem.grid.mp.size
                 obj.energy += obj_global.energy
         if 'E' in calcType :
             obj.energy = rho.mp.vsum(obj.energy)

@@ -226,12 +226,11 @@ class CastepKS(Driver):
         if grid is None :
             grid = self.grid
 
+        density = charge/grid.volume
         if self.grid_driver is not None and np.any(self.grid_driver.nrR != grid.nrR):
-            density /= grid.volume
             density = Field(grid=self.grid_driver, direct=True, data = charge, order = 'F')
             rho = grid_map_data(density, grid = grid)
         else :
-            density /= grid.volume
             rho = Field(grid=grid, rank=1, direct=True, data = charge, order = 'F')
         return rho
 

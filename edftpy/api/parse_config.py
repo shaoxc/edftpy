@@ -283,7 +283,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         elif initial or technique == 'OF' :
             atomicd = AtomicDensity()
             subsys.density[:] = atomicd.guess_rho(subsys.ions, subsys.grid)
-            dftpy_opt(subsys.ions, subsys.density, pplist)
+            subsys.density[:] = dftpy_opt(subsys.ions, subsys.density, pplist)
     #-----------------------------------------------------------------------
     if mix_kwargs['scheme'] == 'Pulay' :
         mixer = PulayMixer(**mix_kwargs)

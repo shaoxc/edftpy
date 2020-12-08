@@ -247,7 +247,6 @@ class PwscfKS(Driver):
         else :
             extpot = np.empty(self.grid.nrR)
             extene = 0.0
-            self.evaluator.get_embed_potential(self.density, gaussian_density = self.gaussian_density)
         if self.comm.size > 1 :
             extene = self.comm.bcast(extene, root = 0)
         if self.grid_driver is not None :
@@ -340,7 +339,7 @@ class PwscfKS(Driver):
         return self.density
 
     def get_fermi_level(self, **kwargs):
-        results = pwscfpy.ener.ef
+        results = pwscfpy.ener.get_ef()
         return results
 
     def get_forces(self, icalc = 2, **kwargs):
@@ -351,7 +350,8 @@ class PwscfKS(Driver):
                 2 : no ewald and local_potential
         """
         pwscfpy.pwpy_forces(icalc)
-        forces = pwscfpy.force_mod.force.T
+        # forces = pwscfpy.force_mod.force.T
+        forces = pwscfpy.force_mod.get_array_force().T
         return forces
 
     def get_stress(self, **kwargs):
