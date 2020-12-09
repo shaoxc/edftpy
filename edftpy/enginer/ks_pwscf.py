@@ -42,6 +42,7 @@ class PwscfKS(Driver):
         self.perform_mix = False
         self.ncharge = ncharge
         self.comm = self.subcell.grid.mp.comm
+        self.outfile = None
         if self.prefix :
             self.prefix += '.in'
             if self.comm.rank == 0 :
@@ -60,15 +61,16 @@ class PwscfKS(Driver):
         #-----------------------------------------------------------------------
         self.init_density()
         #-----------------------------------------------------------------------
+        self.mix_driver = None
         if self.mixer is None :
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-            rho0 = np.mean(self.density)
-            kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
+            self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.1], maxm = 7, coef = [0.5], predecut = 0, delay = 1)
+            # rho0 = np.mean(self.density)
+            # kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
+            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
+        elif isinstance(self.mixer, float):
+            self.mix_driver = self.mixer
         if self.grid_driver is not None :
             sprint('{} has two grids :{} and {}'.format(self.__class__.__name__, self.grid.nr, self.grid_driver.nr), comm=self.comm)
-        # kf = 0.1
-        # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.5], predecut = 0, delay = 1)
         #-----------------------------------------------------------------------
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
         self.energy = 0.0
@@ -126,6 +128,7 @@ class PwscfKS(Driver):
         else :
             comm = self.comm.py2f()
             # print('comm00', comm, self.comm.size)
+        pwscfpy.pwpy_mod.pwpy_set_stdout(self.outfile)
         pwscfpy.pwpy_pwscf(self.prefix, comm)
 
     def init_density(self, rho_ini = None):
@@ -157,7 +160,6 @@ class PwscfKS(Driver):
         for k2, v2 in cell_params['pseudopotentials'].items():
             value[k2] = os.path.basename(v2)
         cell_params['pseudopotentials'] = value
-        # cell_params['pseudopotentials'].update(value)
         # For QE, all pseudopotentials should at same directory
         params['control']['pseudo_dir'] = os.path.dirname(v2)
         fileobj = open(outfile, 'w')
@@ -167,9 +169,13 @@ class PwscfKS(Driver):
         prefix = os.path.splitext(self.prefix)[0]
         params['control']['prefix'] = prefix
         params['control']['outdir'] = prefix + '.tmp'
+        # do not save anything for qe
+        params['control']['disk_io'] = 'none'
         ase_io_driver.write_espresso_in(fileobj, self.ase_atoms, params, **cell_params)
         self._write_params_cards(fileobj, params, cards)
         fileobj.close()
+        #output of qe
+        self.outfile = prefix + '.out'
         return
 
     def _update_kpoints(self, cell_params, cards = None):
@@ -278,13 +284,14 @@ class PwscfKS(Driver):
         # extene = 0.0
         if self._iter > 0 :
         # if self._iter > 100 :
-            self.energy = pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, self.exttype, initial)
+            self.energy = pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, self.exttype, initial, self.mix_driver)
         else :
-            self.energy = pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, 0, initial)
+            self.energy = pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, 0, initial, self.mix_driver)
 
-        pwscfpy.pwpy_sum_band()
-        # if sym :
-            # pwscfpy.pwpy_sum_band_sym()
+        if self.mix_driver is None :
+            pwscfpy.pwpy_sum_band()
+            if sym :
+                pwscfpy.pwpy_sum_band_sym()
         pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
         self.density[:] = self._format_density_invert()
         return self.density
@@ -308,7 +315,9 @@ class PwscfKS(Driver):
 
         if 'E' in calcType :
             func.energy += energy
-            sprint('sub_energy_ks', func.energy, comm=self.comm)
+            fstr = f'sub_energy_ks : {self._iter}, {func.energy}'
+            sprint(fstr, comm=self.comm)
+            pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
             self.energy = func.energy
         return func
 
@@ -326,12 +335,17 @@ class PwscfKS(Driver):
             r = density - prev_density
             self.residual_norm = np.sqrt(np.sum(r * r)/r.size)
             rmax = r.amax()
-            sprint('res_norm_ks', self._iter, rmax, self.residual_norm, comm=self.comm)
+            fstr = f'res_norm_ks : {self._iter}, {rmax}, {self.residual_norm}'
+            sprint(fstr, comm=self.comm)
+            pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
             #-----------------------------------------------------------------------
-            rho = self.mixer(prev_density, density, **kwargs)
-            if self.grid_driver is not None and mix_grid:
-                rho = grid_map_data(rho, grid = self.grid)
-            self.density[:] = rho
+            if self.mix_driver is not None :
+                pass
+            else :
+                rho = self.mixer(prev_density, density, **kwargs)
+                if self.grid_driver is not None and mix_grid:
+                    rho = grid_map_data(rho, grid = self.grid)
+                self.density[:] = rho
         else :
             self.residual_norm = 100.0
         if self.comm.size > 1 :

@@ -209,7 +209,7 @@
 				"type": "floatlist",
 				"default": "1.0 1.0 1.0"
 			},
-			"predcut": {
+			"predecut": {
 				"type": "float",
 				"default": null
 			},

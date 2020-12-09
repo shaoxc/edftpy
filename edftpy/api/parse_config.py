@@ -11,11 +11,10 @@ from edftpy.hartree import Hartree
 from edftpy.xc import XC
 from edftpy.optimizer import Optimization
 from edftpy.evaluator import Evaluator, EnergyEvaluatorMix, EvaluatorOF, TotalEvaluator
-from edftpy.enginer.of_dftpy import DFTpyOF
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import LinearMixer, PulayMixer
-from edftpy.enginer.of_dftpy import dftpy_opt
+from edftpy.enginer.of_dftpy import DFTpyOF, dftpy_opt
 from edftpy.mpi import GraphTopo, MP
 
 
@@ -270,29 +269,31 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         grid_sub = driver.subcell.grid
     else :
         grid_sub = None
-    subsys = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale, mp = mp)
+    subcell = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale, mp = mp)
 
     if cell_change == 'position' :
-        subsys.density[:] = driver.density
+        subcell.density[:] = driver.density
     else :
         if infile : # initial='Read'
-            subsys.density[:] = io.read_density(infile)
+            subcell.density[:] = io.read_density(infile)
         elif initial == 'Atomic' and len(atomicfiles) > 0 :
             atomicd = AtomicDensity(files = atomicfiles)
-            subsys.density[:] = atomicd.guess_rho(subsys.ions, subsys.grid)
+            subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
         elif initial or technique == 'OF' :
             atomicd = AtomicDensity()
-            subsys.density[:] = atomicd.guess_rho(subsys.ions, subsys.grid)
-            subsys.density[:] = dftpy_opt(subsys.ions, subsys.density, pplist)
+            subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
+            subcell.density[:] = dftpy_opt(subcell.ions, subcell.density, pplist)
     #-----------------------------------------------------------------------
     if mix_kwargs['scheme'] == 'Pulay' :
         mixer = PulayMixer(**mix_kwargs)
     elif mix_kwargs['scheme'] == 'Linear' :
         mixer = LinearMixer(**mix_kwargs)
+    elif mix_kwargs['scheme'].capitalize() in ['No', 'None'] :
+        mixer = mix_kwargs['coef'][0]
     else :
         raise AttributeError("!!!ERROR : NOT support ", mix_kwargs['scheme'])
     #-----------------------------------------------------------------------
-    embed_evaluator, sub_evaluator, ke_evaluator = config2evaluator(config, keysys, subsys.ions, subsys.grid, pplist = pplist, optimizer = optimizer, cell_change = cell_change)
+    embed_evaluator, sub_evaluator, ke_evaluator = config2evaluator(config, keysys, subcell.ions, subcell.grid, pplist = pplist, optimizer = optimizer, cell_change = cell_change)
     ke_sub_kwargs = {'name' :'vW'}
     ke_sub = KEDF(**ke_sub_kwargs)
 
@@ -305,9 +306,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         if 'PSEUDO' in embed_evaluator.funcdicts :
             exttype -= 1
 
-    def get_dftpy_enginer(energy_evaluator):
-        opt_options['econv'] *= subsys.ions.nat
-
+    def get_dftpy_driver(energy_evaluator):
+        opt_options['econv'] *= subcell.ions.nat
         if ecut and abs(ecut - gsystem_ecut) > 1.0 :
             if comm.size > 1 :
                 raise AttributeError("Different energy cutoff not supported for parallel version")
@@ -348,58 +348,82 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         else :
             evaluator_of = EvaluatorOF(sub_evaluator = sub_eval, gsystem = gsystem_driver, ke_evaluator = ke_sub)
             mixer_of = mixer
-        enginer = DFTpyOF(evaluator =energy_evaluator, options = opt_options, subcell = subsys, mixer = mixer_of, evaluator_of = evaluator_of, grid = grid_sub)
-        return enginer
-
-    def get_castep_enginer(energy_evaluator):
-        from edftpy.enginer.ks_castep import CastepKS
-        cell_params = {'species_pot' : pplist}
-        if kpoints['grid'] is not None :
-            cell_params['kpoints_mp_grid'] = ' '.join(map(str, kpoints['grid']))
-
-        params = {}
-        if ecut :
-            params['cut_off_energy'] = ecut * ENERGY_CONV['Hartree']['eV']
-            if abs(ecut - gsystem_ecut) < 1.0 :
-                params['devel_code'] = 'STD_GRID={0} {1} {2}  FINE_GRID={0} {1} {2}'.format(*subsys.grid.nr)
-
-        enginer = CastepKS(evaluator =energy_evaluator, prefix = prefix, subcell = subsys, cell_params = cell_params, params = params, exttype = exttype,
-                base_in_file = basefile, mixer = mixer, comm = mp.comm)
-        return enginer
-
-    def get_pwscf_enginer(energy_evaluator):
-        from edftpy.enginer.ks_pwscf import PwscfKS
-
-        cell_params = {'pseudopotentials' : pplist}
-        if kpoints['grid'] is not None :
-            cell_params['kpts'] = kpoints['grid']
-        if kpoints['offset'] is not None :
-            cell_params['koffset'] = kpoints['grid']
-
-        params = {'system' : {}}
-        if ecut :
-            params['system']['ecutwfc'] = ecut * 2.0
-            if abs(4 * ecut - gsystem_ecut) < 1.0 :
-                params['system']['nr1'] = subsys.grid.nr[0]
-                params['system']['nr2'] = subsys.grid.nr[1]
-                params['system']['nr3'] = subsys.grid.nr[2]
-
-        enginer = PwscfKS(evaluator =energy_evaluator, prefix = prefix, subcell = subsys, cell_params = cell_params, params = params, exttype = exttype,
-                base_in_file = basefile, mixer = mixer, comm = mp.comm)
-        return enginer
+        driver = DFTpyOF(evaluator =energy_evaluator, prefix = prefix, options = opt_options, subcell = subcell,
+                mixer = mixer_of, evaluator_of = evaluator_of, grid = grid_sub)
+        return driver
 
     energy_evaluator = EnergyEvaluatorMix(embed_evaluator = embed_evaluator)
     if calculator == 'dftpy' and opt_options['opt_method'] == 'full' :
         energy_evaluator = EnergyEvaluatorMix(embed_evaluator = embed_evaluator, ke_evaluator = ke_evaluator)
 
+    margs = {
+            'evaluator' :energy_evaluator,
+            'prefix' : prefix,
+            'subcell' : subcell,
+            'cell_params' : None,
+            'params' : None,
+            'exttype' : exttype,
+            'base_in_file' : basefile,
+            'mixer' : mixer,
+            'comm' : mp.comm
+            }
     if calculator == 'dftpy' :
-        enginer = get_dftpy_enginer(energy_evaluator)
+        driver = get_dftpy_driver(energy_evaluator)
     elif calculator == 'pwscf' :
-        enginer = get_pwscf_enginer(energy_evaluator)
+        driver = get_pwscf_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
     elif calculator == 'castep' :
-        enginer = get_castep_enginer(energy_evaluator)
+        driver = get_castep_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
 
-    return enginer
+    return driver
+
+def get_castep_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, margs = {}, **kwargs):
+    from edftpy.driver.ks_castep import CastepKS
+    cell_params = {'species_pot' : pplist}
+    if kpoints['grid'] is not None :
+        cell_params['kpoints_mp_grid'] = ' '.join(map(str, kpoints['grid']))
+
+    params = {}
+    if ecut :
+        subcell = margs['subcell']
+        params['cut_off_energy'] = ecut * ENERGY_CONV['Hartree']['eV']
+        if abs(ecut - gsystem_ecut) < 1.0 :
+            params['devel_code'] = 'STD_GRID={0} {1} {2}  FINE_GRID={0} {1} {2}'.format(*subcell.grid.nr)
+
+    add = {
+            'cell_params': cell_params,
+            'params': params,
+            }
+    margs.update(add)
+    driver = CastepKS(**margs)
+    # driver = CastepKS(evaluator =energy_evaluator, prefix = prefix, subcell = subcell, cell_params = cell_params,
+    # params = params, exttype = exttype, base_in_file = basefile, mixer = mixer, comm = mp.comm)
+    return driver
+
+def get_pwscf_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, margs = {}, **kwargs):
+    from edftpy.enginer.ks_pwscf import PwscfKS
+
+    cell_params = {'pseudopotentials' : pplist}
+    if kpoints['grid'] is not None :
+        cell_params['kpts'] = kpoints['grid']
+    if kpoints['offset'] is not None :
+        cell_params['koffset'] = kpoints['grid']
+
+    params = {'system' : {}}
+    if ecut :
+        subcell = margs['subcell']
+        params['system']['ecutwfc'] = ecut * 2.0
+        if abs(4 * ecut - gsystem_ecut) < 1.0 :
+            params['system']['nr1'] = subcell.grid.nr[0]
+            params['system']['nr2'] = subcell.grid.nr[1]
+            params['system']['nr3'] = subcell.grid.nr[2]
+
+    add = {
+            'cell_params': cell_params,
+            'params': params,
+            }
+    margs.update(add)
+    driver = PwscfKS(**margs)
+    return driver
 
 def _get_gap(config, optimizer):
     for key in config :

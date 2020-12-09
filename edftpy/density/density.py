@@ -94,8 +94,8 @@ def get_3d_value_real(r, arho, ions, grid, ncharge = None, rho = None, dtol=1E-3
 def normalization_density(density, ncharge = None, grid = None, tol = 1E-300, method = 'shift'):
     if grid is None :
         grid = density.grid
-    min_rho = grid.mp.amin(density)
-    sprint('min0', min_rho, comm=grid.mp.comm)
+    # min_rho = grid.mp.amin(density)
+    # sprint('min0', min_rho, comm=grid.mp.comm)
     if method == 'scale' :
         if ncharge is not None :
             ncharge = np.sum(density) * grid.dV
@@ -103,14 +103,16 @@ def normalization_density(density, ncharge = None, grid = None, tol = 1E-300, me
         density[density < tol] = tol
         nc = grid.mp.asum(np.sum(density) * grid.dV)
         density *= ncharge / nc
-    else :
+    elif method == 'shift' :
         if ncharge is not None :
             nc = grid.mp.asum(np.sum(density) * grid.dV)
             density += (ncharge-nc)/grid.nnrR
+    else :
+        pass
     if not hasattr(density, 'grid'):
         density = Field(grid, data=density, direct=True)
-    min_rho = grid.mp.amin(density)
-    sprint('min1', min_rho, comm=grid.mp.comm)
+    # min_rho = grid.mp.amin(density)
+    # sprint('min1', min_rho, comm=grid.mp.comm)
     return density
 
 def filter_density(grid, density, mu = 0.7, kt = 0.05):

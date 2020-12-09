@@ -78,7 +78,6 @@ class SpecialPrecondition :
         recip_grid = self.grid.get_reciprocal()
         gg = recip_grid.gg
         preg = a0 * np.minimum(gg/(gg+q0), amin)
-        # preg = a0 * np.maximum(gg/(gg+q0), 0.01)
         preg = Field(recip_grid, data=preg, direct=False)
         matrix = preg
         return matrix
@@ -160,7 +159,7 @@ class AbstractMixer(ABC):
 
     def format_density(self, results, nin):
         ncharge = nin.integral()
-        results = normalization_density(results, ncharge=ncharge, grid=nin.grid)
+        results = normalization_density(results, ncharge=ncharge, grid=nin.grid, method='no')
         return results
 
 

@@ -1,21 +1,23 @@
 import copy
 import numpy as np
 from functools import partial
+import sys
 
 from ..mixer import LinearMixer, PulayMixer
 from ..utils.math import grid_map_data
 from .hamiltonian import Hamiltonian
 from .driver import Driver
+from edftpy.mpi import sprint
 
 from dftpy.optimization import Optimization
 from dftpy.formats.io import write
 from dftpy.external_potential import ExternalPotential
-from edftpy.mpi import sprint
+import dftpy.constants
 
 
 class DFTpyOF(Driver):
     """description"""
-    def __init__(self, evaluator = None, subcell = None, options = None, mixer = None,
+    def __init__(self, evaluator = None, subcell = None, prefix = 'sub_of', options = None, mixer = None,
             grid = None, evaluator_of = None, **kwargs):
         default_options = {
             "opt_method" : 'full',
@@ -46,6 +48,7 @@ class DFTpyOF(Driver):
         self.subcell = subcell
         self.grid_driver = grid
         self.evaluator_of = evaluator_of
+        self.prefix = prefix
         #-----------------------------------------------------------------------
         self.mixer = mixer
         if self.mixer is None and self.options['opt_method'] != 'full' :
@@ -55,6 +58,11 @@ class DFTpyOF(Driver):
         self.init_density()
         self.comm = self.subcell.grid.mp.comm
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
+        self.outfile = self.prefix + '.out'
+        if self.comm.rank == 0 :
+            self.fileobj = open(self.outfile, 'w')
+        else :
+            self.fileobj = None
 
     @property
     def grid(self):
@@ -153,14 +161,16 @@ class DFTpyOF(Driver):
             self.evaluator_of.embed_potential += self.evaluator_of.sub_evaluator(self.charge, calcType = ['V']).potential
 
         self.prev_charge[:] = self.charge
-
         #-----------------------------------------------------------------------
+        stdout = dftpy.constants.STDOUT
+        dftpy.constants.STDOUT = self.fileobj
         if self.options['opt_method'] == 'full' :
             self.get_density_full_opt(**kwargs)
         elif self.options['opt_method'] == 'part' :
             self.get_density_embed(**kwargs)
         elif self.options['opt_method'] == 'hamiltonian' :
             self.get_density_hamiltonian(**kwargs)
+        dftpy.constants.STDOUT = stdout
         #-----------------------------------------------------------------------
         self._format_density_invert(self.charge, self.grid)
         return self.density
@@ -269,7 +279,7 @@ class DFTpyOF(Driver):
     def get_stress(self, **kwargs):
         pass
 
-def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None):
+def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = None):
     from dftpy.interface import OptimizeDensityConf
     from dftpy.config import DefaultOption, OptionFormat
     from dftpy.system import System
@@ -280,6 +290,9 @@ def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None):
     from edftpy.xc import XC
     from edftpy.evaluator import Evaluator
     #-----------------------------------------------------------------------
+    save = dftpy.constants.STDOUT
+    if stdout is None :
+        dftpy.constants.STDOUT = stdout
     if xc_kwargs is None :
         xc_kwargs = {"x_str":'gga_x_pbe','c_str':'gga_c_pbe'}
     if ke_kwargs is None :
@@ -300,6 +313,7 @@ def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None):
     conf = OptionFormat(conf)
     struct = System(ions, rho.grid, name='density', field=rho)
     opt = OptimizeDensityConf(conf, struct, evaluator)
+    dftpy.constants.STDOUT = save
     # rho[:] =opt['density'] 
     # return rho
     return opt['density']
