@@ -3,15 +3,16 @@ from dftpy.constants import LEN_CONV, ENERGY_CONV, FORCE_CONV, STRESS_CONV
 from dftpy.formats.ase_io import ase2ions
 
 from edftpy.utils.common import Field, Grid, Atoms, Coord
-from edftpy.interface import config2optimizer, get_forces
+from edftpy.interface import config2optimizer
 from edftpy.mpi import sprint
 
 
 class eDFTpyCalculator(object):
     """eDFTpy calculator for ase"""
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, graphtopo = None):
         self.config = config
+        self.graphtopo = graphtopo
         self.atoms = None
         self.optimizer = None
         self.restart()
@@ -31,21 +32,21 @@ class eDFTpyCalculator(object):
 
     def update_optimizer(self, atoms = None):
         ions = ase2ions(atoms)
-        self.optimizer = config2optimizer(self.config, ions, self.optimizer)
+        self.optimizer = config2optimizer(self.config, ions, self.optimizer, graphtopo = self.graphtopo)
         self.optimizer.optimize()
 
     def get_potential_energy(self, atoms=None, **kwargs):
         if self.check_restart(atoms):
             self.update_optimizer(atoms)
         self._energy = self.optimizer.energy
-        sprint('Total energy :', self._energy * ENERGY_CONV["Hartree"]["eV"])
+        sprint('Total energy :', self._energy * ENERGY_CONV["Hartree"]["eV"], self.graphtopo.size)
         return self._energy * ENERGY_CONV["Hartree"]["eV"]
 
     def get_forces(self, atoms):
         if self.check_restart(atoms):
             self.update_optimizer(atoms)
         if self._forces is None :
-            self._forces = get_forces(self.optimizer.drivers, self.optimizer.gsystem)
+            self._forces = self.optimizer.get_forces()
         return self._forces * FORCE_CONV["Ha/Bohr"]["eV/A"]
 
     def get_stress(self, atoms):

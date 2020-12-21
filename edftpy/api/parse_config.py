@@ -17,8 +17,29 @@ from edftpy.mixer import LinearMixer, PulayMixer
 from edftpy.enginer.of_dftpy import DFTpyOF, dftpy_opt
 from edftpy.mpi import GraphTopo, MP
 
+def import_drivers(config):
+    """
+    Import the enginer of different drivers
 
-# from .utils import graphtopo, sprint
+    Args:
+        config: contains all variables of input
+
+    Notes:
+        Must import driver firstly, before the mpi4py
+    """
+    calcs = []
+    for key in config :
+        if key.startswith('SUB'):
+            calc = config[key]['calculator']
+            calcs.append(calc)
+    if 'pwscf' in calcs :
+        from edftpy.enginer.ks_pwscf import PwscfKS
+    if 'castep' in calcs :
+        from edftpy.enginer.ks_castep import CastepKS
+    if 'dftpy' in calcs :
+        from edftpy.enginer.of_dftpy import DFTpyOF
+    return
+
 def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **kwargs):
     if isinstance(config, dict):
         pass
@@ -272,7 +293,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     subcell = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale, mp = mp)
 
     if cell_change == 'position' :
-        subcell.density[:] = driver.density
+        pass
+        # subcell.density[:] = driver.density
     else :
         if infile : # initial='Read'
             subcell.density[:] = io.read_density(infile)

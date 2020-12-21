@@ -5,6 +5,7 @@ from dftpy.formats import io
 from dftpy.ewald import ewald
 # from .utils.common import Field
 from edftpy.mpi import sprint
+from edftpy.properties import get_total_forces, get_total_stress
 
 
 class Optimization(object):
@@ -297,3 +298,11 @@ class Optimization(object):
                 # dr = 0.0
             # diff_res.append(dr)
         return diff_res
+
+    def get_forces(self, **kwargs):
+        forces = get_total_forces(drivers = self.drivers, gsystem = self.gsystem, **kwargs)
+        return forces
+
+    def get_stress(self, **kwargs):
+        stress = get_total_stress(drivers = self.drivers, gsystem = self.gsystem, **kwargs)
+        return stress

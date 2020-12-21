@@ -1,11 +1,25 @@
 import numpy as np
 from dftpy.constants import LEN_CONV, ENERGY_CONV, FORCE_CONV, STRESS_CONV
-from dftpy.formats import io
 
 from edftpy.utils.common import Grid
 from edftpy.subsystem.subcell import GlobalCell
-from edftpy.api.parse_config import config2optimizer
-from edftpy.mpi import sprint
+from edftpy.api.parse_config import config2optimizer, import_drivers
+from edftpy.mpi import graphtopo, sprint, pmi
+
+def conf2init(conf, parallel = False, *args, **kwargs):
+    import_drivers(conf)
+    if parallel :
+        try :
+            from mpi4py import MPI
+            from mpi4py_fft import PFFT
+            graphtopo.comm = MPI.COMM_WORLD
+            info = 'Parallel version (MPI) on {0:>8d} processors'.format(graphtopo.comm.size)
+        except Exception as e:
+            raise e
+    else :
+        info = 'Serial version on {0:>8d} processor'.format(1)
+    sprint(info)
+    return graphtopo
 
 def optimize_density_conf(config, **kwargs):
     opt = config2optimizer(config, **kwargs)
@@ -22,11 +36,14 @@ def get_forces(drivers = None, gsystem = None, linearii=True):
     forces = gsystem.get_forces(linearii = linearii)
     sprint('Total forces0 : \n', forces)
     for i, driver in enumerate(drivers):
+        if driver is None : continue
         fs = driver.get_forces()
-        ind = driver.subcell.ions_index
-        sprint('ind', ind)
-        sprint('fs', fs)
-        forces[ind] += fs
+        if driver.comm.rank == 0 :
+            ind = driver.subcell.ions_index
+            # sprint('ind', ind)
+            # sprint('fs', fs)
+            forces[ind] += fs
+    forces = gsystem.grid.mp.vsum(forces)
     sprint('Total forces : \n', forces)
     return forces
 

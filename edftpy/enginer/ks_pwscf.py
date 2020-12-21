@@ -1,9 +1,10 @@
+import pwscfpy
+
 import numpy as np
 from scipy import signal
 import copy
 import os
 from dftpy.formats.ase_io import ions2ase
-import pwscfpy
 import ase.io.espresso as ase_io_driver
 from ase.calculators.espresso import Espresso as ase_calc_driver
 
@@ -13,6 +14,7 @@ from ..utils.math import grid_map_data
 from ..density import normalization_density
 from .driver import Driver
 from edftpy.mpi import sprint, SerialComm
+from collections import OrderedDict
 
 class PwscfKS(Driver):
     """description"""
@@ -97,22 +99,81 @@ class PwscfKS(Driver):
         in_params, cards = self._build_ase_atoms(params, cell_params, base_in_file)
         self._write_params(self.prefix, params = in_params, cell_params = cell_params, cards = cards)
 
+    def _fix_params(self, params = None):
+        prefix = os.path.splitext(self.prefix)[0]
+        #output of qe
+        self.outfile = prefix + '.out'
+        default_params = OrderedDict({
+                'control' :
+                {
+                    'calculation' : 'scf',
+                    'verbosity' : 'high',
+                    'restart_mode' : 'from_scratch',
+                    'iprint' : 1,
+                    },
+                'system' :
+                {
+                    'ibrav' : 0,
+                    'nat' : 1,
+                    'ntyp' : 1,
+                    'nosym' : True,
+                    'occupations' : 'smearing',
+                    'degauss' : 0.001,
+                    'smearing' : 'gaussian',
+                    },
+                'electrons' :
+                {
+                    'electron_maxstep' : 1,
+                    'conv_thr' : 1E-8,
+                    'mixing_beta' : 0.5,
+                    },
+                'ions' :
+                {
+                    'pot_extrapolation' : 'none',
+                    },
+                'cell' :{}
+                })
+        fix_params = {
+                'control' :
+                {
+                    'disk_io' : 'none', # do not save anything for qe
+                    'prefix' : prefix,
+                    'outdir' : prefix + '.tmp'  # outdir of qe
+                    },
+                'electrons' :
+                {
+                    'electron_maxstep' : 1  # only run 1 step for scf
+                    },
+                'ions' :
+                {
+                    'pot_extrapolation' : 'none',  # no extrapolation for potential from preceding ionic steps
+                    'wfc_extrapolation' : 'none'   # no extrapolation for wfc from preceding ionic steps
+                    },
+                }
+        if not params :
+            params = default_params.copy()
+
+        for k1, v1 in fix_params.items() :
+            if k1 not in params :
+                params[k1] = {}
+            for k2, v2 in v1.items() :
+                params[k1][k2] = v2
+        return params
+
     def _build_ase_atoms(self, params = None, cell_params = None, base_in_file = None):
         ase_atoms = ions2ase(self.subcell.ions)
         ase_atoms.set_calculator(ase_calc_driver())
         self.ase_atoms = ase_atoms
 
-        if base_in_file is not None :
+        if base_in_file :
             fileobj = open(base_in_file, 'r')
             in_params, card_lines = ase_io_driver.read_fortran_namelist(fileobj)
             fileobj.close()
         else :
             in_params = {}
+            card_lines = []
 
-        fix_params = {'electrons' : {'electron_maxstep' : 1}}
-        if params is None :
-            params = {}
-        params.update(fix_params)
+        in_params = self._fix_params(in_params)
 
         for k1, v1 in params.items() :
             if k1 not in in_params :
@@ -165,17 +226,9 @@ class PwscfKS(Driver):
         fileobj = open(outfile, 'w')
         if 'kpts' not in cell_params :
             self._update_kpoints(cell_params, cards)
-        # outdir of qe
-        prefix = os.path.splitext(self.prefix)[0]
-        params['control']['prefix'] = prefix
-        params['control']['outdir'] = prefix + '.tmp'
-        # do not save anything for qe
-        params['control']['disk_io'] = 'none'
         ase_io_driver.write_espresso_in(fileobj, self.ase_atoms, params, **cell_params)
         self._write_params_cards(fileobj, params, cards)
         fileobj.close()
-        #output of qe
-        self.outfile = prefix + '.out'
         return
 
     def _update_kpoints(self, cell_params, cards = None):
