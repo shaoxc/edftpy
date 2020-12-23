@@ -8,7 +8,7 @@ from edftpy.utils.common import Field, Grid, Atoms, Coord
 from ..utils.math import gaussian
 from ..density import get_3d_value_recipe
 from edftpy.mpi import sprint
-
+na = 0
 
 class SubCell(object):
     def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, full = False, gaussian_options = None, **kwargs):

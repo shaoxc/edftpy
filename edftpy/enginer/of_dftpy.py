@@ -3,7 +3,7 @@ import numpy as np
 from functools import partial
 import sys
 
-from ..mixer import LinearMixer, PulayMixer
+from ..mixer import LinearMixer, PulayMixer, AbstractMixer
 from ..utils.math import grid_map_data
 from .hamiltonian import Hamiltonian
 from .driver import Driver
@@ -37,14 +37,9 @@ class DFTpyOF(Driver):
         self.options = default_options
         if options is not None :
             self.options.update(options)
-        Driver.__init__(self, options = self.options, technique = 'OF')
+        super().__init__(options = self.options, technique = 'OF')
 
         self.evaluator = evaluator
-        self.fermi = None
-        self.calc = None
-        self._iter = 0
-        self.phi = None
-        self.residual_norm = 1
         self.subcell = subcell
         self.grid_driver = grid
         self.evaluator_of = evaluator_of
@@ -57,12 +52,36 @@ class DFTpyOF(Driver):
         self.density = self.subcell.density
         self.init_density()
         self.comm = self.subcell.grid.mp.comm
-        self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
         self.outfile = self.prefix + '.out'
         if self.comm.rank == 0 :
             self.fileobj = open(self.outfile, 'w')
         else :
             self.fileobj = None
+        self.update_workspace(first = True)
+
+    def update_workspace(self, subcell = None, first = False, **kwargs):
+        """
+        Notes:
+            clean workspace
+        """
+        self.rho = None
+        self.wfs = None
+        self.occupations = None
+        self.eigs = None
+        self.fermi = None
+        self.calc = None
+        self._iter = 0
+        self.energy = 0.0
+        self.phi = None
+        self.residual_norm = 1
+        if isinstance(self.mixer, AbstractMixer):
+            self.mixer.restart()
+        if subcell is not None :
+            self.subcell = subcell
+        self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
+        if not first :
+            self.options['econv'] = self.options['econv0'] / 1E4
+        return
 
     @property
     def grid(self):
@@ -147,7 +166,7 @@ class DFTpyOF(Driver):
             self.options['econv'] = econv
         if norm < 1E-7 :
             self.options['maxiter'] = 4
-        sprint('econv', self.options['econv'], comm=self.comm)
+        sprint('econv', self._iter, self.options['econv'], comm=self.comm)
         #-----------------------------------------------------------------------
         if self.options['opt_method'] == 'full' :
             hamil = False

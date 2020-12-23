@@ -15,7 +15,7 @@ from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import LinearMixer, PulayMixer
 from edftpy.enginer.of_dftpy import DFTpyOF, dftpy_opt
-from edftpy.mpi import GraphTopo, MP
+from edftpy.mpi import GraphTopo, MP, sprint
 
 def import_drivers(config):
     """
@@ -123,10 +123,12 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
     #-----------------------------------------------------------------------
     for i, driver in enumerate(drivers):
         if driver is None : continue
-        if (driver.technique == 'OF' and graphtopo.is_root) or (graphtopo.isub == i and graphtopo.comm_sub.rank == 0):
-            ase_io.ase_write('edftpy_subcell_' + str(i) + '.vasp', driver.subcell.ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
+        if (driver.technique == 'OF' and graphtopo.is_root) or (graphtopo.isub == i and graphtopo.comm_sub.rank == 0) or graphtopo.isub is None:
+            # outfile = 'edftpy_subcell_' + str(i) + '.vasp'
+            outfile = driver.prefix + '.vasp'
+            ase_io.ase_write(outfile, driver.subcell.ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
     if graphtopo.is_root :
-        ase_io.ase_write('edftpy_cell.vasp', ions, format = 'vasp', direct = 'True', vasp5 = True)
+        ase_io.ase_write('edftpy_cell.vasp', ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
     #-----------------------------------------------------------------------
     optimization_options = config["OPT"].copy()
     optimization_options["econv"] *= ions.nat
@@ -195,6 +197,7 @@ def config2evaluator(config, keysys, ions, grid, pplist = None, optimizer = None
         if not exttype & 1 : embed.append('PSEUDO')
         if not exttype & 2 : embed.append('HARTREE')
         if not exttype & 4 : embed.append('XC')
+        # if exttype == 0 : embed = []
     emb_funcdicts = {}
     if 'KE' in embed :
         ke_emb = KEDF(**emb_ke_kwargs)
@@ -264,6 +267,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         for k, v in atomicfiles.copy().items():
             if not os.path.exists(v):
                 atomicfiles[k] = pp_path + os.sep + v
+    if not prefix :
+        prefix = keysys.lower()
     #-----------------------------------------------------------------------
     if ecut :
         ecut *= ENERGY_CONV["eV"]["Hartree"]
@@ -292,9 +297,10 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         grid_sub = None
     subcell = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale, mp = mp)
 
+
     if cell_change == 'position' :
-        pass
-        # subcell.density[:] = driver.density
+        if subcell.density.shape == driver.density.shape :
+            subcell.density[:] = driver.density
     else :
         if infile : # initial='Read'
             subcell.density[:] = io.read_density(infile)
@@ -389,12 +395,18 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             'mixer' : mixer,
             'comm' : mp.comm
             }
-    if calculator == 'dftpy' :
-        driver = get_dftpy_driver(energy_evaluator)
-    elif calculator == 'pwscf' :
-        driver = get_pwscf_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
-    elif calculator == 'castep' :
-        driver = get_castep_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
+    if cell_change == 'cell' :
+        raise AttributeError("Not support change the cell")
+
+    if cell_change == 'position' :
+        driver.update_workspace(subcell)
+    else :
+        if calculator == 'dftpy' :
+            driver = get_dftpy_driver(energy_evaluator)
+        elif calculator == 'pwscf' :
+            driver = get_pwscf_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
+        elif calculator == 'castep' :
+            driver = get_castep_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
 
     return driver
 

@@ -6,6 +6,8 @@ from dftpy.functionals import FunctionalClass
 from dftpy.formats.io import write
 import scipy.special as sp
 
+from edftpy.mpi import sprint
+
 
 class Evaluator(AbsFunctional):
     def __init__(self, **kwargs):
@@ -14,8 +16,8 @@ class Evaluator(AbsFunctional):
         for key, evalfunctional in self.funcdicts.items():
             if evalfunctional is None:
                 del self.funcdicts[key]
-        if len(self.funcdicts) == 0 :
-            return None
+        # if len(self.funcdicts) == 0 :
+            # return None
 
     def __call__(self, density, calcType=["E","V"], **kwargs):
         return self.compute(density, calcType, **kwargs)
@@ -25,8 +27,8 @@ class Evaluator(AbsFunctional):
         results = None
         for key, evalfunctional in self.funcdicts.items():
             obj = evalfunctional(density, calcType)
-            # if hasattr(obj, 'energy'): print(key, obj.energy * 27.21138)
-            # if hasattr(obj, 'potential'): print(key, obj.potential[:3, 0, 0] * 2)
+            # if hasattr(obj, 'energy'): sprint(key, obj.energy * 27.21138)
+            # if hasattr(obj, 'potential'): sprint(key, obj.potential[:3, 0, 0] * 2)
             if results is None :
                 results = obj
             else :

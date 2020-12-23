@@ -6,6 +6,7 @@ __all__ = ["graphtopo", "sprint"]
 graphtopo = GraphTopo()
 
 def sprint(*args, comm = None, **kwargs):
+    # kwargs['debug'] = True
     kwargs['flush'] = True
     comm = comm or graphtopo.comm
     dftpy_sprint(*args, comm = comm, **kwargs)

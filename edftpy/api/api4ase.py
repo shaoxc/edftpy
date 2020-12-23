@@ -16,6 +16,7 @@ class eDFTpyCalculator(object):
         self.atoms = None
         self.optimizer = None
         self.restart()
+        self.iter = 0
 
     def restart(self):
         self._energy = None
@@ -31,6 +32,7 @@ class eDFTpyCalculator(object):
             return True
 
     def update_optimizer(self, atoms = None):
+        self.iter += 1
         ions = ase2ions(atoms)
         self.optimizer = config2optimizer(self.config, ions, self.optimizer, graphtopo = self.graphtopo)
         self.optimizer.optimize()

@@ -80,6 +80,7 @@ class Optimization(object):
 
     def optimize(self, gsystem = None, olevel = 1, **kwargs):
         #-----------------------------------------------------------------------
+        sprint('Begin optimize')
         if gsystem is None:
             if self.gsystem is None :
                 raise AttributeError("Must provide global system")
@@ -87,7 +88,6 @@ class Optimization(object):
         else:
             self.gsystem = gsystem
 
-        self.gsystem.gaussian_density[:] = 0.0
         for i, driver in enumerate(self.drivers):
             if driver is None :
                 density = None
@@ -95,17 +95,16 @@ class Optimization(object):
             else :
                 density = driver.density
                 gaussian_density = driver.gaussian_density
-                # if gaussian_density is not None :
-                    # print('gaussian_density : -> ', gaussian_density.integral())
-            self.gsystem.update_density(gaussian_density, isub = i, restart = False, fake = True)
             if i == 0 :
-                self.gsystem.update_density(density, isub = i, restart = True)
+                restart = True
             else :
-                self.gsystem.update_density(density, isub = i, restart = False)
+                restart = False
+
+            self.gsystem.update_density(gaussian_density, isub = i, restart = restart, fake = True)
+            self.gsystem.update_density(density, isub = i, restart = restart)
+        sprint('update density')
         totalrho = self.gsystem.density.copy()
-        # value = self.gsystem.gaussian_density.gather()
-        # if self.gsystem.graphtopo.rank == 0 :
-            # io.write('a.xsf', value, ions = self.gsystem.ions)
+        # io.write('a.xsf', value, ions = self.gsystem.ions)
         # exit(0)
         self.nsub = len(self.drivers)
         energy_history = [0.0]

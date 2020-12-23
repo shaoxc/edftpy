@@ -344,7 +344,7 @@
 		},
 		"prefix": {
 			"type": "str",
-			"default": "sub_a"
+			"default": null
 		},
 		"kpoints": {
 			"method": {

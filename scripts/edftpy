@@ -24,11 +24,13 @@ def get_conf():
     return args
 
 def run_job(args):
+    from edftpy.mpi import pmi
     if len(args.confs) == 0 :
         args.confs.append(args.input)
     for fname in args.confs:
         config = read_conf(fname)
-        conf2init(config, args.mpi)
+        parallel = args.mpi or pmi.size > 0
+        conf2init(config, parallel)
         sprint("Begin on :", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
         sprint("#" * 80)
         TimeData.Begin("TOTAL")

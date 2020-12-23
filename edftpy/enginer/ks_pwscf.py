@@ -8,7 +8,7 @@ from dftpy.formats.ase_io import ions2ase
 import ase.io.espresso as ase_io_driver
 from ase.calculators.espresso import Espresso as ase_calc_driver
 
-from ..mixer import LinearMixer, PulayMixer
+from ..mixer import LinearMixer, PulayMixer, AbstractMixer
 from ..utils.common import Grid, Field, Functional
 from ..utils.math import grid_map_data
 from ..density import normalization_density
@@ -18,7 +18,7 @@ from collections import OrderedDict
 
 class PwscfKS(Driver):
     """description"""
-    def __init__(self, evaluator = None, subcell = None, prefix = 'qe_sub_in', params = None, cell_params = None,
+    def __init__(self, evaluator = None, subcell = None, prefix = 'sub_ks', params = None, cell_params = None,
             exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None, **kwargs):
         '''
         Here, prefix is the name of the input file
@@ -31,31 +31,24 @@ class PwscfKS(Driver):
                     6 : hartree + xc                 : 110
                     7 : pseudo + hartree + xc        : 111
         '''
-        Driver.__init__(self, options = options)
+        super().__init__(options = options)
+        self._input_ext = '.in'
+
         self.evaluator = evaluator
         self.exttype = exttype
         self.subcell = subcell
         self.prefix = prefix
-        self.rho = None
-        self.wfs = None
-        self.occupations = None
-        self.eigs = None
-        self.fermi = None
-        self.perform_mix = False
         self.ncharge = ncharge
         self.comm = self.subcell.grid.mp.comm
         self.outfile = None
         if self.prefix :
-            self.prefix += '.in'
             if self.comm.rank == 0 :
                 self.build_input(params, cell_params, base_in_file)
         else :
-            self.prefix = base_in_file
+            self.prefix, self._input_ext= os.path.splitext(base_in_file)
 
         if self.comm.size > 1 : self.comm.Barrier()
         self._driver_initialise()
-        self._iter = 0
-        self._filter = None
         self.mixer = mixer
 
         self._grid = None
@@ -74,8 +67,34 @@ class PwscfKS(Driver):
         if self.grid_driver is not None :
             sprint('{} has two grids :{} and {}'.format(self.__class__.__name__, self.grid.nr, self.grid_driver.nr), comm=self.comm)
         #-----------------------------------------------------------------------
-        self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
+        self.update_workspace(first = True)
+
+    def update_workspace(self, subcell = None, first = False, **kwargs):
+        """
+        Notes:
+            clean workspace
+        """
+        self.rho = None
+        self.wfs = None
+        self.occupations = None
+        self.eigs = None
+        self.fermi = None
+        self.calc = None
+        self._iter = 0
         self.energy = 0.0
+        self.phi = None
+        self.residual_norm = 1
+        if isinstance(self.mixer, AbstractMixer):
+            self.mixer.restart()
+        if subcell is not None :
+            self.subcell = subcell
+        self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
+        if not first :
+            # from qe-6.5:run_pwscf.f90
+            pwscfpy.pwpy_electrons_scf(0, 0, self.charge, 0, self.exttype, 0, finish = True)
+            pwscfpy.extrapolation.update_pot()
+            pwscfpy.hinit1()
+        return
 
     @property
     def grid(self):
@@ -97,10 +116,10 @@ class PwscfKS(Driver):
 
     def build_input(self, params, cell_params, base_in_file):
         in_params, cards = self._build_ase_atoms(params, cell_params, base_in_file)
-        self._write_params(self.prefix, params = in_params, cell_params = cell_params, cards = cards)
+        self._write_params(self.prefix + self._input_ext, params = in_params, cell_params = cell_params, cards = cards)
 
     def _fix_params(self, params = None):
-        prefix = os.path.splitext(self.prefix)[0]
+        prefix = self.prefix
         #output of qe
         self.outfile = prefix + '.out'
         default_params = OrderedDict({
@@ -190,7 +209,7 @@ class PwscfKS(Driver):
             comm = self.comm.py2f()
             # print('comm00', comm, self.comm.size)
         pwscfpy.pwpy_mod.pwpy_set_stdout(self.outfile)
-        pwscfpy.pwpy_pwscf(self.prefix, comm)
+        pwscfpy.pwpy_pwscf(self.prefix + self._input_ext, comm)
 
     def init_density(self, rho_ini = None):
         self.density = Field(grid=self.grid)
@@ -423,3 +442,6 @@ class PwscfKS(Driver):
 
     def get_stress(self, **kwargs):
         pass
+
+    def stop_run(self, *arg, **kwargs):
+        pwscfpy.pwpy_stop_run(*arg, **kwargs)
