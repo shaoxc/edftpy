@@ -199,7 +199,8 @@
 		"mix": {
 			"scheme": {
 				"type": "str",
-				"default": "Pulay"
+				"default": null,
+				"options": "Pulay, Linear"
 			},
 			"predtype": {
 				"type": "str",
@@ -223,7 +224,7 @@
 			},
 			"delay": {
 				"type": "int",
-				"default": "1"
+				"default": "2"
 			},
 			"restarted": {
 				"type": "bool",

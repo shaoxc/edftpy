@@ -297,7 +297,6 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         grid_sub = None
     subcell = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale, mp = mp)
 
-
     if cell_change == 'position' :
         if subcell.density.shape == driver.density.shape :
             subcell.density[:] = driver.density

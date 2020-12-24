@@ -46,8 +46,13 @@ class DFTpyOF(Driver):
         self.prefix = prefix
         #-----------------------------------------------------------------------
         self.mixer = mixer
-        if self.mixer is None and self.options['opt_method'] != 'full' :
+        if self.options['opt_method'] == 'full' :
+            if not isinstance(self.mixer, AbstractMixer):
+                self.mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
+        elif self.mixer is None :
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
+        elif isinstance(self.mixer, float):
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = self.mixer, predecut = 0, delay = 1)
         #-----------------------------------------------------------------------
         self.density = self.subcell.density
         self.init_density()

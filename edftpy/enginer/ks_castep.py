@@ -35,14 +35,9 @@ class CastepKS(Driver):
         self.exttype = exttype
         self.subcell = subcell
         self.prefix = prefix
-        self.rho = None
-        self.wfs = None
-        self.occupations = None
-        self.eigs = None
-        self.fermi = None
-        self.perform_mix = False
         self.ncharge = ncharge
         self.comm = self.subcell.grid.mp.comm
+        self.outfile = None
         if self.prefix :
             if self.comm.rank == 0 :
                 self.build_input(params, cell_params, base_in_file)
@@ -51,8 +46,6 @@ class CastepKS(Driver):
 
         if self.comm.size > 1 : self.comm.Barrier()
         self._driver_initialise()
-        self._iter = 0
-        self._filter = None
         self.mixer = mixer
 
         self._grid = None
@@ -60,14 +53,39 @@ class CastepKS(Driver):
         #-----------------------------------------------------------------------
         self.init_density()
         #-----------------------------------------------------------------------
+        self.mix_driver = None
         if self.mixer is None :
-            # self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.2], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
-            rho0 = np.mean(self.density)
-            kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = [0.5], predecut = 0, delay = 1)
+        elif isinstance(self.mixer, float):
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = [0.5], predecut = 0, delay = 1)
         if self.grid_driver is not None :
             sprint('{} has two grids :{} and {}'.format(self.__class__.__name__, self.grid.nr, self.grid_driver.nr))
+        #-----------------------------------------------------------------------
+        self.update_workspace(first = True)
+
+    def update_workspace(self, subcell = None, first = False, **kwargs):
+        """
+        Notes:
+            clean workspace
+        """
+        self.rho = None
+        self.wfs = None
+        self.occupations = None
+        self.eigs = None
+        self.fermi = None
+        self.calc = None
+        self._iter = 0
+        self.energy = 0.0
+        self.phi = None
+        self.residual_norm = 1
+        if isinstance(self.mixer, AbstractMixer):
+            self.mixer.restart()
+        if subcell is not None :
+            self.subcell = subcell
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
+        if not first :
+            raise AttributeError("Will implemented soon")
+        return
 
     @property
     def grid(self):

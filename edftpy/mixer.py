@@ -109,11 +109,11 @@ class SpecialPrecondition :
         matrix = preg
         return matrix
 
-    def __call__(self, nin, nout, drho = None, residual = None):
-        results = self.compute(nin, nout, drho, residual)
+    def __call__(self, nin, nout, drho = None, residual = None, coef = 0.7):
+        results = self.compute(nin, nout, drho, residual, coef)
         return results
 
-    def compute(self, nin, nout, drho = None, residual = None):
+    def compute(self, nin, nout, drho = None, residual = None, coef = 0.7):
         if self.grid is None :
             self.grid = nin.grid
         nin_g = nin.fft()
@@ -124,9 +124,9 @@ class SpecialPrecondition :
         if residual is not None :
             res = Field(self.grid, data=residual, direct=True)
             results += res.fft()*self.matrix
-        results[self.mask] = nout.fft()[self.mask]
-        # results[self.mask] = nin_g[self.mask]*0.8 + 0.2 * nout.fft()[self.mask]
-        # results[self.mask] = nin_g[self.mask]
+        if self.mask.size > 1 :
+            # Linear mixing for high-frequency part
+            results[self.mask] = nin_g[self.mask]*(1-coef) + coef * nout.fft()[self.mask]
         return results.ifft(force_real=True)
 
     def add(self, density, residual = None, grid = None):
@@ -187,7 +187,7 @@ class LinearMixer(AbstractMixer):
         if self._iter > self._delay and coef[0] < one:
             res = nout - nin
             res *= coef[0]
-            results = self.pred(nin, nout, residual=res)
+            results = self.pred(nin, nout, residual=res, coef=coef[0])
             results = self.format_density(results, nin)
         else :
             results = nout.copy()
@@ -295,12 +295,12 @@ class PulayMixer(AbstractMixer):
                 # res[:] = filter_density(res)
                 #-----------------------------------------------------------------------
                 res *= coef[0]
-                results = self.pred(nin, nout, drho, res)
+                results = self.pred(nin, nout, drho, res, coef[0])
             except Exception :
                 res = r * coef[0]
                 sprint('!WARN : Change to linear mixer', comm=self.comm)
                 sprint('amat', amat, comm=self.comm)
-                results = self.pred(nin, nout, residual=res)
+                results = self.pred(nin, nout, residual=res, coef=coef[0])
         else :
             # res = r * 0.8
             # results = self.pred(nin, nout, residual=res)

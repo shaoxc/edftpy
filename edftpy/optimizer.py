@@ -88,6 +88,7 @@ class Optimization(object):
         else:
             self.gsystem = gsystem
 
+        self.gsystem.gaussian_density[:] = 0.0
         for i, driver in enumerate(self.drivers):
             if driver is None :
                 density = None
@@ -99,8 +100,8 @@ class Optimization(object):
                 restart = True
             else :
                 restart = False
-
-            self.gsystem.update_density(gaussian_density, isub = i, restart = restart, fake = True)
+            # self.gsystem.update_density(gaussian_density, isub = i, restart = restart, fake = True)
+            self.gsystem.update_density(gaussian_density, isub = i, fake = True)
             self.gsystem.update_density(density, isub = i, restart = restart)
         sprint('update density')
         totalrho = self.gsystem.density.copy()
@@ -191,7 +192,7 @@ class Optimization(object):
             fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(it, energy, dE, resN, 1, timecost - time_begin)
             fmt += "\n    Total: {:<8d}{:<24.12E}".format(it, totalfunc.energy)
             sprint(seq +'\n' + fmt +'\n' + seq)
-            if self.check_converge(energy_history):
+            if self.check_converge(energy_history, res_norm):
                 sprint("#### Subsytem Density Optimization Converged ####")
                 break
             # exit()
@@ -224,13 +225,21 @@ class Optimization(object):
                 diff_res.append(driver.residual_norm)
         return diff_res
 
-    def check_converge(self, energy_history, **kwargs):
+    def check_converge(self, energy_history, residual = None, **kwargs):
         econv = self.options["econv"]
         ncheck = self.options["ncheck"]
         E = energy_history[-1]
+        #-----------------------------------------------------------------------
+        res_max = max(residual)
+        res_min = min(residual)
+        #If one subsystem not udpate, for driver safe (e.g. pwscf will stop writing davcio)
+        if res_min < 1E-12 : return True
+        #Only check one step, if density converged well
+        if res_max < econv/1E1 : ncheck = 1
+        #-----------------------------------------------------------------------
         if econv is not None :
-            if len(energy_history) - 1 < ncheck :
-                return
+            if len(energy_history) < ncheck + 1 :
+                return False
             for i in range(ncheck):
                 dE = abs(energy_history[-2-i] - E)
                 if abs(dE) > econv :
