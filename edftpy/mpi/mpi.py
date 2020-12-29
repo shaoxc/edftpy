@@ -249,9 +249,12 @@ class GraphTopo:
                 sub_data[:] = self.region_data[i][index]
             else :
                 if self.rank == self.rank_region[i] :
-                    self.comm.Isend(self.region_data[i][index], dest = self.rank_sub[i], tag = i)
+                    buf = np.empty(self.graph.sub_shape[i])
+                    buf[:] = self.region_data[i][index]
+                    # self.comm.Isend(self.region_data[i][index], dest = self.rank_sub[i], tag = i)
+                    self.comm.Isend(buf, dest = self.rank_sub[i], tag = i)
                 elif self.rank == self.rank_sub[i] :
-                    recv_req = self.comm.Irecv(sub_data, source= self.rank_region[i], tag = i)
+                    recv_req = self.comm.Irecv(sub_data, source=self.rank_region[i], tag = i)
                     recv_req.wait()
 
             if self.isub == i :
@@ -268,8 +271,10 @@ class GraphTopo:
                 if self.rank == self.rank_sub[i] :
                     self.comm.Isend(sub_data, dest = self.rank_region[i], tag = i)
                 elif self.rank == self.rank_region[i] :
-                    recv_req = self.comm.Irecv(self.region_data[i][index], source = self.rank_sub[i], tag = i)
+                    buf = np.empty(self.graph.sub_shape[i])
+                    recv_req = self.comm.Irecv(buf, source = self.rank_sub[i], tag = i)
                     recv_req.wait()
+                    self.region_data[i][index] = buf
         else :
             self.region_data[i][index] = sub_data
 

@@ -173,7 +173,7 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
         hartree = Hartree()
         xc = XC(**xc_kwargs)
         funcdicts = {'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
-        if ke_kwargs['kedf'] == 'None' :
+        if ke_kwargs['kedf'] is None or ke_kwargs['kedf'].lower().startswith('no'):
             pass
         else :
             ke = KEDF(**ke_kwargs)
@@ -297,7 +297,6 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         grid_sub = None
     subcell = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale, mp = mp)
 
-
     if cell_change == 'position' :
         if subcell.density.shape == driver.density.shape :
             subcell.density[:] = driver.density
@@ -316,7 +315,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         mixer = PulayMixer(**mix_kwargs)
     elif mix_kwargs['scheme'] == 'Linear' :
         mixer = LinearMixer(**mix_kwargs)
-    elif mix_kwargs['scheme'].capitalize() in ['No', 'None'] :
+    elif mix_kwargs['scheme'] is None or mix_kwargs['scheme'].lower().startswith('no'):
         mixer = mix_kwargs['coef'][0]
     else :
         raise AttributeError("!!!ERROR : NOT support ", mix_kwargs['scheme'])

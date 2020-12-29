@@ -88,6 +88,8 @@ class Optimization(object):
         else:
             self.gsystem = gsystem
 
+        self.gsystem.gaussian_density[:] = 0.0
+        self.gsystem.density[:] = 0.0
         for i, driver in enumerate(self.drivers):
             if driver is None :
                 density = None
@@ -95,16 +97,12 @@ class Optimization(object):
             else :
                 density = driver.density
                 gaussian_density = driver.gaussian_density
-            if i == 0 :
-                restart = True
-            else :
-                restart = False
-
-            self.gsystem.update_density(gaussian_density, isub = i, restart = restart, fake = True)
-            self.gsystem.update_density(density, isub = i, restart = restart)
+            self.gsystem.update_density(gaussian_density, isub = i, fake = True)
+            self.gsystem.update_density(density, isub = i)
         sprint('update density')
+        sprint('density', self.gsystem.density.integral())
         totalrho = self.gsystem.density.copy()
-        # io.write('a.xsf', value, ions = self.gsystem.ions)
+        # io.write('a.xsf', totalrho, ions = self.gsystem.ions)
         # exit(0)
         self.nsub = len(self.drivers)
         energy_history = [0.0]
@@ -191,7 +189,7 @@ class Optimization(object):
             fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(it, energy, dE, resN, 1, timecost - time_begin)
             fmt += "\n    Total: {:<8d}{:<24.12E}".format(it, totalfunc.energy)
             sprint(seq +'\n' + fmt +'\n' + seq)
-            if self.check_converge(energy_history):
+            if self.check_converge(energy_history, res_norm):
                 sprint("#### Subsytem Density Optimization Converged ####")
                 break
             # exit()
@@ -218,19 +216,26 @@ class Optimization(object):
         return new_coef
 
     def get_diff_residual(self, **kwargs):
-        diff_res = []
+        diff_res = np.zeros(self.nsub)
         for i, driver in enumerate(self.drivers):
             if driver is not None :
-                diff_res.append(driver.residual_norm)
+                diff_res[i] = driver.residual_norm
+        diff_res = self.gsystem.grid.mp.vsum(diff_res)
+        sprint('diff_res', diff_res)
         return diff_res
 
-    def check_converge(self, energy_history, **kwargs):
+    def check_converge(self, energy_history, residual = None, **kwargs):
         econv = self.options["econv"]
         ncheck = self.options["ncheck"]
         E = energy_history[-1]
+        #-----------------------------------------------------------------------
+        res_min = min(residual)
+        #If one subsystem not udpate, for driver safe (e.g. pwscf will stop writing davcio)
+        if res_min < 1E-12 : return True
+        #-----------------------------------------------------------------------
         if econv is not None :
-            if len(energy_history) - 1 < ncheck :
-                return
+            if len(energy_history) < ncheck + 1 :
+                return False
             for i in range(ncheck):
                 dE = abs(energy_history[-2-i] - E)
                 if abs(dE) > econv :

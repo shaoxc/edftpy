@@ -46,8 +46,13 @@ class DFTpyOF(Driver):
         self.prefix = prefix
         #-----------------------------------------------------------------------
         self.mixer = mixer
-        if self.mixer is None and self.options['opt_method'] != 'full' :
+        if self.options['opt_method'] == 'full' :
+            if not isinstance(self.mixer, AbstractMixer):
+                self.mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
+        elif self.mixer is None :
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
+        elif isinstance(self.mixer, float):
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = self.mixer, predecut = 0, delay = 1)
         #-----------------------------------------------------------------------
         self.density = self.subcell.density
         self.init_density()
@@ -269,16 +274,19 @@ class DFTpyOF(Driver):
         elif olevel == 2 :
             func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False, with_embed = True)
         func_driver = self.evaluator_of.compute(self.charge, calcType = ['E'], with_sub = True, with_global = False, with_embed = False, with_ke = True)
-        func.energy += func_driver.energy
-        sprint('sub_energy_of', func.energy, comm=self.comm)
-        func.energy /= self.grid.mp.size
+        if 'E' in calcType :
+            func.energy += func_driver.energy
+            fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
+            sprint(fstr, comm=self.comm)
+            func.energy /= self.grid.mp.size
         return func
 
     def update_density(self, **kwargs):
         r = self.charge - self.prev_charge
         self.residual_norm = np.sqrt(self.grid.mp.asum(r * r)/self.grid.nnrR)
         rmax = r.amax()
-        sprint('res_norm_of', self._iter, rmax, self.residual_norm, comm=self.comm)
+        fstr = f'res_norm({self.prefix}): {self._iter}  {rmax}  {self.residual_norm}'
+        sprint(fstr, comm=self.comm)
         if self.options['opt_method'] == 'full' :
             rho = self.charge
         else :

@@ -58,10 +58,7 @@ class PwscfKS(Driver):
         #-----------------------------------------------------------------------
         self.mix_driver = None
         if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'inverse_kerker', predcoef = [0.1], maxm = 7, coef = [0.5], predecut = 0, delay = 1)
-            # rho0 = np.mean(self.density)
-            # kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
-            # self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, kf, 1.0], maxm = 7, coef = [0.7], predecut = 0, delay = 1)
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = [0.5], predecut = 0, delay = 1)
         elif isinstance(self.mixer, float):
             self.mix_driver = self.mixer
         if self.grid_driver is not None :
@@ -125,7 +122,7 @@ class PwscfKS(Driver):
         default_params = OrderedDict({
                 'control' :
                 {
-                    'calculation' : 'scf',
+                    'calculation' : 'relax',
                     'verbosity' : 'high',
                     'restart_mode' : 'from_scratch',
                     'iprint' : 1,
@@ -295,8 +292,8 @@ class PwscfKS(Driver):
         #-----------------------------------------------------------------------
         charge = charge.reshape((-1, 1), order='F')
         pwscfpy.pwpy_mod.pwpy_set_rho(charge)
-        if sym :
-            pwscfpy.pwpy_sum_band_sym()
+        # if sym :
+            # pwscfpy.pwpy_sum_band_sym()
         pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
         #-----------------------------------------------------------------------
         self.density[:] = self._format_density_invert(**kwargs)
@@ -353,17 +350,13 @@ class PwscfKS(Driver):
 
         self.prev_charge[:] = self.charge
 
-        # extene = 0.0
-        if self._iter > 0 :
-        # if self._iter > 100 :
-            self.energy = pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, self.exttype, initial, self.mix_driver)
-        else :
-            self.energy = pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, 0, initial, self.mix_driver)
+        self.energy = pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, self.exttype, initial, self.mix_driver)
 
-        if self.mix_driver is None :
-            pwscfpy.pwpy_sum_band()
-            if sym :
-                pwscfpy.pwpy_sum_band_sym()
+        # if self.mix_driver is None :
+            # pwscfpy.pwpy_sum_band()
+            # if sym :
+                # pwscfpy.pwpy_sum_band_sym()
+
         pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
         self.density[:] = self._format_density_invert()
         return self.density
@@ -387,7 +380,7 @@ class PwscfKS(Driver):
 
         if 'E' in calcType :
             func.energy += energy
-            fstr = f'sub_energy_ks : {self._iter}, {func.energy}'
+            fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
             sprint(fstr, comm=self.comm)
             pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
             self.energy = func.energy
@@ -407,7 +400,7 @@ class PwscfKS(Driver):
             r = density - prev_density
             self.residual_norm = np.sqrt(np.sum(r * r)/r.size)
             rmax = r.amax()
-            fstr = f'res_norm_ks : {self._iter}, {rmax}, {self.residual_norm}'
+            fstr = f'res_norm({self.prefix}): {self._iter}  {rmax}  {self.residual_norm}'
             sprint(fstr, comm=self.comm)
             pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
             #-----------------------------------------------------------------------

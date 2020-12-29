@@ -310,7 +310,6 @@ class GlobalCell(object):
         else :
             if restart :
                 self._density[:] = tol
-            # print(subrho.shape, self._density.shape)
             self.graphtopo.sub_to_global(subrho, self._density, isub = isub, grid = grid)
 
     def set_density(self, subrho, isub = None, grid = None, fake = False):
