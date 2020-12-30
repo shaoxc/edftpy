@@ -391,8 +391,8 @@ class CastepKS(Driver):
             self.density[:] = rho
         else :
             self.residual_norm = 100.0
-        if self.comm.size > 1 :
-            self.residual_norm = self.comm.bcast(self.residual_norm, root=0)
+        # if self.comm.size > 1 : self.residual_norm = self.comm.bcast(self.residual_norm, root=0)
+        if self.comm.rank > 0 : self.residual_norm = 0.0
         return self.density
 
     def get_fermi_level(self, **kwargs):

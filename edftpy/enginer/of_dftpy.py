@@ -155,6 +155,10 @@ class DFTpyOF(Driver):
         if res_max is None :
             res_max = self.residual_norm
 
+        if self.comm.size > 1 :
+            #only rank0 has the correct residual_norm
+            res_max = self.comm.bcast(res_max, root = 0)
+
         if self._iter == 1 :
             self.options['econv0'] = self.options['econv'] * 1E4
             self.options['econv'] = self.options['econv0']
@@ -271,7 +275,7 @@ class DFTpyOF(Driver):
             func = self.evaluator.compute(density, calcType = calcType, with_global = False)
         elif olevel == 1 :
             func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False)
-        elif olevel == 2 :
+        else : # elif olevel == 2 :
             func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False, with_embed = True)
         func_driver = self.evaluator_of.compute(self.charge, calcType = ['E'], with_sub = True, with_global = False, with_embed = False, with_ke = True)
         if 'E' in calcType :
@@ -293,6 +297,7 @@ class DFTpyOF(Driver):
             rho = self.mixer(self.prev_charge, self.charge, **kwargs)
         self.charge[:] = rho
         self._format_density_invert(self.charge, self.grid)
+        if self.comm.rank > 0 : self.residual_norm = 0.0
         return self.density
 
     def get_fermi_level(self, **kwargs):

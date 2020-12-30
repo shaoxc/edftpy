@@ -22,12 +22,12 @@ class Evaluator(AbsFunctional):
     def __call__(self, density, calcType=["E","V"], **kwargs):
         return self.compute(density, calcType, **kwargs)
 
-    def compute(self, density, calcType=["E","V"], **kwargs):
+    def compute(self, density, calcType=["E","V"], split = False, **kwargs):
         # calcType = ['E', 'V']
         results = None
         for key, evalfunctional in self.funcdicts.items():
             obj = evalfunctional(density, calcType)
-            # if hasattr(obj, 'energy'): sprint(key, obj.energy * 27.21138)
+            # if hasattr(obj, 'energy'): sprint(key, density.mp.asum(obj.energy * 27.21138))
             # if hasattr(obj, 'potential'): sprint(key, obj.potential[:3, 0, 0] * 2)
             if results is None :
                 results = obj
@@ -226,6 +226,7 @@ class TotalEvaluator(Evaluator):
         super().__init__(**kwargs)
         self.embed_keys = embed_keys
         self.embed_potential = None
+        self.static_potential = None
 
     def get_embed_potential(self, rho, gaussian_density = None, embed_keys = [], with_global = True, **kwargs):
         self.embed_potential = None
@@ -238,9 +239,12 @@ class TotalEvaluator(Evaluator):
                     key = key1
                     break
         remove_global = {}
-        if key is not None and gaussian_density is not None :
+        if key is not None :
             remove_global = {key : func}
-            obj_global = func(rho + gaussian_density, calcType = ['V'])
+            if gaussian_density is not None :
+                obj_global = func(rho + gaussian_density, calcType = ['V'])
+            else :
+                obj_global = func(rho, calcType = ['V'])
             self.embed_potential = obj_global.potential
         #-----------------------------------------------------------------------
         if not with_global :
@@ -254,3 +258,5 @@ class TotalEvaluator(Evaluator):
         else :
             self.embed_potential += obj_global.potential
         self.update_functional(add = remove_global)
+
+        self.static_potential = obj_global.potential

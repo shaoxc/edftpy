@@ -6,6 +6,7 @@ from dftpy.ewald import ewald
 # from .utils.common import Field
 from edftpy.mpi import sprint
 from edftpy.properties import get_total_forces, get_total_stress
+from edftpy.hartree import Hartree
 
 
 class Optimization(object):
@@ -27,7 +28,7 @@ class Optimization(object):
         self.options = default_options
         self.options.update(options)
 
-    def get_energy(self, totalrho = None, totalfunc = None, olevel = 0, **kwargs):
+    def get_energy(self, totalrho = None, totalfunc = None, update = None, olevel = 0, **kwargs):
         elist = []
         if totalfunc is None :
             if totalrho is None :
@@ -39,6 +40,8 @@ class Optimization(object):
             if driver is None :
                 ene = 0.0
             elif olevel < 0 : # use saved energy
+                ene = driver.energy
+            elif update is not None and not update[i]:
                 ene = driver.energy
             else :
                 self.gsystem.density[:] = totalrho
@@ -107,8 +110,7 @@ class Optimization(object):
         self.nsub = len(self.drivers)
         energy_history = [0.0]
         #-----------------------------------------------------------------------
-        fmt = "           {:8s}{:24s}{:16s}{:16s}{:8s}{:16s}".format("Step", "Energy(a.u.)", "dE", "dP", "Nls", "Time(s)")
-        resN = 9999
+        fmt = "           {:8s}{:24s}{:16s}{:10s}{:10s}{:16s}".format("Step", "Energy(a.u.)", "dE", "dP", "dC", "Time(s)")
         #-----------------------------------------------------------------------
         sprint(fmt)
         seq = "-" * 100
@@ -119,27 +121,24 @@ class Optimization(object):
         # fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(0, energy, dE, resN, 1, timecost - time_begin)
         # sprint(seq +'\n' + fmt +'\n' + seq)
         #-----------------------------------------------------------------------
-        embed_keys = []
         of_ids = []
         of_drivers = []
         for i, driver in enumerate(self.drivers):
-            if driver is not None :
-                if driver.technique== 'OF' :
+            if driver is not None and driver.technique== 'OF' :
                     of_drivers.append(driver)
                     of_ids.append(i)
-                else :
-                    embed_keys = driver.evaluator.embed_evaluator.funcdicts.keys()
-                    break
-        # print('embed_keys', embed_keys)
         #-----------------------------------------------------------------------
         update = [True for _ in range(self.nsub)]
+        res_norm = np.ones(self.nsub)
+        totalrho_prev = None
         for it in range(self.options['maxiter']):
             self.iter = it
             #-----------------------------------------------------------------------
             if self.nsub == len(of_drivers):
                 pass
             else :
-                self.gsystem.total_evaluator.get_embed_potential(totalrho, gaussian_density = self.gsystem.gaussian_density, embed_keys = embed_keys, with_global = True)
+                self.gsystem.total_evaluator.get_embed_potential(totalrho, gaussian_density = self.gsystem.gaussian_density, with_global = True)
+                static_potential = self.gsystem.total_evaluator.static_potential.copy()
             for isub in range(self.nsub + len(of_drivers)):
                 if isub < self.nsub :
                     driver = self.drivers[isub]
@@ -164,41 +163,59 @@ class Optimization(object):
                     driver = of_drivers[isub - self.nsub]
                     i = of_ids[isub - self.nsub]
 
-                update_delay = driver.options['update_delay']
-                update_freq = driver.options['update_freq']
-                if it > update_delay and (it - update_delay) % update_freq > 0:
-                    update[i] = False
-                else :
-                    update[i] = True
+                update[i] = self.get_update(driver, it, res_norm[i])
 
                 if update[i] :
                     self.gsystem.density[:] = totalrho
                     driver(gsystem = self.gsystem, calcType = ['O'], olevel = olevel)
-            # res_norm = self.get_diff_residual()
+
+            if self.nsub == len(of_drivers):
+                static_potential = self.gsystem.total_evaluator.static_potential.copy()
             #-----------------------------------------------------------------------
+            # res_norm = self.get_diff_residual()
+            totalrho, totalrho_prev = totalrho_prev, totalrho
             totalrho = self.update_density(update = update)
             res_norm = self.get_diff_residual()
-
+            d_ehart = self.delta_rho_hartree(totalrho, totalrho_prev)
+            if self.check_converge(d_ehart, res_norm):
+                sprint("#### Subsytem Density Optimization Converged ####")
+                break
+            scf_correction = self.get_scf_correction(static_potential, totalrho, totalrho_prev)
             totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
-            energy = self.get_energy(totalrho, totalfunc, olevel = olevel)[0]
+            energy = self.get_energy(totalrho, totalfunc, update = update, olevel = olevel)[0]
             #-----------------------------------------------------------------------
             energy_history.append(energy)
             timecost = time.time()
             dE = energy_history[-1] - energy_history[-2]
-            resN = max(res_norm)
-            fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(it, energy, dE, resN, 1, timecost - time_begin)
+            dE += scf_correction
+            energy += scf_correction
+            #-----------------------------------------------------------------------
+            fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format(it, energy, dE, d_ehart, scf_correction, timecost - time_begin)
             fmt += "\n    Total: {:<8d}{:<24.12E}".format(it, totalfunc.energy)
             sprint(seq +'\n' + fmt +'\n' + seq)
-            if self.check_converge(energy_history, res_norm):
-                sprint("#### Subsytem Density Optimization Converged ####")
-                break
+            # if self.check_converge_ene(energy_history, res_norm):
+                # sprint("#### Subsytem Density Optimization Converged ####")
+                # break
             # exit()
-        if self.options['maxiter'] < 1 :
-            totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
-        # self.energy = energy
+        totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
         self.energy = self.get_energy(totalrho, totalfunc, olevel = 0)[0]
         self.density = totalrho
+        fmt = "    Final: {:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format(it, self.energy, 0.0, d_ehart, 0.0, time.time() - time_begin)
+        fmt += "\n    Total: {:<8d}{:<24.12E}".format(it, totalfunc.energy)
+        sprint(seq +'\n' + fmt +'\n' + seq)
         return
+
+    def get_update(self, driver, istep, residual):
+        update_delay = driver.options['update_delay']
+        update_freq = driver.options['update_freq']
+        if istep > update_delay and (istep - update_delay) % update_freq > 0:
+            update = False
+        # elif residual < 1E-12 :
+            # #For driver safe (e.g. pwscf will stop writing davcio)
+            # update = False
+        else :
+            update = True
+        return update
 
     def get_frag_coef(self, coef, sub_d_e, d_e, alpha = 1.0, maxs = 0.2):
         '''
@@ -224,14 +241,22 @@ class Optimization(object):
         sprint('diff_res', diff_res)
         return diff_res
 
-    def check_converge(self, energy_history, residual = None, **kwargs):
+    def check_converge(self, de, residual = None, **kwargs):
+        econv = self.options["econv"]/1E2
+        if np.any(residual < 1E-12) : return True
+        #-----------------------------------------------------------------------
+        if econv is not None :
+            if abs(de) > econv : return False
+        return True
+
+    def check_converge_ene(self, energy_history, residual = None, **kwargs):
         econv = self.options["econv"]
         ncheck = self.options["ncheck"]
         E = energy_history[-1]
         #-----------------------------------------------------------------------
-        res_min = min(residual)
-        #If one subsystem not udpate, for driver safe (e.g. pwscf will stop writing davcio)
-        if res_min < 1E-12 : return True
+        # res_max = max(residual)
+        # if res_max < 1E-12 : return True
+        if np.any(residual < 1E-12) : return True
         #-----------------------------------------------------------------------
         if econv is not None :
             if len(energy_history) < ncheck + 1 :
@@ -310,3 +335,14 @@ class Optimization(object):
     def get_stress(self, **kwargs):
         stress = get_total_stress(drivers = self.drivers, gsystem = self.gsystem, **kwargs)
         return stress
+
+    def get_scf_correction(self, v, rho1, rho0):
+        ene = -np.sum((rho1 - rho0) * v) * rho1.grid.dV
+        ene = self.gsystem.grid.mp.asum(ene)
+        return ene
+
+    def delta_rho_hartree(self, rho1=None, rho0=None):
+        if rho0 is None or rho1 is None : return 1.0
+        ene = Hartree.compute(rho1-rho0, calcType=['E']).energy
+        ene = self.gsystem.grid.mp.asum(ene)
+        return ene

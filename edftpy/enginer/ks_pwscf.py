@@ -319,13 +319,16 @@ class PwscfKS(Driver):
             self.evaluator.get_embed_potential(self.density, gaussian_density = self.gaussian_density)
             extpot = self.evaluator.embed_potential
             extene = (extpot * self.density).integral()
+            if self.grid_driver is not None :
+                extpot = grid_map_data(extpot, grid = self.grid_driver)
         else :
-            extpot = np.empty(self.grid.nrR)
             extene = 0.0
+            if self.grid_driver is not None :
+                extpot = np.empty(self.grid_driver.nrR, order = 'F')
+            else :
+                extpot = np.empty(self.grid.nrR, order = 'F')
         if self.comm.size > 1 :
             extene = self.comm.bcast(extene, root = 0)
-        if self.grid_driver is not None :
-            extpot = grid_map_data(extpot, grid = self.grid_driver)
         extpot = extpot.ravel(order = 'F') * 2.0 # a.u. to Ry
         extene *= -2.0
         return extpot, extene
@@ -365,10 +368,13 @@ class PwscfKS(Driver):
         energy = pwscfpy.pwpy_calc_energies(self.exttype) * 0.5
         return energy
 
-    def get_energy_potential(self, density, calcType = ['E', 'V'], **kwargs):
+    def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, **kwargs):
+        olevel =0
         if 'E' in calcType :
-            energy = self.get_energy()
-            # energy = self.energy
+            if olevel == 0 :
+                energy = self.get_energy()
+            else : # elif olevel == 1 :
+                energy = self.energy
 
         if self.comm.rank == 0 :
             func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = False)
@@ -413,8 +419,8 @@ class PwscfKS(Driver):
                 self.density[:] = rho
         else :
             self.residual_norm = 100.0
-        if self.comm.size > 1 :
-            self.residual_norm = self.comm.bcast(self.residual_norm, root=0)
+        # if self.comm.size > 1 : self.residual_norm = self.comm.bcast(self.residual_norm, root=0)
+        if self.comm.rank > 0 : self.residual_norm = 0.0
         return self.density
 
     def get_fermi_level(self, **kwargs):
