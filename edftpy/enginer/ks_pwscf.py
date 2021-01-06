@@ -5,6 +5,7 @@ from scipy import signal
 import copy
 import os
 from dftpy.formats.ase_io import ions2ase
+from dftpy.constants import LEN_CONV, ENERGY_CONV
 import ase.io.espresso as ase_io_driver
 from ase.calculators.espresso import Espresso as ase_calc_driver
 
@@ -13,11 +14,19 @@ from ..utils.common import Grid, Field, Functional
 from ..utils.math import grid_map_data
 from ..density import normalization_density
 from .driver import Driver
+from edftpy.hartree import hartree_energy
 from edftpy.mpi import sprint, SerialComm
 from collections import OrderedDict
 
+from pwscfpy import constants as pwc
+unit_len = LEN_CONV["Bohr"]["Angstrom"] / pwc.BOHR_RADIUS_SI / 1E10
+unit_vol = unit_len ** 3
+
 class PwscfKS(Driver):
-    """description"""
+    """
+    Note :
+        The extpot separated into two parts : v.of_r and vltot will be a better and safe way
+    """
     def __init__(self, evaluator = None, subcell = None, prefix = 'sub_ks', params = None, cell_params = None,
             exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None, **kwargs):
         '''
@@ -31,7 +40,7 @@ class PwscfKS(Driver):
                     6 : hartree + xc                 : 110
                     7 : pseudo + hartree + xc        : 111
         '''
-        super().__init__(options = options)
+        super().__init__(options = options, technique = 'KS')
         self._input_ext = '.in'
 
         self.evaluator = evaluator
@@ -81,6 +90,7 @@ class PwscfKS(Driver):
         self.energy = 0.0
         self.phi = None
         self.residual_norm = 1
+        self.dp_norm = 1
         if isinstance(self.mixer, AbstractMixer):
             self.mixer.restart()
         if subcell is not None :
@@ -91,6 +101,18 @@ class PwscfKS(Driver):
             pwscfpy.pwpy_electrons_scf(0, 0, self.charge, 0, self.exttype, 0, finish = True)
             pwscfpy.extrapolation.update_pot()
             pwscfpy.hinit1()
+
+        # self.core_charge = pwscfpy.scf.get_array_rho_core()
+        if self.grid_driver is not None :
+            grid = self.grid_driver
+        else :
+            grid = self.grid
+        self.core_charge = np.empty((grid.nnr, 1), order = 'F')
+        pwscfpy.pwpy_mod.pwpy_get_rho_core(self.core_charge)
+        if self.comm.rank == 0 :
+            self.core_density = self._format_density_invert(self.core_charge)
+        else :
+            self.core_density = Field(grid=self.grid, rank=1, direct=True)
         return
 
     @property
@@ -122,7 +144,7 @@ class PwscfKS(Driver):
         default_params = OrderedDict({
                 'control' :
                 {
-                    'calculation' : 'relax',
+                    'calculation' : 'scf',
                     'verbosity' : 'high',
                     'restart_mode' : 'from_scratch',
                     'iprint' : 1,
@@ -132,6 +154,7 @@ class PwscfKS(Driver):
                     'ibrav' : 0,
                     'nat' : 1,
                     'ntyp' : 1,
+                    # 'ecutwfc' : 40,
                     'nosym' : True,
                     'occupations' : 'smearing',
                     'degauss' : 0.001,
@@ -290,7 +313,7 @@ class PwscfKS(Driver):
         else :
             charge = self.density
         #-----------------------------------------------------------------------
-        charge = charge.reshape((-1, 1), order='F')
+        charge = charge.reshape((-1, 1), order='F') / unit_vol
         pwscfpy.pwpy_mod.pwpy_set_rho(charge)
         # if sym :
             # pwscfpy.pwpy_sum_band_sym()
@@ -312,6 +335,7 @@ class PwscfKS(Driver):
             rho = grid_map_data(density, grid = grid)
         else :
             rho = Field(grid=grid, rank=1, direct=True, data = charge, order = 'F')
+        rho *= unit_vol
         return rho
 
     def _get_extpot(self, **kwargs):
@@ -330,7 +354,8 @@ class PwscfKS(Driver):
         if self.comm.size > 1 :
             extene = self.comm.bcast(extene, root = 0)
         extpot = extpot.ravel(order = 'F') * 2.0 # a.u. to Ry
-        extene *= -2.0
+        # extene *= -2.0
+        extene = 0.0
         return extpot, extene
 
     def get_density(self, vext = None, **kwargs):
@@ -353,7 +378,7 @@ class PwscfKS(Driver):
 
         self.prev_charge[:] = self.charge
 
-        self.energy = pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, self.exttype, initial, self.mix_driver)
+        self.energy, self.dp_norm = pwscfpy.pwpy_electrons_scf(printout, exxen, extpot, extene, self.exttype, initial)
 
         # if self.mix_driver is None :
             # pwscfpy.pwpy_sum_band()
@@ -369,7 +394,7 @@ class PwscfKS(Driver):
         return energy
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, **kwargs):
-        olevel =0
+        # olevel =0
         if 'E' in calcType :
             if olevel == 0 :
                 energy = self.get_energy()
@@ -405,22 +430,28 @@ class PwscfKS(Driver):
             #-----------------------------------------------------------------------
             r = density - prev_density
             self.residual_norm = np.sqrt(np.sum(r * r)/r.size)
+            self.dp_norm = hartree_energy(r)
             rmax = r.amax()
             fstr = f'res_norm({self.prefix}): {self._iter}  {rmax}  {self.residual_norm}'
             sprint(fstr, comm=self.comm)
             pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
             #-----------------------------------------------------------------------
-            if self.mix_driver is not None :
-                pass
-            else :
+            if self.mix_driver is None :
                 rho = self.mixer(prev_density, density, **kwargs)
                 if self.grid_driver is not None and mix_grid:
                     rho = grid_map_data(rho, grid = self.grid)
                 self.density[:] = rho
         else :
-            self.residual_norm = 100.0
+            self.residual_norm = 0.0
+            self.dp_norm = 0.0
+
+        if self.mix_driver is not None :
+            ene, dp_norm = pwscfpy.pwpy_electrons_scf(0, 0, self.charge[:, 0], 0, self.exttype, 0, mix_coef = self.mix_driver)
+            if self._iter > 1 : self.dp_norm = dp_norm
+            pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
+            self.density[:] = self._format_density_invert()
+
         # if self.comm.size > 1 : self.residual_norm = self.comm.bcast(self.residual_norm, root=0)
-        if self.comm.rank > 0 : self.residual_norm = 0.0
         return self.density
 
     def get_fermi_level(self, **kwargs):

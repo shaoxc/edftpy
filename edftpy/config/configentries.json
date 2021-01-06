@@ -162,9 +162,9 @@
 		},
 		"embed": {
 			"type": "strlist",
-			"default": "KE, XC",
+			"default": "KE  XC",
 			"comment": "The embedding potential",
-			"options": "KE, XC"
+			"options": "KE  XC"
 		},
 		"cell": {
 			"file": {
@@ -292,7 +292,7 @@
 			},
 			"use_gaussians": {
 				"type": "bool",
-				"default": true,
+				"default": false,
 				"comment": " It will replaces the core densities of the surrounding fragments with a gaussian. This is to avoid problems of electrons leaking in the core region of surrounding fragments when hard pseudopotentials are employed."
 			},
 			"gaussians_rcut": {

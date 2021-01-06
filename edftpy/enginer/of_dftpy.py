@@ -7,6 +7,7 @@ from ..mixer import LinearMixer, PulayMixer, AbstractMixer
 from ..utils.math import grid_map_data
 from .hamiltonian import Hamiltonian
 from .driver import Driver
+from edftpy.hartree import hartree_energy
 from edftpy.mpi import sprint
 
 from dftpy.optimization import Optimization
@@ -79,6 +80,8 @@ class DFTpyOF(Driver):
         self.energy = 0.0
         self.phi = None
         self.residual_norm = 1
+        self.dp_norm = 1
+        self.core_density = None
         if isinstance(self.mixer, AbstractMixer):
             self.mixer.restart()
         if subcell is not None :
@@ -287,6 +290,7 @@ class DFTpyOF(Driver):
 
     def update_density(self, **kwargs):
         r = self.charge - self.prev_charge
+        self.dp_norm = hartree_energy(r)
         self.residual_norm = np.sqrt(self.grid.mp.asum(r * r)/self.grid.nnrR)
         rmax = r.amax()
         fstr = f'res_norm({self.prefix}): {self._iter}  {rmax}  {self.residual_norm}'
@@ -295,9 +299,11 @@ class DFTpyOF(Driver):
             rho = self.charge
         else :
             rho = self.mixer(self.prev_charge, self.charge, **kwargs)
-        self.charge[:] = rho
-        self._format_density_invert(self.charge, self.grid)
-        if self.comm.rank > 0 : self.residual_norm = 0.0
+            self.charge[:] = rho
+            self._format_density_invert(self.charge, self.grid)
+        if self.comm.rank > 0 :
+            self.residual_norm = 0.0
+            self.dp_norm = 0.0
         return self.density
 
     def get_fermi_level(self, **kwargs):

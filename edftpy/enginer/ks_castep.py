@@ -30,7 +30,8 @@ class CastepKS(Driver):
                     6 : hartree + xc                 : 110
                     7 : pseudo + hartree + xc        : 111
         '''
-        Driver.__init__(self, options = options)
+        super().__init__(options = options, technique = 'KS')
+
         self.evaluator = evaluator
         self.exttype = exttype
         self.subcell = subcell

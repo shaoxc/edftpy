@@ -14,3 +14,8 @@ class Hartree(AbsFunctional):
     def compute(cls, density, calcType=["E","V"], **kwargs):
         functional = HartreeFunctional(density, calcType=calcType)
         return functional
+
+def hartree_energy(density):
+    ene = Hartree.compute(density, calcType=['E']).energy
+    ene = density.grid.mp.asum(ene)
+    return ene

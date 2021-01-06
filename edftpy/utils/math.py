@@ -14,7 +14,13 @@ def gaussian(x, sigma = 0.4, mu = 0.0, dim = 3):
         y = 1.0/(np.sqrt(2.0 * np.pi) * sigma) * np.exp(-0.5 * ((x - mu)/sigma) ** 2.0)
     else : # Just for debug
         y = 1.0/(np.sqrt(2.0 * np.pi * sigma)) ** 3 * np.exp((x - mu) ** 2 /(-2.0 * sigma))
-        # y = np.zeros_like(x)
+    return y
+
+def gaussian_g(x, sigma = 0.1, dim = 3, kind = 0):
+    if kind > 0 :
+        y = (np.sqrt(2.0 * np.pi) * sigma) ** (dim - 1) * np.exp(-2 * (x * sigma * np.pi) ** 2)
+    else :
+        y = (np.sqrt(2.0 * np.pi) * sigma) ** (dim - 1) * np.exp(-0.5 * (x * sigma) ** 2)
     return y
 
 def fermi_dirac(x, mu = None, kt = None):

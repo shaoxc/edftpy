@@ -8,7 +8,7 @@ from dftpy.ewald import CBspline
 from edftpy.mpi import sprint
 
 
-def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=1E-30, direct=True, pme=True, order=10, **kwargs):
+def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=0.0, direct=True, pme=True, order=10, **kwargs):
     """
     """
     if hasattr(grid, 'get_reciprocal'):
@@ -17,7 +17,7 @@ def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=1E
         reciprocal_grid = grid
         grid = grid.get_direct()
 
-    rho = Field(reciprocal_grid, direct = False)
+    rho_g = Field(reciprocal_grid, direct = False)
 
     radial = {}
     vlines = {}
@@ -34,8 +34,8 @@ def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=1E
                 if ions.labels[i] == key:
                     qa = Bspline.get_PME_Qarray(i, qa)
             qarray = Field(grid=grid, data=qa, direct = True)
-            rho += vlines[key] * qarray.fft()
-        rho *= Bspline.Barray * grid.nnrR / grid.volume
+            rho_g += vlines[key] * qarray.fft()
+        rho_g *= Bspline.Barray * grid.nnrR / grid.volume
     else :
         for key in r:
             r0 = r[key]
@@ -45,10 +45,10 @@ def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=1E
             for i in range(ions.nat):
                 if ions.labels[i] == key:
                     strf = ions.strf(reciprocal_grid, i)
-                    rho += vlines[key] * strf
+                    rho_g += vlines[key] * strf
 
     if direct :
-        rho = rho.ifft()
+        rho = rho_g.ifft()
         rho[rho < dtol] = dtol
         sprint('Guess density (Real): ', rho.integral(), comm=grid.mp.comm)
         if ncharge is None :

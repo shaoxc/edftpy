@@ -5,10 +5,9 @@ from dftpy.ewald import ewald
 
 from edftpy.pseudopotential import LocalPP
 from edftpy.utils.common import Field, Grid, Atoms, Coord
-from ..utils.math import gaussian
+from ..utils.math import gaussian, gaussian_g
 from ..density import get_3d_value_recipe
 from edftpy.mpi import sprint
-na = 0
 
 class SubCell(object):
     def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, full = False, gaussian_options = None, **kwargs):
@@ -138,19 +137,25 @@ class SubCell(object):
         sprint('subcell shift', shift, comm=self.comm)
 
     def _gen_gaussian_density(self, options={}):
+        """
+        FWHM : 2*np.sqrt(2.0*np.log(2)) = 2.354820
+        """
+        fwhm = 2.354820
         nr = self.grid.nrR
         dnr = (1.0/nr).reshape((3, 1))
         gaps = self.grid.spacings
         # latp = self.grid.latparas
         self._gaussian_density = Field(self.grid)
         ncharge = 0.0
+        sigma_min = np.max(gaps) * 2 / fwhm
         for key, option in options.items() :
             rcut = option.get('rcut', 5.0)
-            sigma = option.get('sigma', 0.4)
+            sigma = option.get('sigma', 0.1)
             scale = option.get('scale', 0.0)
-            # scale = option.get('scale', self.ions.Zval[key])
             if scale is None or abs(scale) < 1E-10 :
                 continue
+            # print('sigma', np.max(gaps), fwhm * sigma, sigma_min)
+            sigma = max(sigma, sigma_min)
             border = (rcut / gaps).astype(np.int32) + 1
             border = np.minimum(border, nr//2)
             ixyzA = np.mgrid[-border[0]:border[0]+1, -border[1]:border[1]+1, -border[2]:border[2]+1].reshape((3, -1))
@@ -176,15 +181,16 @@ class SubCell(object):
                 self._gaussian_density[l123A[0][mask], l123A[1][mask], l123A[2][mask]] += prho.ravel()[mask]
                 ncharge += scale
 
-        if ncharge > 1E-3 :
-            factor = ncharge / (self._gaussian_density.integral())
-        else :
-            factor = 0.0
         nc = self._gaussian_density.integral()
-        sprint('fake01', nc, comm=self.comm)
-        self._gaussian_density *= factor
-        nc = self._gaussian_density.integral()
-        sprint('fake02', nc, comm=self.comm)
+        sprint('fake : ', nc, ' error : ', nc - ncharge, comm=self.comm)
+
+        # if ncharge > 1E-3 :
+            # factor = ncharge / (self._gaussian_density.integral())
+        # else :
+            # factor = 0.0
+        # self._gaussian_density *= factor
+        # nc = self._gaussian_density.integral()
+        # sprint('fake02', nc, comm=self.comm)
 
     def get_array_mask(self, l123A):
         if self.comm.size == 1 :
@@ -216,9 +222,10 @@ class SubCell(object):
                     continue
                 ncharge += scale
             r_g[key] = np.linspace(0, 30, 10000)
-            arho_g[key] = np.exp(-0.5 * sigma ** 2 * r_g[key] ** 2) * scale
+            arho_g[key] = np.exp(-2 * (sigma * r_g[key] * np.pi) ** 2) * scale
         self._gaussian_density[:]=get_3d_value_recipe(r_g, arho_g, self.ions, self.grid, ncharge = ncharge, direct=True, pme=True, order=10)
-        sprint('fake01', np.sum(self._gaussian_density) * self.grid.dV, comm=self.comm)
+        nc = self._gaussian_density.integral()
+        sprint('fake01', nc, comm=self.comm)
 
 class GlobalCell(object):
     def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, graphtopo = None, **kwargs):
@@ -245,6 +252,7 @@ class GlobalCell(object):
             self._gen_grid(**self.grid_kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
         self._gaussian_density = Field(grid=self.grid, rank=1, direct=True)
+        self._core_density = Field(grid=self.grid, rank=1, direct=True)
 
     @property
     def grid(self):
@@ -271,6 +279,14 @@ class GlobalCell(object):
     @density.setter
     def density(self, value):
         self._density[:] = value
+
+    @property
+    def core_density(self):
+        return self._core_density
+
+    @core_density.setter
+    def core_density(self, value):
+        self._core_density[:] = value
 
     @property
     def total_evaluator(self):
@@ -302,14 +318,12 @@ class GlobalCell(object):
         self._grid = grid
         sprint('GlobalCell grid', nr, comm=self.comm)
 
-    def update_density(self, subrho, isub = None, grid = None, restart = False, fake = False, tol = 0.0):
+    def update_density(self, subrho, isub = None, grid = None, restart = False, fake = False, core = False):
         if fake :
-            if restart :
-                self._gaussian_density[:] = tol
             self.graphtopo.sub_to_global(subrho, self._gaussian_density, isub = isub, grid = grid)
+        elif core :
+            self.graphtopo.sub_to_global(subrho, self._core_density, isub = isub, grid = grid)
         else :
-            if restart :
-                self._density[:] = tol
             self.graphtopo.sub_to_global(subrho, self._density, isub = isub, grid = grid)
 
     def set_density(self, subrho, isub = None, grid = None, fake = False):

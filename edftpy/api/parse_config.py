@@ -1,9 +1,11 @@
 import numpy as np
 import os
+from collections import OrderedDict
+
 from dftpy.constants import LEN_CONV, ENERGY_CONV
 from dftpy.formats import ase_io, io
 
-from edftpy.config import read_conf
+from edftpy.config import read_conf, print_conf
 
 from edftpy.pseudopotential import LocalPP
 from edftpy.kedf import KEDF
@@ -40,13 +42,33 @@ def import_drivers(config):
         from edftpy.enginer.of_dftpy import DFTpyOF
     return
 
+def config_correct(config):
+    """
+
+    Correct some missing but important variables
+
+    Args:
+        config: config
+
+    Notes:
+        Only correct some missing variables
+    """
+    subkeys = [key for key in config if key.startswith('SUB')]
+    for key in subkeys :
+        if config[key]['calculator'] == 'dftpy' :
+            config[key]['technique'] = 'OF'
+        else :
+            config[key]['technique'] = 'KS'
+    return config
 def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **kwargs):
     if isinstance(config, dict):
         pass
     elif isinstance(config, str):
         config = read_conf(config)
     #-----------------------------------------------------------------------
+    config = config_correct(config)
     graphtopo = config2graphtopo(config, graphtopo = graphtopo)
+    # if graphtopo.rank == 0 : print_conf(config)
     #-----------------------------------------------------------------------
     cell_change = None
     ############################## Gsystem ##############################
@@ -200,8 +222,11 @@ def config2evaluator(config, keysys, ions, grid, pplist = None, optimizer = None
         # if exttype == 0 : embed = []
     emb_funcdicts = {}
     if 'KE' in embed :
-        ke_emb = KEDF(**emb_ke_kwargs)
-        emb_funcdicts['KE'] = ke_emb
+        if emb_ke_kwargs['kedf'] is None or emb_ke_kwargs['kedf'].lower().startswith('no'):
+            pass
+        else :
+            ke_emb = KEDF(**emb_ke_kwargs)
+            emb_funcdicts['KE'] = ke_emb
     if 'XC' in embed :
         xc_emb = XC(**emb_xc_kwargs)
         emb_funcdicts['XC'] = xc_emb
@@ -279,7 +304,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     #-----------------------------------------------------------------------
     gaussian_options = {}
     if use_gaussians :
-        for key in set(ions.labels):
+        for key in pplist :
             if key in gaussians_scale :
                 scale = float(gaussians_scale[key])
             else :
@@ -419,8 +444,8 @@ def get_castep_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, ma
     if ecut :
         subcell = margs['subcell']
         params['cut_off_energy'] = ecut * ENERGY_CONV['Hartree']['eV']
-        if abs(ecut - gsystem_ecut) < 1.0 :
-            params['devel_code'] = 'STD_GRID={0} {1} {2}  FINE_GRID={0} {1} {2}'.format(*subcell.grid.nr)
+        if abs(ecut - gsystem_ecut) < 5.0 :
+            params['devel_code'] = 'STD_GRID={0} {1} {2}  FINE_GRID={0} {1} {2}'.format(*subcell.grid.nrR)
 
     add = {
             'cell_params': cell_params,
@@ -444,11 +469,13 @@ def get_pwscf_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, mar
     params = {'system' : {}}
     if ecut :
         subcell = margs['subcell']
-        params['system']['ecutwfc'] = ecut * 2.0
-        if abs(4 * ecut - gsystem_ecut) < 1.0 :
-            params['system']['nr1'] = subcell.grid.nr[0]
-            params['system']['nr2'] = subcell.grid.nr[1]
-            params['system']['nr3'] = subcell.grid.nr[2]
+        # params['system']['ecutwfc'] = ecut * 2.0
+        # if abs(4 * ecut - gsystem_ecut) < 1.0 :
+        params['system']['ecutwfc'] = ecut / 4.0 * 2.0 # 4*ecutwfc to Ry
+        if abs(ecut - gsystem_ecut) < 5.0 :
+            params['system']['nr1'] = subcell.grid.nrR[0]
+            params['system']['nr2'] = subcell.grid.nrR[1]
+            params['system']['nr3'] = subcell.grid.nrR[2]
 
     add = {
             'cell_params': cell_params,

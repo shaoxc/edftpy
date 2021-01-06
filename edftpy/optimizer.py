@@ -1,12 +1,10 @@
 import numpy as np
 import time
-import copy
 from dftpy.formats import io
-from dftpy.ewald import ewald
-# from .utils.common import Field
+from dftpy.constants import ENERGY_CONV
 from edftpy.mpi import sprint
 from edftpy.properties import get_total_forces, get_total_stress
-from edftpy.hartree import Hartree
+from collections import OrderedDict
 
 
 class Optimization(object):
@@ -66,18 +64,16 @@ class Optimization(object):
             # sprint('outcoef',coef)
             if driver is None : continue
             coef = None
-            if update[i] :
+            if update is not None and update[i]:
                 driver.update_density(coef = coef)
 
+        self.gsystem.density[:] = 0.0
         for i, driver in enumerate(self.drivers):
             if driver is None :
                 density = None
             else :
                 density = driver.density
-            if i == 0 :
-                self.gsystem.update_density(density, isub = i, restart = True)
-            else :
-                self.gsystem.update_density(density, isub = i, restart = False)
+            self.gsystem.update_density(density, isub = i)
         totalrho = self.gsystem.density.copy()
         return totalrho
 
@@ -97,14 +93,21 @@ class Optimization(object):
             if driver is None :
                 density = None
                 gaussian_density = None
+                core_density = None
             else :
                 density = driver.density
                 gaussian_density = driver.gaussian_density
-            self.gsystem.update_density(gaussian_density, isub = i, fake = True)
+                core_density = driver.core_density
+                # io.write(str(i) + '_gauss.xsf', gaussian_density, ions = driver.subcell.ions)
             self.gsystem.update_density(density, isub = i)
+            self.gsystem.update_density(gaussian_density, isub = i, fake = True)
+            self.gsystem.update_density(core_density, isub = i, core = True)
         sprint('update density')
         sprint('density', self.gsystem.density.integral())
         totalrho = self.gsystem.density.copy()
+        #-----------------------------------------------------------------------
+        self.add_xc_correction()
+        #-----------------------------------------------------------------------
         # io.write('a.xsf', totalrho, ions = self.gsystem.ions)
         # exit(0)
         self.nsub = len(self.drivers)
@@ -172,12 +175,13 @@ class Optimization(object):
             if self.nsub == len(of_drivers):
                 static_potential = self.gsystem.total_evaluator.static_potential.copy()
             #-----------------------------------------------------------------------
-            # res_norm = self.get_diff_residual()
             totalrho, totalrho_prev = totalrho_prev, totalrho
             totalrho = self.update_density(update = update)
             res_norm = self.get_diff_residual()
-            d_ehart = self.delta_rho_hartree(totalrho, totalrho_prev)
-            if self.check_converge(d_ehart, res_norm):
+            dp_norm = self.get_diff_potential()
+            sprint('diff_res', res_norm)
+            sprint('dp_norm', dp_norm)
+            if self.check_converge(dp_norm, res_norm):
                 sprint("#### Subsytem Density Optimization Converged ####")
                 break
             scf_correction = self.get_scf_correction(static_potential, totalrho, totalrho_prev)
@@ -189,6 +193,7 @@ class Optimization(object):
             dE = energy_history[-1] - energy_history[-2]
             dE += scf_correction
             energy += scf_correction
+            d_ehart = np.max(dp_norm)
             #-----------------------------------------------------------------------
             fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format(it, energy, dE, d_ehart, scf_correction, timecost - time_begin)
             fmt += "\n    Total: {:<8d}{:<24.12E}".format(it, totalfunc.energy)
@@ -196,13 +201,13 @@ class Optimization(object):
             # if self.check_converge_ene(energy_history, res_norm):
                 # sprint("#### Subsytem Density Optimization Converged ####")
                 # break
-            # exit()
-        totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
-        self.energy = self.get_energy(totalrho, totalfunc, olevel = 0)[0]
+        self.energy_all = self.print_energy()
+        # totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
+        # fmt = "    Final: {:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format(it, self.energy, 0.0, d_ehart, 0.0, time.time() - time_begin)
+        # fmt += "\n    Total: {:<8d}{:<24.12E}".format(it, totalfunc.energy)
+        # sprint(seq +'\n' + fmt +'\n' + seq)
+        self.energy = self.energy_all['TOTAL']
         self.density = totalrho
-        fmt = "    Final: {:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format(it, self.energy, 0.0, d_ehart, 0.0, time.time() - time_begin)
-        fmt += "\n    Total: {:<8d}{:<24.12E}".format(it, totalfunc.energy)
-        sprint(seq +'\n' + fmt +'\n' + seq)
         return
 
     def get_update(self, driver, istep, residual):
@@ -238,15 +243,26 @@ class Optimization(object):
             if driver is not None :
                 diff_res[i] = driver.residual_norm
         diff_res = self.gsystem.grid.mp.vsum(diff_res)
-        sprint('diff_res', diff_res)
         return diff_res
 
-    def check_converge(self, de, residual = None, **kwargs):
-        econv = self.options["econv"]/1E2
-        if np.any(residual < 1E-12) : return True
-        #-----------------------------------------------------------------------
+    def get_diff_potential(self, **kwargs):
+        dp_norm = np.zeros(self.nsub)
+        for i, driver in enumerate(self.drivers):
+            if driver is not None :
+                dp_norm[i] = driver.dp_norm
+        dp_norm = self.gsystem.grid.mp.vsum(dp_norm)
+        return dp_norm
+
+    def check_converge(self, dp_norm, residual = None, **kwargs):
+        return self.check_converge_pot(dp_norm, residual, **kwargs)
+
+    def check_converge_pot(self, dp_norm, residual = None, **kwargs):
+        econv = self.options["econv"]
+        if residual is not None :
+            if np.any(residual < 1E-12) : return True
         if econv is not None :
-            if abs(de) > econv : return False
+            econv /= self.gsystem.ions.nat * 10
+            if np.any(dp_norm > econv) : return False
         return True
 
     def check_converge_ene(self, energy_history, residual = None, **kwargs):
@@ -254,9 +270,8 @@ class Optimization(object):
         ncheck = self.options["ncheck"]
         E = energy_history[-1]
         #-----------------------------------------------------------------------
-        # res_max = max(residual)
-        # if res_max < 1E-12 : return True
-        if np.any(residual < 1E-12) : return True
+        if residual is not None :
+            if np.any(residual < 1E-12) : return True
         #-----------------------------------------------------------------------
         if econv is not None :
             if len(energy_history) < ncheck + 1 :
@@ -318,14 +333,6 @@ class Optimization(object):
                 r = driver.density - driver.prev_density
                 res_norm = np.sqrt(driver.grid.mp.asum(r * r)/driver.grid.nnrR)
                 diff_res.append(res_norm)
-            # energy = Hartree.compute(driver.density.copy(), calcType=['E']).energy
-            # sprint('Hartree_i', i, energy)
-            # ls = driver.get_energy_traj('HARTREE', density = driver.density)
-            # if len(ls) > 1 :
-                # dr = abs(ls[-1]-ls[-2])
-            # else :
-                # dr = 0.0
-            # diff_res.append(dr)
         return diff_res
 
     def get_forces(self, **kwargs):
@@ -341,8 +348,42 @@ class Optimization(object):
         ene = self.gsystem.grid.mp.asum(ene)
         return ene
 
-    def delta_rho_hartree(self, rho1=None, rho0=None):
-        if rho0 is None or rho1 is None : return 1.0
-        ene = Hartree.compute(rho1-rho0, calcType=['E']).energy
-        ene = self.gsystem.grid.mp.asum(ene)
-        return ene
+    def print_energy(self):
+        edict = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True)
+        totalfunc = edict.pop('TOTAL')
+        totalfunc.energy *= self.gsystem.grid.mp.size
+        totalfunc = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'])
+        etotal, elist = self.get_energy(self.gsystem.density, totalfunc, olevel = 0)
+        keys = list(edict.keys())
+        values = [item.energy for item in edict.values()]
+        keys.append('II')
+        values.append(self.gsystem.ewald.energy)
+        values = self.gsystem.grid.mp.vsum(values)
+        ep_w = OrderedDict()
+        for i, key in sorted(enumerate(keys), key=lambda x:x[1]):
+            ep_w[key] = values[i]
+        for i, item in enumerate(elist[1:]):
+            key = "SUB-"+str(i)
+            ep_w[key] = item
+        key = "TOTAL"
+        ep_w[key] = etotal
+        sprint(format("Energy information", "-^80"))
+        for key, value in ep_w.items():
+            sprint("{:>10s} energy: {:22.15E} (eV)  =  {:22.15E} (a.u.) ".format(key, value* ENERGY_CONV["Hartree"]["eV"], value))
+        sprint("-" * 80)
+        return ep_w
+
+    def add_xc_correction(self):
+        """
+        Sorry, we also hate add the non-linear core correction here, maybe we can find a better way to add it in the future.
+        """
+        for i, driver in enumerate(self.drivers):
+            if driver is None : continue
+            if driver.evaluator.embed_evaluator is not None :
+                if 'XC' in driver.evaluator.embed_evaluator.funcdicts :
+                    driver.evaluator.embed_evaluator.funcdicts['XC'].core_density = driver.core_density
+            if driver.technique == 'OF' and driver.evaluator_of.sub_evaluator is not None :
+                if 'XC' in driver.evaluator_of.sub_evaluator.funcdicts :
+                    driver.evaluator_of.sub_evaluator.funcdicts['XC'].core_density = driver.core_density
+        if 'XC' in self.gsystem.total_evaluator.funcdicts :
+            self.gsystem.total_evaluator.funcdicts['XC'].core_density = self.gsystem.core_density

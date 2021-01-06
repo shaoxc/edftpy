@@ -53,14 +53,14 @@ class RadialGrid(object):
         else :
             results = out
         mask = dist < self._r[-1]
-        results[mask] = splev(dist[mask], self.v_interp, der=0)
+        results[mask] = splev(dist[mask], self.v_interp, der=0, ext=1)
         #-----------------------------------------------------------------------
-        mask = dist < self._r[1]
-        v = self._v
-        dp = v[1]-v[0]
-        f = [v[2], v[1], v[0], v[1], v[2]]
-        dx = dist[mask]/dp
-        results[mask] = quartic_interpolation(f, dx)
+        # mask = dist < self._r[1]
+        # v = self._v
+        # dp = v[1]-v[0]
+        # f = [v[2], v[1], v[0], v[1], v[2]]
+        # dx = dist[mask]/dp
+        # results[mask] = quartic_interpolation(f, dx)
         #-----------------------------------------------------------------------
         return results
 
