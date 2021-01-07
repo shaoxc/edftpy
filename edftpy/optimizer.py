@@ -12,9 +12,8 @@ class Optimization(object):
     def __init__(self, drivers=None, gsystem = None, options=None):
         if drivers is None:
             raise AttributeError("Must provide optimization driver (list)")
-        else:
-            self.drivers = drivers
 
+        self.drivers = drivers
         self.gsystem = gsystem
 
         default_options = {
@@ -32,8 +31,7 @@ class Optimization(object):
             if totalrho is None :
                 totalrho = self.gsystem.density.copy()
             totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
-        ene = totalfunc.energy / totalrho.mp.size
-        elist.append(ene)
+        elist.append(totalfunc.energy)
         for i, driver in enumerate(self.drivers):
             if driver is None :
                 ene = 0.0
@@ -379,11 +377,10 @@ class Optimization(object):
         """
         for i, driver in enumerate(self.drivers):
             if driver is None : continue
-            if driver.evaluator.embed_evaluator is not None :
-                if 'XC' in driver.evaluator.embed_evaluator.funcdicts :
-                    driver.evaluator.embed_evaluator.funcdicts['XC'].core_density = driver.core_density
-            if driver.technique == 'OF' and driver.evaluator_of.sub_evaluator is not None :
-                if 'XC' in driver.evaluator_of.sub_evaluator.funcdicts :
-                    driver.evaluator_of.sub_evaluator.funcdicts['XC'].core_density = driver.core_density
+            if 'XC' in driver.evaluator.funcdicts :
+                driver.evaluator.funcdicts['XC'].core_density = driver.core_density
+            if driver.technique == 'OF' :
+                if 'XC' in driver.evaluator_of.funcdicts :
+                    driver.evaluator_of.funcdicts['XC'].core_density = driver.core_density
         if 'XC' in self.gsystem.total_evaluator.funcdicts :
             self.gsystem.total_evaluator.funcdicts['XC'].core_density = self.gsystem.core_density

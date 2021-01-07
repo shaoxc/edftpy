@@ -12,7 +12,7 @@ from edftpy.kedf import KEDF
 from edftpy.hartree import Hartree
 from edftpy.xc import XC
 from edftpy.optimizer import Optimization
-from edftpy.evaluator import Evaluator, EnergyEvaluatorMix, EvaluatorOF, TotalEvaluator
+from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
 from edftpy.enginer.of_dftpy import DFTpyOF
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
@@ -85,50 +85,35 @@ class Test(unittest.TestCase):
     def gen_sub_of(self, ions, grid, pplist = None, index = None, atomicd = None, xc_kwargs = {}, ke_kwargs = {}, emb_ke_kwargs = {}, gsystem = None, method = 'part', mp = None, **kwargs):
         if atomicd is None :
             atomicd = AtomicDensity()
+        mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = 0.8, predecut = 0, delay = 1)
         #-----------------------------------------------------------------------
+        if ke_kwargs is None or len(ke_kwargs) == 0 :
+            ke_evaluator = None
+        else :
+            ke_evaluator = KEDF(**ke_kwargs)
+
+        ke_emb_a = KEDF(**emb_ke_kwargs)
+        emb_funcdicts = {'KE' :ke_emb_a}
+
+        ke_sub_kwargs = {'name' :'vW'}
+        ke_sub = KEDF(**ke_sub_kwargs)
+
+        sub_funcdicts = {}
         if method == 'full' :
-            if ke_kwargs is None or len(ke_kwargs) == 0 :
-                ke_evaluator = None
-            else :
-                ke_evaluator = KEDF(**ke_kwargs)
-            ke_sub_a = KEDF(name='vW')
-            sub_funcdicts_a = {'KE' :ke_sub_a}
-            sub_evaluator_a = Evaluator(**sub_funcdicts_a)
-
-            ke_emb_a = KEDF(**emb_ke_kwargs)
-            emb_funcdicts_a = {'KE' :ke_emb_a}
-            emb_evaluator_a = Evaluator(**emb_funcdicts_a)
-
-            subsys_a = SubCell(ions, grid, index = index, cellcut = [0.0, 0.0, 10.5], optfft = True, mp = mp)
-            ions_a = subsys_a.ions
-            rho_a = subsys_a.density
-            rho_a[:] = atomicd.guess_rho(ions_a, subsys_a.grid)
-            options = {"method" :'CG-HS', "maxiter": 220, "econv": 1.0e-6, "ncheck": 2, "opt_method" : 'full'}
-            energy_evaluator = EnergyEvaluatorMix(embed_evaluator = emb_evaluator_a, ke_evaluator = ke_evaluator, **kwargs)
-            evaluator_of = EvaluatorOF(grid = subsys_a.grid, sub_evaluator = sub_evaluator_a, gsystem = gsystem)
-            mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
-        else : # part, hamiltonian
-            if ke_kwargs is None or len(ke_kwargs) == 0 :
-                sub_evaluator_a = None
-            else :
-                ke_sub_a = KEDF(**ke_kwargs)
-                sub_funcdicts_a = {'KE' :ke_sub_a}
-                sub_evaluator_a = Evaluator(**sub_funcdicts_a)
-
-            ke_emb_a = KEDF(**emb_ke_kwargs)
-            emb_funcdicts_a = {'KE' :ke_emb_a}
-            emb_evaluator_a = Evaluator(**emb_funcdicts_a)
-
-            subsys_a = SubCell(ions, grid, index = index, cellcut = [0.0, 0.0, 10.5], optfft = True, mp = mp, **kwargs)
-            ions_a = subsys_a.ions
-            rho_a = subsys_a.density
-            rho_a[:] = atomicd.guess_rho(ions_a, subsys_a.grid)
-            options = {"method" :'CG-HS', "maxiter": 220, "econv": 1.0e-6, "ncheck": 2, "opt_method" : method}
-            ke_evaluator = KEDF(name='vW')
-            energy_evaluator = EnergyEvaluatorMix(embed_evaluator = emb_evaluator_a, **kwargs)
-            evaluator_of = EvaluatorOF(grid = subsys_a.grid, sub_evaluator = sub_evaluator_a, ke_evaluator = ke_evaluator, gsystem = gsystem)
-            mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = [0.8], predecut = 0, delay = 1)
-        of_enginer_a = DFTpyOF(evaluator = energy_evaluator, mixer = mixer, options = options, subcell = subsys_a, evaluator_of = evaluator_of)
+            sub_funcdicts['KE'] = ke_sub
+            evaluator_of = EvaluatorOF(gsystem = gsystem, **sub_funcdicts)
+            embed_evaluator = EmbedEvaluator(ke_evaluator = ke_evaluator, **emb_funcdicts)
+        else :
+            sub_funcdicts['KE'] = ke_evaluator
+            evaluator_of = EvaluatorOF(gsystem = gsystem, ke_evaluator = ke_sub, **sub_funcdicts)
+            embed_evaluator = EmbedEvaluator(**emb_funcdicts)
+        #-----------------------------------------------------------------------
+        subsys_a = SubCell(ions, grid, index = index, cellcut = [0.0, 0.0, 10.5], optfft = True, mp = mp)
+        ions_a = subsys_a.ions
+        rho_a = subsys_a.density
+        rho_a[:] = atomicd.guess_rho(ions_a, subsys_a.grid)
+        options = {"method" :'CG-HS', "maxiter": 220, "econv": 1.0e-6, "ncheck": 2, "opt_method" : method}
+        of_enginer_a = DFTpyOF(evaluator = embed_evaluator, mixer = mixer, options = options, subcell = subsys_a, evaluator_of = evaluator_of)
         return of_enginer_a
 
 

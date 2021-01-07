@@ -67,7 +67,7 @@ class PwscfKS(Driver):
         #-----------------------------------------------------------------------
         self.mix_driver = None
         if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = [0.5], predecut = 0, delay = 1)
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = 0.5, predecut = 0, delay = 1)
         elif isinstance(self.mixer, float):
             self.mix_driver = self.mixer
         if self.grid_driver is not None :
@@ -403,8 +403,7 @@ class PwscfKS(Driver):
 
         if self.comm.rank == 0 :
             func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = False)
-            if self.exttype == 0 :
-                func.energy = 0.0
+            if self.exttype == 0 : func.energy = 0.0
         else :
             func = Functional(name = 'ZERO', energy=0.0, potential=None)
             energy = 0.0
@@ -417,7 +416,7 @@ class PwscfKS(Driver):
             self.energy = func.energy
         return func
 
-    def update_density(self, **kwargs):
+    def update_density(self, coef = None, **kwargs):
         if self.comm.rank == 0 :
             mix_grid = False
             # mix_grid = True
@@ -446,7 +445,8 @@ class PwscfKS(Driver):
             self.dp_norm = 0.0
 
         if self.mix_driver is not None :
-            ene, dp_norm = pwscfpy.pwpy_electrons_scf(0, 0, self.charge[:, 0], 0, self.exttype, 0, mix_coef = self.mix_driver)
+            if coef is None : coef = self.mix_driver
+            ene, dp_norm = pwscfpy.pwpy_electrons_scf(0, 0, self.charge[:, 0], 0, self.exttype, 0, mix_coef = coef)
             if self._iter > 1 : self.dp_norm = dp_norm
             pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
             self.density[:] = self._format_density_invert()

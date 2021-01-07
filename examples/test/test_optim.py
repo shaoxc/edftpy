@@ -2,6 +2,7 @@ import os
 import copy
 import numpy as np
 import unittest
+from functools import partial
 
 from dftpy.constants import ENERGY_CONV
 from dftpy.formats import io
@@ -42,7 +43,8 @@ class Test(unittest.TestCase):
         atomicd = AtomicDensity()
         rho_ini = atomicd.guess_rho(ions, grid)
         #-----------------------------------------------------------------------
-        evaluator = Evaluator(**funcdicts)
+        evaluator_of = Evaluator(**funcdicts)
+        evaluator = partial(evaluator_of.compute, gather = True)
         optimization_options = {'econv' : 1e-6, 'maxfun' : 50, 'maxiter' : 100}
         optimization_options["econv"] *= ions.nat
         opt = Optimization(EnergyEvaluator= evaluator, optimization_options = optimization_options, optimization_method = 'CG-HS')

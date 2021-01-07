@@ -60,11 +60,13 @@ class SpecialPrecondition :
     @property
     def mask(self):
         if self._mask is None :
-            gg = self.grid.get_reciprocal().gg
-            self._mask = np.zeros(self.grid.nrG, dtype = 'bool')
+            recip_grid = self.grid.get_reciprocal()
+            gg = recip_grid.gg
+            self._mask = np.zeros(recip_grid.nr, dtype = 'bool')
             if self._ecut is not None :
                 if self._ecut < 2 :
                     gmax = max(gg[:, 0, 0].max(), gg[0, :, 0].max(), gg[0, 0, :].max()) + 2
+                    gmax = self.grid.mp.amax(gmax)
                 else :
                     gmax = 2.0 * self._ecut
                 self._mask[gg > gmax] = True
@@ -164,7 +166,7 @@ class AbstractMixer(ABC):
 
 
 class LinearMixer(AbstractMixer):
-    def __init__(self, predtype = None, predcoef = [0.8, 1.0], coef = [0.5], delay = 3, predecut = None, **kwargs):
+    def __init__(self, predtype = None, predcoef = [0.8, 1.0], coef = 0.5, delay = 3, predecut = None, **kwargs):
         # if predtype is None :
             # self.pred = None
         self.pred = SpecialPrecondition(predtype, predcoef, predecut=predecut)
@@ -184,10 +186,10 @@ class LinearMixer(AbstractMixer):
         one = 1.0-1E-10
         if coef is None :
             coef = self.coef
-        if self._iter > self._delay and coef[0] < one:
+        if self._iter > self._delay and coef < one:
             res = nout - nin
-            res *= coef[0]
-            results = self.pred(nin, nout, residual=res, coef=coef[0])
+            res *= coef
+            results = self.pred(nin, nout, residual=res, coef=coef)
             results = self.format_density(results, nin)
         else :
             results = nout.copy()
@@ -200,7 +202,7 @@ class LinearMixer(AbstractMixer):
 
 
 class PulayMixer(AbstractMixer):
-    def __init__(self, predtype = None, predcoef = [0.8, 0.1], maxm = 5, coef = [1.0], delay = 3, predecut = None, restarted = False, **kwargs):
+    def __init__(self, predtype = None, predcoef = [0.8, 0.1], maxm = 5, coef = 1.0, delay = 3, predecut = None, restarted = False, **kwargs):
         self.pred = SpecialPrecondition(predtype, predcoef, predecut=predecut)
         self._delay = delay
         self.maxm = maxm
@@ -249,7 +251,7 @@ class PulayMixer(AbstractMixer):
         r = nout - nin
         #-----------------------------------------------------------------------
         if self._iter == 1 and self._delay < 1 :
-            res = r * coef[0]
+            res = r * coef
             sprint('!WARN : Change to linear mixer', comm=self.comm)
             results = self.pred(nin, nout, residual=res)
         elif self._iter > self._delay :
@@ -290,17 +292,17 @@ class PulayMixer(AbstractMixer):
                     else :
                         drho += x[i] * self.dn_mat[i]
                         res += x[i] * self.dr_mat[i]
-                # drho *= coef[0]
+                # drho *= coef
                 #-----------------------------------------------------------------------
                 # res[:] = filter_density(res)
                 #-----------------------------------------------------------------------
-                res *= coef[0]
-                results = self.pred(nin, nout, drho, res, coef[0])
+                res *= coef
+                results = self.pred(nin, nout, drho, res, coef)
             except Exception :
-                res = r * coef[0]
+                res = r * coef
                 sprint('!WARN : Change to linear mixer', comm=self.comm)
                 sprint('amat', amat, comm=self.comm)
-                results = self.pred(nin, nout, residual=res, coef=coef[0])
+                results = self.pred(nin, nout, residual=res, coef=coef)
         else :
             # res = r * 0.8
             # results = self.pred(nin, nout, residual=res)
@@ -346,7 +348,7 @@ class BroydenMixer(AbstractMixer):
     """
     Not finished !!!
     """
-    def __init__(self, predtype = None, predcoef = [0.8, 0.1], maxm = 5, coef = [1.0], delay = 3):
+    def __init__(self, predtype = None, predcoef = [0.8, 0.1], maxm = 5, coef = 1.0, delay = 3):
         self.pred = SpecialPrecondition(predtype, predcoef)
         self._delay = delay
         self.maxm = maxm
@@ -405,7 +407,7 @@ class BroydenMixer(AbstractMixer):
                     amat[i, j] = np.sum(self.dr_mat[i] * self.dr_mat[j])
                     amat[j, i] = amat[i, j]
             self.jr_mat[-1] = self.dn_mat[-1].copy()
-            self.jr_mat[-1] = self.pred(self.jr_mat[-1], self.dr_mat[-1]*coef[0], grid=nin.grid)
+            self.jr_mat[-1] = self.pred(self.jr_mat[-1], self.dr_mat[-1]*coef, grid=nin.grid)
             for i in range(ns - 1):
                 self.jr_mat[-1] -= amat[i, -1] * self.jr_mat[-1]
             self.jr_mat[-1] /= amat[-1, -1]
@@ -417,7 +419,7 @@ class BroydenMixer(AbstractMixer):
                     results = nin + x[i] * self.jr_mat[i]
                 else :
                     results += x[i] * self.jr_mat[i]
-            results = self.pred(results, r*coef[0], nin.grid)
+            results = self.pred(results, r*coef, nin.grid)
         else :
             results = nout.copy()
         #-----------------------------------------------------------------------

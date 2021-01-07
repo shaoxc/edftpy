@@ -1,7 +1,6 @@
 import copy
 import numpy as np
 from functools import partial
-import sys
 
 from ..mixer import LinearMixer, PulayMixer, AbstractMixer
 from ..utils.math import grid_map_data
@@ -12,7 +11,6 @@ from edftpy.mpi import sprint
 
 from dftpy.optimization import Optimization
 from dftpy.formats.io import write
-from dftpy.external_potential import ExternalPotential
 import dftpy.constants
 
 
@@ -49,9 +47,9 @@ class DFTpyOF(Driver):
         self.mixer = mixer
         if self.options['opt_method'] == 'full' :
             if not isinstance(self.mixer, AbstractMixer):
-                self.mixer = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
+                self.mixer = LinearMixer(predtype = None, coef = 1.0, predecut = None, delay = 1)
         elif self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = [0.2], predecut = 0, delay = 1)
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = 0.2, predecut = 0, delay = 1)
         elif isinstance(self.mixer, float):
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = self.mixer, predecut = 0, delay = 1)
         #-----------------------------------------------------------------------
@@ -128,8 +126,8 @@ class DFTpyOF(Driver):
         self._map_gsystem()
         gsystem = self.evaluator.gsystem
         embed_keys = []
-        if self.evaluator.embed_evaluator is not None :
-            embed_keys = self.evaluator.embed_evaluator.funcdicts.keys()
+        if self.evaluator.nfunc > 0 :
+            embed_keys = self.evaluator.funcdicts.keys()
         gsystem.total_evaluator.get_embed_potential(gsystem.density, gaussian_density = gsystem.gaussian_density, embed_keys = embed_keys, with_global = with_global)
         self.evaluator.get_embed_potential(self.density, gaussian_density = self.subcell.gaussian_density, with_ke = True)
         gsystem.add_to_sub(gsystem.total_evaluator.embed_potential, self.evaluator.embed_potential)
@@ -172,8 +170,6 @@ class DFTpyOF(Driver):
             norm = max(0.1, res_max)
 
         econv = self.options['econv0'] * norm
-        # if econv / self.options['econv'] < 1E-2 :
-            # econv = self.options['econv'] * 1E-2
         if econv < self.options['econv'] :
             self.options['econv'] = econv
         if norm < 1E-7 :
@@ -188,8 +184,8 @@ class DFTpyOF(Driver):
             self._format_density()
 
         self._get_extpot(with_global = hamil)
-        if self.evaluator_of.sub_evaluator and hamil:
-            self.evaluator_of.embed_potential += self.evaluator_of.sub_evaluator(self.charge, calcType = ['V']).potential
+        if self.evaluator_of.nfunc > 0 and hamil:
+            self.evaluator_of.embed_potential += self.evaluator_of(self.charge, calcType = ['V'], with_global = False, with_ke = False, with_embed = False).potential
 
         self.prev_charge[:] = self.charge
         #-----------------------------------------------------------------------
@@ -200,6 +196,8 @@ class DFTpyOF(Driver):
         elif self.options['opt_method'] == 'part' :
             self.get_density_embed(**kwargs)
         elif self.options['opt_method'] == 'hamiltonian' :
+            if self.comm.size > 1 :
+                raise AttributeError("Not support parallel")
             self.get_density_hamiltonian(**kwargs)
         dftpy.constants.STDOUT = stdout
         #-----------------------------------------------------------------------
@@ -208,11 +206,9 @@ class DFTpyOF(Driver):
 
     def get_density_full_opt(self, **kwargs):
         remove_global = {}
-        embed_evaluator = self.evaluator.embed_evaluator
         total_evaluator = self.evaluator_of.gsystem.total_evaluator
-        # if self.evaluator_of.gsystem is self.evaluator.gsystem :
-        if embed_evaluator is not None :
-            keys_emb = embed_evaluator.funcdicts.keys()
+        if self.evaluator.nfunc > 0 :
+            keys_emb = self.evaluator.funcdicts.keys()
             keys_global = total_evaluator.funcdicts.keys()
             keys = [key for key in keys_global if key in keys_emb]
             for key in keys :
@@ -224,7 +220,7 @@ class DFTpyOF(Driver):
         else :
             optimization_method = 'CG-HS'
 
-        evaluator = partial(self.evaluator_of.compute, calcType=["E","V"], with_global = True, with_ke = True, with_embed = True)
+        evaluator = partial(self.evaluator_of.compute, calcType=["E","V"], with_global = True, with_ke = True, with_embed = True, gather = True)
         self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=self.charge, optimization_options=self.options, optimization_method = optimization_method)
         self.calc.optimize_rho()
 
@@ -239,7 +235,7 @@ class DFTpyOF(Driver):
         else :
             optimization_method = 'CG-HS'
 
-        evaluator = partial(self.evaluator_of.compute, with_global = False, with_embed = True, with_ke = True, with_sub = False)
+        evaluator = partial(self.evaluator_of.compute, with_global = False, with_embed = True, with_ke = True, with_sub = False, gather = True)
         self.calc = Optimization(EnergyEvaluator=evaluator, guess_rho=self.charge, optimization_options=self.options, optimization_method = optimization_method)
         self.calc.optimize_rho()
 
@@ -285,7 +281,6 @@ class DFTpyOF(Driver):
             func.energy += func_driver.energy
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
             sprint(fstr, comm=self.comm)
-            func.energy /= self.grid.mp.size
         return func
 
     def update_density(self, **kwargs):
@@ -317,7 +312,7 @@ class DFTpyOF(Driver):
     def get_stress(self, **kwargs):
         pass
 
-def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = None):
+def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = None, options = {}):
     from dftpy.interface import OptimizeDensityConf
     from dftpy.config import DefaultOption, OptionFormat
     from dftpy.system import System
@@ -327,9 +322,10 @@ def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = No
     from edftpy.hartree import Hartree
     from edftpy.xc import XC
     from edftpy.evaluator import Evaluator
+    from edftpy.density.init_density import AtomicDensity
     #-----------------------------------------------------------------------
     save = dftpy.constants.STDOUT
-    if stdout is None :
+    if stdout is not None :
         dftpy.constants.STDOUT = stdout
     if xc_kwargs is None :
         xc_kwargs = {"x_str":'gga_x_pbe','c_str':'gga_c_pbe'}
@@ -342,16 +338,15 @@ def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = No
     xc = XC(**xc_kwargs)
     ke = KEDF(**ke_kwargs)
     funcdicts = {'KE' :ke, 'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
-    evaluator = Evaluator(**funcdicts)
+    evaluator_of = Evaluator(**funcdicts)
+    evaluator = partial(evaluator_of.compute, gather = True)
+    atomicd = AtomicDensity()
+    rho_ini = atomicd.guess_rho(ions, rho.grid)
     #-----------------------------------------------------------------------
-    conf = DefaultOption()
-    conf['JOB']['calctype'] = 'Density'
-    conf['OUTPUT']['time'] = False
-    conf['OPT'] = {"method" :'CG-HS', "maxiter": 1000, "econv": 1.0e-6*ions.nat}
-    conf = OptionFormat(conf)
-    struct = System(ions, rho.grid, name='density', field=rho)
-    opt = OptimizeDensityConf(conf, struct, evaluator)
+    optimization_options = {'econv' : 1e-6 * ions.nat, 'maxfun' : 50, 'maxiter' : 100}
+    optimization_options["econv"] *= ions.nat
+    optimization_options.update(options)
+    opt = Optimization(EnergyEvaluator= evaluator, optimization_options = optimization_options, optimization_method = 'CG-HS')
+    new_rho = opt.optimize_rho(guess_rho=rho_ini)
     dftpy.constants.STDOUT = save
-    # rho[:] =opt['density'] 
-    # return rho
-    return opt['density']
+    return new_rho

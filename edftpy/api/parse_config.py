@@ -12,7 +12,7 @@ from edftpy.kedf import KEDF
 from edftpy.hartree import Hartree
 from edftpy.xc import XC
 from edftpy.optimizer import Optimization
-from edftpy.evaluator import Evaluator, EnergyEvaluatorMix, EvaluatorOF, TotalEvaluator
+from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import LinearMixer, PulayMixer
@@ -60,6 +60,7 @@ def config_correct(config):
         else :
             config[key]['technique'] = 'KS'
     return config
+
 def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **kwargs):
     if isinstance(config, dict):
         pass
@@ -134,8 +135,8 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
             driver = config2driver(config, keysys, ions, grid, pplist, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp)
             #-----------------------------------------------------------------------
             #PSEUDO was evaluated on all processors, so directly remove from embedding
-            if 'PSEUDO' in driver.evaluator.embed_evaluator.funcdicts :
-                driver.evaluator.embed_evaluator.update_functional(remove = ['PSEUDO'])
+            if 'PSEUDO' in driver.evaluator.funcdicts :
+                driver.evaluator.update_functional(remove = ['PSEUDO'])
                 gsystem.total_evaluator.update_functional(remove = ['PSEUDO'])
             #-----------------------------------------------------------------------
         drivers.append(driver)
@@ -203,23 +204,24 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
         total_evaluator = TotalEvaluator(**funcdicts)
     return total_evaluator
 
-def config2evaluator(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None):
+def config2embed_evaluator(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None):
     emb_ke_kwargs = config['GSYSTEM']["kedf"].copy()
     emb_xc_kwargs = config['GSYSTEM']["exc"].copy()
     pme = config["MATH"]["linearie"]
 
     ke_kwargs = config[keysys]["kedf"].copy()
-    xc_kwargs = config[keysys]["exc"].copy()
     embed = config[keysys]["embed"]
-    technique = config[keysys]["technique"]
     exttype = config[keysys]["exttype"]
+
+    opt_options = config[keysys]["opt"].copy()
+    calculator = config[keysys]["calculator"]
     #Embedding Functional---------------------------------------------------
     if exttype is not None :
         embed = ['KE']
         if not exttype & 1 : embed.append('PSEUDO')
         if not exttype & 2 : embed.append('HARTREE')
         if not exttype & 4 : embed.append('XC')
-        # if exttype == 0 : embed = []
+
     emb_funcdicts = {}
     if 'KE' in embed :
         if emb_ke_kwargs['kedf'] is None or emb_ke_kwargs['kedf'].lower().startswith('no'):
@@ -227,33 +229,64 @@ def config2evaluator(config, keysys, ions, grid, pplist = None, optimizer = None
         else :
             ke_emb = KEDF(**emb_ke_kwargs)
             emb_funcdicts['KE'] = ke_emb
+    exttype = 7
     if 'XC' in embed :
         xc_emb = XC(**emb_xc_kwargs)
         emb_funcdicts['XC'] = xc_emb
+        exttype -= 4
     if 'HARTREE' in embed :
         hartree = Hartree()
         emb_funcdicts['HARTREE'] = hartree
+        exttype -= 2
     if 'PSEUDO' in embed :
         pseudo = LocalPP(grid = grid, ions=ions,PP_list=pplist,PME=pme)
         emb_funcdicts['PSEUDO'] = pseudo
-    emb_evaluator = Evaluator(**emb_funcdicts)
-    #Subsystem Functional---------------------------------------------------
-    # ke_sub_kwargs = {'name' :'vW'}
-    # ke_sub = KEDF(**ke_sub_kwargs)
-    # sub_funcdicts = {'KE' :ke_sub}
+        exttype -= 1
+
+    if calculator == 'dftpy' and opt_options['opt_method'] == 'full' :
+        # Remove the vW part from the KE
+        ke_kwargs['y'] = 0.0
+        ke_evaluator = KEDF(**ke_kwargs)
+    else :
+        ke_evaluator = None
+
+    embed_evaluator = EmbedEvaluator(ke_evaluator = ke_evaluator, **emb_funcdicts)
+    return embed_evaluator, exttype
+
+def config2evaluator_of(config, keysys, gsystem = None, optimizer = None, cell_change = None):
+    ke_kwargs = config[keysys]["kedf"].copy()
+    xc_kwargs = config[keysys]["exc"].copy()
+
+    embed = config[keysys]["embed"]
+    exttype = config[keysys]["exttype"]
+
+    opt_options = config[keysys]["opt"].copy()
+
+    if exttype is not None :
+        embed = ['KE']
+        if not exttype & 1 : embed.append('PSEUDO')
+        if not exttype & 2 : embed.append('HARTREE')
+        if not exttype & 4 : embed.append('XC')
+
+    ke_sub_kwargs = {'name' :'vW'}
+    ke_sub = KEDF(**ke_sub_kwargs)
+
     sub_funcdicts = {}
     if 'XC' in embed :
         xc_sub = XC(**xc_kwargs)
         sub_funcdicts['XC'] = xc_sub
-    sub_evaluator = Evaluator(**sub_funcdicts)
-    # Remove the vW part from the KE
-    ke_kwargs['y'] = 0.0
-    ke_evaluator = KEDF(**ke_kwargs)
-    #KS not need sub_evaluator and ke_evaluator-----------------------------
-    if technique == 'KS' :
-        sub_evaluator = None
-        ke_evaluator = None
-    return (emb_evaluator, sub_evaluator, ke_evaluator)
+
+    if opt_options['opt_method'] == 'full' :
+        sub_funcdicts['KE'] = ke_sub
+        evaluator_of = EvaluatorOF(gsystem = gsystem, **sub_funcdicts)
+    else :
+        # Remove the vW part from the KE
+        ke_kwargs['y'] = 0.0
+        ke_evaluator = KEDF(**ke_kwargs)
+        sub_funcdicts['KE'] = ke_evaluator
+        evaluator_of = EvaluatorOF(gsystem = gsystem, ke_evaluator = ke_sub, **sub_funcdicts)
+
+    return evaluator_of
 
 def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None, driver = None, mp = None, comm = None):
     gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
@@ -262,12 +295,11 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     max_prime_global = config['GSYSTEM']["grid"]["maxprime"]
     grid_scale_global = config['GSYSTEM']["grid"]["scale"]
 
-    # nr = config[keysys]["grid"]["nr"]
-    # spacing = config[keysys]["grid"]["spacing"] * LEN_CONV["Angstrom"]["Bohr"]
     # print('keysys', keysys, config[keysys])
     # print_conf(config[keysys])
 
     ecut = config[keysys]["grid"]["ecut"]
+    nr = config[keysys]["grid"]["nr"]
     max_prime = config[keysys]["grid"]["maxprime"]
     grid_scale = config[keysys]["grid"]["scale"]
     cellcut = config[keysys]["cell"]["cut"]
@@ -345,20 +377,9 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     else :
         raise AttributeError("!!!ERROR : NOT support ", mix_kwargs['scheme'])
     #-----------------------------------------------------------------------
-    embed_evaluator, sub_evaluator, ke_evaluator = config2evaluator(config, keysys, subcell.ions, subcell.grid, pplist = pplist, optimizer = optimizer, cell_change = cell_change)
-    ke_sub_kwargs = {'name' :'vW'}
-    ke_sub = KEDF(**ke_sub_kwargs)
+    embed_evaluator, exttype = config2embed_evaluator(config, keysys, subcell.ions, subcell.grid, pplist = pplist, optimizer = optimizer, cell_change = cell_change)
 
-    exttype = 7
-    if embed_evaluator is not None :
-        if 'XC' in embed_evaluator.funcdicts :
-            exttype -= 4
-        if 'HARTREE' in embed_evaluator.funcdicts :
-            exttype -= 2
-        if 'PSEUDO' in embed_evaluator.funcdicts :
-            exttype -= 1
-
-    def get_dftpy_driver(energy_evaluator):
+    def get_dftpy_driver(embed_evaluator):
         opt_options['econv'] *= subcell.ions.nat
         if ecut and abs(ecut - gsystem_ecut) > 1.0 :
             if comm.size > 1 :
@@ -377,39 +398,14 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             grid_sub = None
             gsystem_driver = None
 
-        add_ke = {}
-        if opt_options['opt_method'] == 'full' :
-            if ke_sub is not None : add_ke = {'KE' : ke_sub}
-        else :
-            if ke_evaluator is not None : add_ke = {'KE' :ke_evaluator}
-        sub_eval = sub_evaluator
-        if sub_eval is None :
-            sub_eval = Evaluator(**add_ke)
-        else :
-            sub_eval.update_functional(add = add_ke)
+        evaluator_of = config2evaluator_of(config, keysys, gsystem = gsystem_driver, optimizer = optimizer, cell_change = cell_change)
 
-        if opt_options['opt_method'] == 'full' :
-            mixer_of = LinearMixer(predtype = None, coef = [1.0], predecut = None, delay = 1)
-            add_ke = {'KE' : ke_sub}
-            sub_eval = sub_evaluator
-            if sub_eval is None :
-                sub_eval = Evaluator(**add_ke)
-            else :
-                sub_eval.update_functional(add = add_ke)
-            evaluator_of = EvaluatorOF(sub_evaluator = sub_eval, gsystem = gsystem_driver)
-        else :
-            evaluator_of = EvaluatorOF(sub_evaluator = sub_eval, gsystem = gsystem_driver, ke_evaluator = ke_sub)
-            mixer_of = mixer
-        driver = DFTpyOF(evaluator =energy_evaluator, prefix = prefix, options = opt_options, subcell = subcell,
-                mixer = mixer_of, evaluator_of = evaluator_of, grid = grid_sub)
+        driver = DFTpyOF(evaluator = embed_evaluator, prefix = prefix, options = opt_options, subcell = subcell,
+                mixer = mixer, evaluator_of = evaluator_of, grid = grid_sub)
         return driver
 
-    energy_evaluator = EnergyEvaluatorMix(embed_evaluator = embed_evaluator)
-    if calculator == 'dftpy' and opt_options['opt_method'] == 'full' :
-        energy_evaluator = EnergyEvaluatorMix(embed_evaluator = embed_evaluator, ke_evaluator = ke_evaluator)
-
     margs = {
-            'evaluator' :energy_evaluator,
+            'evaluator' : embed_evaluator,
             'prefix' : prefix,
             'subcell' : subcell,
             'cell_params' : None,
@@ -426,7 +422,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         driver.update_workspace(subcell)
     else :
         if calculator == 'dftpy' :
-            driver = get_dftpy_driver(energy_evaluator)
+            driver = get_dftpy_driver(embed_evaluator)
         elif calculator == 'pwscf' :
             driver = get_pwscf_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
         elif calculator == 'castep' :

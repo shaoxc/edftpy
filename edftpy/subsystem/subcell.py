@@ -10,13 +10,13 @@ from ..density import get_3d_value_recipe
 from edftpy.mpi import sprint
 
 class SubCell(object):
-    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, full = False, gaussian_options = None, **kwargs):
+    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, full = False, gaussian_options = None, nr = None, **kwargs):
         self._grid = None
         self._ions = None
         self._density = None
         self._ions_index = None
 
-        self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, full = full, **kwargs)
+        self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, full = full, nr = nr, **kwargs)
         self._density = Field(grid=self.grid, rank=1, direct=True)
         if gaussian_options is None or len(gaussian_options)==0:
             self._gaussian_density = None
@@ -65,7 +65,7 @@ class SubCell(object):
         return self.grid.shift
 
     def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True,
-            full = False, grid_sub = None, max_prime = 5, scale = 1.0, mp = None):
+            full = False, grid_sub = None, max_prime = 5, scale = 1.0, nr = None, mp = None):
         tol = 1E-8
         lattice = ions.pos.cell.lattice.copy()
         lattice_sub = ions.pos.cell.lattice.copy()
@@ -80,7 +80,6 @@ class SubCell(object):
         spacings = grid.spacings.copy()
         shift = np.zeros(3, dtype = 'int')
         origin = np.zeros(3)
-        nr = grid.nrR.copy()
 
         cell_size = np.ptp(pos, axis = 0)
         pbc = np.ones(3, dtype = 'int')
@@ -104,12 +103,16 @@ class SubCell(object):
             else :
                 origin[i] = 0.0
 
+        if nr is None :
+            nr = grid.nrR.copy()
             if origin[i] > 0.01 :
                 nr[i] = int(cell_size[i]/spacings[i])
                 if optfft :
                     nr[i] = bestFFTsize(nr[i], scale = scale, max_prime = max_prime)
                     nr[i] = min(nr[i], grid.nrR[i])
                 lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
+        else :
+            lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
 
         c1 = Coord(origin, lattice_sub, basis = 'Crystal').to_cart()
 

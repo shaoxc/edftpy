@@ -92,7 +92,7 @@ class DFTpyKS(Driver):
         return func
 
     def update_density(self, prev, new, **kwargs):
-        results = self.mixer(prev, new, coef=[0.1])
+        results = self.mixer(prev, new, coef=0.1)
         return results
 
     def get_fermi_level(self, **kwargs):

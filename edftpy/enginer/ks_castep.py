@@ -56,9 +56,9 @@ class CastepKS(Driver):
         #-----------------------------------------------------------------------
         self.mix_driver = None
         if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = [0.5], predecut = 0, delay = 1)
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = 0.5, predecut = 0, delay = 1)
         elif isinstance(self.mixer, float):
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = [0.5], predecut = 0, delay = 1)
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = self.mixer, predecut = 0, delay = 1)
         if self.grid_driver is not None :
             sprint('{} has two grids :{} and {}'.format(self.__class__.__name__, self.grid.nr, self.grid_driver.nr))
         #-----------------------------------------------------------------------
