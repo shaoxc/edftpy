@@ -62,8 +62,8 @@ class Test(unittest.TestCase):
         #-----------------------------------------------------------------------
         gsystem.total_evaluator = total_evaluator
         graphtopo = GraphTopo()
-        nprocs = [0]
-        graphtopo.distribute_procs(nprocs)
+        # nprocs = [0]
+        # graphtopo.distribute_procs(nprocs)
         mp = MP(comm = graphtopo.comm_sub)
         gsystem.graphtopo = graphtopo
         #-----------------------------------------------------------------------

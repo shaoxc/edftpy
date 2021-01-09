@@ -18,12 +18,16 @@ class Optimization(object):
 
         default_options = {
             "maxiter": 80,
-            "econv": 1.0e-6,
+            "econv": 1.0e-5,
+            "pconv": None,
             "ncheck": 2,
         }
 
         self.options = default_options
         self.options.update(options)
+
+        if not self.options['pconv'] :
+            self.options['pconv'] = self.options['econv'] / 1E2
 
     def get_energy(self, totalrho = None, totalfunc = None, update = None, olevel = 0, **kwargs):
         elist = []
@@ -111,7 +115,7 @@ class Optimization(object):
         self.nsub = len(self.drivers)
         energy_history = [0.0]
         #-----------------------------------------------------------------------
-        fmt = "           {:8s}{:24s}{:16s}{:10s}{:10s}{:16s}".format("Step", "Energy(a.u.)", "dE", "dP", "dC", "Time(s)")
+        fmt = "{:10s}{:8s}{:24s}{:16s}{:10s}{:10s}{:16s}".format(" ", "Step", "Energy(a.u.)", "dE", "dP", "dC", "Time(s)")
         #-----------------------------------------------------------------------
         sprint(fmt)
         seq = "-" * 100
@@ -150,7 +154,7 @@ class Optimization(object):
                         continue
                     else :
                         if driver.evaluator.global_potential is None :
-                            driver.evaluator.global_potential = np.zeros(driver.grid.nrR)
+                            driver.evaluator.global_potential = np.zeros_like(driver.density)
                         global_potential = driver.evaluator.global_potential
                     self.gsystem.sub_value(self.gsystem.total_evaluator.embed_potential, global_potential, isub = isub)
             #-----------------------------------------------------------------------
@@ -179,31 +183,26 @@ class Optimization(object):
             dp_norm = self.get_diff_potential()
             sprint('diff_res', res_norm)
             sprint('dp_norm', dp_norm)
-            if self.check_converge(dp_norm, res_norm):
-                sprint("#### Subsytem Density Optimization Converged ####")
+            if self.check_converge_potential(dp_norm):
+                sprint("#### Subsytem Density Optimization Converged (Potential)####")
                 break
             scf_correction = self.get_scf_correction(static_potential, totalrho, totalrho_prev)
             totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
             energy = self.get_energy(totalrho, totalfunc, update = update, olevel = olevel)[0]
             #-----------------------------------------------------------------------
+            energy += scf_correction
             energy_history.append(energy)
             timecost = time.time()
             dE = energy_history[-1] - energy_history[-2]
-            dE += scf_correction
-            energy += scf_correction
             d_ehart = np.max(dp_norm)
             #-----------------------------------------------------------------------
-            fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format(it, energy, dE, d_ehart, scf_correction, timecost - time_begin)
-            fmt += "\n    Total: {:<8d}{:<24.12E}".format(it, totalfunc.energy)
+            fmt = "{:>10s}{:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format("Embed: ", it, energy, dE, d_ehart, scf_correction, timecost - time_begin)
+            fmt += "\n{:>10s}{:<8d}{:<24.12E}".format("Total: ", it, totalfunc.energy)
             sprint(seq +'\n' + fmt +'\n' + seq)
-            # if self.check_converge_ene(energy_history, res_norm):
-                # sprint("#### Subsytem Density Optimization Converged ####")
-                # break
+            if self.check_converge_energy(energy_history):
+                sprint("#### Subsytem Density Optimization Converged (Energy)####")
+                break
         self.energy_all = self.print_energy()
-        # totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
-        # fmt = "    Final: {:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format(it, self.energy, 0.0, d_ehart, 0.0, time.time() - time_begin)
-        # fmt += "\n    Total: {:<8d}{:<24.12E}".format(it, totalfunc.energy)
-        # sprint(seq +'\n' + fmt +'\n' + seq)
         self.energy = self.energy_all['TOTAL']
         self.density = totalrho
         return
@@ -251,26 +250,16 @@ class Optimization(object):
         dp_norm = self.gsystem.grid.mp.vsum(dp_norm)
         return dp_norm
 
-    def check_converge(self, dp_norm, residual = None, **kwargs):
-        return self.check_converge_pot(dp_norm, residual, **kwargs)
-
-    def check_converge_pot(self, dp_norm, residual = None, **kwargs):
-        econv = self.options["econv"]
-        if residual is not None :
-            if np.any(residual < 1E-12) : return True
-        if econv is not None :
-            econv /= self.gsystem.ions.nat * 10
-            if np.any(dp_norm > econv) : return False
+    def check_converge_potential(self, dp_norm, **kwargs):
+        pconv = self.options["pconv"]
+        if pconv is not None :
+            if np.any(dp_norm > pconv) : return False
         return True
 
-    def check_converge_ene(self, energy_history, residual = None, **kwargs):
+    def check_converge_energy(self, energy_history, **kwargs):
         econv = self.options["econv"]
         ncheck = self.options["ncheck"]
         E = energy_history[-1]
-        #-----------------------------------------------------------------------
-        if residual is not None :
-            if np.any(residual < 1E-12) : return True
-        #-----------------------------------------------------------------------
         if econv is not None :
             if len(energy_history) < ncheck + 1 :
                 return False
@@ -288,13 +277,6 @@ class Optimization(object):
                 ide = 1
                 if it > freq and (it - freq) % freq > 0 :
                     update[i] = False
-                # if it > freq and it < 150 and (it - freq) % freq > 0 :
-                # if it > freq :
-                    # if abs(res_history[i][-1]-res_history[i][-2]) < 1E-15 and \
-                            # res_history[ide][-1] < 1E-6 and res_history[ide][-1]-res_history[ide][-2] < 2E-7 :
-                        # update[i] = True
-                    # else :
-                        # update[i] = False
                 else :
                     update[i] = True
 

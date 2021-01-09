@@ -161,9 +161,9 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
 def config2graphtopo(config, subkeys = None, graphtopo = None):
     if graphtopo is None :
         graphtopo = GraphTopo()
-    elif graphtopo.comm_sub is not None :
-        # already initialize the comm_sub
-        return graphtopo
+    # elif graphtopo.comm_sub is not None :
+        # # already initialize the comm_sub
+        # return graphtopo
 
     if subkeys is None :
         subkeys = []
@@ -373,7 +373,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     elif mix_kwargs['scheme'] == 'Linear' :
         mixer = LinearMixer(**mix_kwargs)
     elif mix_kwargs['scheme'] is None or mix_kwargs['scheme'].lower().startswith('no'):
-        mixer = mix_kwargs['coef'][0]
+        mixer = mix_kwargs['coef']
     else :
         raise AttributeError("!!!ERROR : NOT support ", mix_kwargs['scheme'])
     #-----------------------------------------------------------------------

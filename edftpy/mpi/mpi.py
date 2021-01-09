@@ -15,6 +15,7 @@ class Graph :
         self.region_shift = np.zeros((self.nsub, 3), dtype = 'int')
         self._sub_index = [None, ] * self.nsub
         self._region_index = [None, ] * self.nsub # for processor in region
+        self._region_bound = [None, ] * self.nsub # for processor in region
         self.sub_ids = {}
 
     def sub_index(self, i):
@@ -26,6 +27,16 @@ class Graph :
         if self._region_index[i] is None :
             self._region_index[i] = self.get_region_index(i)
         return self._region_index[i]
+
+    def region_bound(self, i):
+        if self._region_bound[i] is None :
+            self._region_bound[i] = self.get_region_bound(i)
+        return self._region_bound[i]
+
+    def region_shape_sub(self, i):
+        b = self.region_bound(i)
+        shape = [b[1,0]-b[0,0], b[1,1]-b[0,1], b[1,2]-b[0,2]]
+        return np.array(shape)
 
     def get_sub_index(self, i):
         indl = self.sub_shift[i] - self.region_shift[i]
@@ -57,6 +68,12 @@ class Graph :
         index = np.s_[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]]
         return index
 
+    def get_region_bound(self, i):
+        indl = self.region_offsets[i]
+        indr = indl + self.grid.nr
+        bound = np.array([indl, indr])
+        return bound
+
 
 class GraphTopo:
     def __init__(self, comm = None, parallel = False, **kwargs):
@@ -71,7 +88,8 @@ class GraphTopo:
         self._is_mpi = parallel
         self._MPI = MPI
         self.isub = None
-        self.comm_sub = None
+        # self.comm_sub = None
+        self.comm_sub = comm
 
     def _set_default_vars(self, grid = None, drivers = None):
         self.grid = grid
@@ -83,6 +101,29 @@ class GraphTopo:
         self.rank_sub = np.zeros(self.nsub, dtype='int')
         self.comm_region= [None, ] * self.nsub
         self.region_data = [np.zeros(3), ] * self.nsub
+        self.region_data_buf = [np.zeros(3), ] * self.nsub
+        self._region_bound_w = [None, ] * self.nsub # for processor in region
+        self._region_subs_shape = [None, ] * self.nsub # for processor in region
+        self._region_subs_size = [None, ] * self.nsub # for processor in region
+        self._region_subs_index = [None, ] * self.nsub # for processor in region
+
+    def region_bound_w(self, i):
+        if self._region_bound_w[i] is None :
+            self._region_bound_w[i] = self.get_region_bound_w(i)
+            # self._region_bound_to_shape(i)
+        return self._region_bound_w[i]
+
+    def get_region_bound_w(self, i):
+        bound = self.graph.region_bound(i)
+        if self.comm_region[i].rank == 0 :
+            bound_w = np.zeros((2 * self.comm_region[i].size, 3), dtype = 'int')
+        else :
+            bound_w = np.zeros(3, dtype = 'int')
+        if self.comm_region[i].size > 1 :
+            self.comm_region[i].Gather(bound, bound_w, root=0)
+        else :
+            bound_w[:] = bound
+        return bound_w
 
     def grid_to_region(self, grid=None):
         ranks = np.empty(self.comm.size, dtype = 'int')
@@ -234,16 +275,38 @@ class GraphTopo:
         else :
             raise AttributeError("Only works for parallel version")
 
-    def region_to_sub(self, i, sub_data):
+    def region_to_sub(self, i, total, sub_data):
+        self.creat_tmp_data(i)
         index = self.graph.sub_index(i)
-        # print('region_to_sub', np.sum(sub_data))
         if self.is_mpi :
             # gather the data to all region processors
+            #-----------------------------------------------------------------------
+            if self.rank == self.rank_region[i] :
+                nrank = self.comm_region[i].size
+                region_bound_w = self.region_bound_w(i)
+                displ = np.zeros(nrank, dtype = 'int')
+                count = np.zeros(nrank, dtype = 'int')
+                disp = 0
+                for ik in range(0, nrank):
+                    b = region_bound_w[2*ik:2*ik+2]
+                    size = (b[1,0]-b[0,0]) * (b[1,1]-b[0,1]) * (b[1,2]-b[0,2])
+                    displ[ik] = disp
+                    count[ik] = size
+                    disp += size
+            else :
+                displ = 0
+                count = 0
+
             if self.comm_region[i] is not None and self.comm_region[i].size > 1 :
-                if self.rank == self.rank_region[i] :
-                    self.comm_region[i].Reduce(self.MPI.IN_PLACE, self.region_data[i], op=self.MPI.SUM, root=0)
-                else :
-                    self.comm_region[i].Reduce(self.region_data[i], None, op=self.MPI.SUM, root=0)
+                self.comm_region[i].Gatherv(total, [self.region_data_buf[i], count, displ, self.MPI.DOUBLE], root=0)
+
+            if self.rank == self.rank_region[i] :
+                for ik in range(0, nrank):
+                    b = region_bound_w[2*ik:2*ik+2]
+                    ind = np.s_[b[0,0]:b[1,0], b[0,1]:b[1,1], b[0,2]:b[1,2]]
+                    shape = (b[1,0]-b[0,0], b[1,1]-b[0,1], b[1,2]-b[0,2])
+                    self.region_data[i][ind] = self.region_data_buf[i][displ[ik]:displ[ik]+count[ik]].reshape(shape)
+            #-----------------------------------------------------------------------
 
             if self.rank_region[i] == self.rank_sub[i] == self.rank:
                 sub_data[:] = self.region_data[i][index]
@@ -251,18 +314,16 @@ class GraphTopo:
                 if self.rank == self.rank_region[i] :
                     buf = np.empty(self.graph.sub_shape[i])
                     buf[:] = self.region_data[i][index]
-                    # self.comm.Isend(self.region_data[i][index], dest = self.rank_sub[i], tag = i)
                     self.comm.Isend(buf, dest = self.rank_sub[i], tag = i)
                 elif self.rank == self.rank_sub[i] :
                     recv_req = self.comm.Irecv(sub_data, source=self.rank_region[i], tag = i)
                     recv_req.wait()
-
-            if self.isub == i :
-                self.comm_sub.Bcast(sub_data, root=0)
         else :
             sub_data[:] = self.region_data[i][index]
 
     def sub_to_region(self, i, sub_data):
+        self.creat_tmp_data(i)
+        recv_buf = None
         index = self.graph.sub_index(i)
         if self.is_mpi :
             if self.rank_region[i] == self.rank_sub[i] == self.rank :
@@ -275,19 +336,41 @@ class GraphTopo:
                     recv_req = self.comm.Irecv(buf, source = self.rank_sub[i], tag = i)
                     recv_req.wait()
                     self.region_data[i][index] = buf
+            #-----------------------------------------------------------------------
+            nrank = self.comm_region[i].size
+            region_bound_w = self.region_bound_w(i)
+            displ = np.zeros(nrank, dtype = 'int')
+            count = np.zeros(nrank, dtype = 'int')
+            disp = 0
+            if self.rank == self.rank_region[i] :
+                for ik in range(0, nrank):
+                    b = region_bound_w[2*ik:2*ik+2]
+                    ind = np.s_[b[0,0]:b[1,0], b[0,1]:b[1,1], b[0,2]:b[1,2]]
+                    arr = self.region_data[i][ind]
+                    displ[ik] = disp
+                    count[ik] = arr.size
+                    disp += count[ik]
+                    self.region_data_buf[i][displ[ik]:disp] = arr.ravel()
+
+            if self.comm_region[i] is not None and self.comm_region[i].size > 1 :
+                shape = self.graph.region_shape_sub(i)
+                recv_buf = np.empty(shape)
+                self.comm_region[i].Scatterv([self.region_data_buf[i], count, displ, self.MPI.DOUBLE], recv_buf, root=0)
+            #-----------------------------------------------------------------------
         else :
             self.region_data[i][index] = sub_data
+            recv_buf = self.region_data
 
-        # bcast the data to all region processors
-        if self.comm_region[i] is not None and self.comm_region[i].size > 1 :
-            self.comm_region[i].Bcast(self.region_data[i], root=0)
+        return recv_buf
 
     def creat_tmp_data(self, i):
-        if self.comm_region[i] is not None :
+        if self.comm_region[i] is not None and self.rank == self.rank_region[i] :
             if np.all(self.graph.region_shape[i] == np.array(self.region_data[i].shape)):
                 self.region_data[i][:] = 0.0
+                self.region_data_buf[i][:] = 0.0
             else :
                 self.region_data[i] = np.zeros(self.graph.region_shape[i])
+                self.region_data_buf[i] = np.zeros(self.graph.region_shape[i].prod())
 
     def _sub_to_global_serial(self, i, sub_data, total = None, overwrite = False, index = None):
         if index is None :
@@ -314,14 +397,13 @@ class GraphTopo:
             index = slice(None)
             self._sub_to_global_serial(i, sub_data, total, overwrite = overwrite, index = index)
             return
-        self.creat_tmp_data(i)
-        self.sub_to_region(i, sub_data)
-        if self.comm_region[i] is not None :
-            index = self.graph.region_index(i)
-            if overwrite :
-                total[:] = self.region_data[i][index]
-            else :
-                total[:] += self.region_data[i][index]
+        else :
+            value = self.sub_to_region(i, sub_data)
+            if self.comm_region[i] is not None :
+                if overwrite :
+                    total[:] = value
+                else :
+                    total[:] += value
 
     def _global_to_sub_serial(self, i, total, sub_data = None, add = False, index = None):
         if index is None :
@@ -344,13 +426,7 @@ class GraphTopo:
         else :
             if add and self.isub == i :
                 saved = sub_data.copy()
-            if self.comm_region[i] is not None :
-                self.creat_tmp_data(i)
-                index = self.graph.region_index(i)
-                # print('index', index, i, self.region_data[i].shape)
-                self.region_data[i][index] = total
-            self.region_to_sub(i, sub_data)
-            # print('sub_data', sub_data.shape)
+            self.region_to_sub(i, total, sub_data)
             if add and self.isub == i :
                 sub_data[:] += saved
         return sub_data

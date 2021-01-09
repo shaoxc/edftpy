@@ -61,9 +61,15 @@
 		},
 		"econv": {
 			"type": "float",
-			"default": 1e-06,
-			"comment": "Energy Convergence (a.u./atom)",
+			"default": 1e-05,
+			"comment": "Convergence threshold for energy, it will divided by the number of atoms.",
 			"unit": "a.u./atom"
+		},
+		"pconv": {
+			"type": "float",
+			"default": null,
+			"comment": "Convergence threshold for potential. Default is 'econv'/1E2.",
+			"unit": "a.u/atom"
 		},
 		"maxiter": {
 			"type": "int",
@@ -219,7 +225,7 @@
 				"default": 7
 			},
 			"coef": {
-				"type": "floatlist",
+				"type": "float",
 				"default": "0.5"
 			},
 			"delay": {
