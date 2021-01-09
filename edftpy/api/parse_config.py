@@ -141,7 +141,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
             #-----------------------------------------------------------------------
         drivers.append(driver)
     #-----------------------------------------------------------------------
-    # print('build_region -> ', graphtopo.rank)
+    # sprint('build_region -> ', graphtopo.rank)
     graphtopo.build_region(grid=gsystem.grid, drivers=drivers)
     #-----------------------------------------------------------------------
     for i, driver in enumerate(drivers):
@@ -179,6 +179,9 @@ def config2graphtopo(config, subkeys = None, graphtopo = None):
             n = config[key]["nprocs"]
         nprocs.append(n)
     graphtopo.distribute_procs(nprocs)
+    sprint('Number of subsystems : ', graphtopo.rank, comm = graphtopo.comm)
+    f_str = np.array2string(graphtopo.nprocs, separator=' ', max_line_width=80)[1:-1]
+    sprint('Number of processors for each subsystem : \n ', f_str, comm = graphtopo.comm)
     return graphtopo
 
 def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= None, cell_change = None):
