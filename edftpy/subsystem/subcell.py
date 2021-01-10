@@ -5,7 +5,7 @@ from dftpy.ewald import ewald
 
 from edftpy.pseudopotential import LocalPP
 from edftpy.utils.common import Field, Grid, Atoms, Coord
-from ..utils.math import gaussian, gaussian_g
+from ..utils.math import gaussian
 from ..density import get_3d_value_recipe
 from edftpy.mpi import sprint
 
@@ -83,36 +83,44 @@ class SubCell(object):
 
         cell_size = np.ptp(pos, axis = 0)
         pbc = np.ones(3, dtype = 'int')
-        for i in range(3):
-            latp0 = np.linalg.norm(lattice[:, i])
-            latp = np.linalg.norm(lattice_sub[:, i])
-            if cellsplit is not None :
-                pbc[i] = False
-                if cellsplit[i] > (1.0-tol) :
-                    origin[i] = 0.0
-                    continue
-                cell_size[i] = cellsplit[i] * latp0
-                origin[i] = 0.5
-            elif cellcut[i] > 1E-6 :
-                pbc[i] = False
-                cell_size[i] += cellcut[i] * 2.0
-                if cell_size[i] > (latp0 - (max_prime + 1) * spacings[i]):
-                    origin[i] = 0.0
-                    continue
-                origin[i] = 0.5
-            else :
-                origin[i] = 0.0
 
         if nr is None :
             nr = grid.nrR.copy()
-            if origin[i] > 0.01 :
-                nr[i] = int(cell_size[i]/spacings[i])
-                if optfft :
-                    nr[i] = bestFFTsize(nr[i], scale = scale, max_prime = max_prime)
-                    nr[i] = min(nr[i], grid.nrR[i])
-                lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
+            for i in range(3):
+                latp0 = np.linalg.norm(lattice[:, i])
+                latp = np.linalg.norm(lattice_sub[:, i])
+                if cellsplit is not None :
+                    pbc[i] = False
+                    if cellsplit[i] > (1.0-tol) :
+                        origin[i] = 0.0
+                        continue
+                    cell_size[i] = cellsplit[i] * latp0
+                    origin[i] = 0.5
+                elif cellcut[i] > 1E-6 :
+                    pbc[i] = False
+                    cell_size[i] += cellcut[i] * 2.0
+                    if cell_size[i] > (latp0 - (max_prime + 1) * spacings[i]):
+                        origin[i] = 0.0
+                        continue
+                    origin[i] = 0.5
+                else :
+                    origin[i] = 0.0
+
+                if origin[i] > 0.01 :
+                    nr[i] = int(cell_size[i]/spacings[i])
+                    if optfft :
+                        nr[i] = bestFFTsize(nr[i], scale = scale, max_prime = max_prime)
+                        nr[i] = min(nr[i], grid.nrR[i])
+                    lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
         else :
-            lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
+            for i in range(3):
+                if nr[i] < grid.nrR[i] :
+                    latp = np.linalg.norm(lattice_sub[:, i])
+                    lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
+                    origin[i] = 0.5
+                else :
+                    nr[i] = grid.nrR[i]
+                    origin[i] = 0.0
 
         c1 = Coord(origin, lattice_sub, basis = 'Crystal').to_cart()
 

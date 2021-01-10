@@ -5,6 +5,7 @@ from dftpy.constants import ENERGY_CONV
 from edftpy.mpi import sprint
 from edftpy.properties import get_total_forces, get_total_stress
 from collections import OrderedDict
+import pprint
 
 
 class Optimization(object):
@@ -20,14 +21,27 @@ class Optimization(object):
             "maxiter": 80,
             "econv": 1.0e-5,
             "pconv": None,
+            "pconv_sub": None,
             "ncheck": 2,
         }
 
         self.options = default_options
         self.options.update(options)
+        self.nsub = len(self.drivers)
 
+    def guess_pconv(self):
         if not self.options['pconv'] :
             self.options['pconv'] = self.options['econv'] / 1E2
+
+        if not self.options['pconv_sub'] :
+            pconv_sub = np.zeros(self.nsub)
+            for i, driver in enumerate(self.drivers):
+                if driver is not None and driver.comm.rank == 0 :
+                    pconv_sub[i] = self.options['pconv'] / driver.subcell.ions.nat * self.gsystem.ions.nat
+            self.options['pconv_sub'] = self.gsystem.grid.mp.vsum(pconv_sub)
+        pretty_dict_str = 'Optimization options :\n'
+        pretty_dict_str += pprint.pformat(self.options)
+        sprint(pretty_dict_str)
 
     def get_energy(self, totalrho = None, totalfunc = None, update = None, olevel = 0, **kwargs):
         elist = []
@@ -89,6 +103,8 @@ class Optimization(object):
         else:
             self.gsystem = gsystem
 
+        self.guess_pconv()
+
         self.gsystem.gaussian_density[:] = 0.0
         self.gsystem.density[:] = 0.0
         for i, driver in enumerate(self.drivers):
@@ -112,7 +128,6 @@ class Optimization(object):
         #-----------------------------------------------------------------------
         # io.write('a.xsf', totalrho, ions = self.gsystem.ions)
         # exit(0)
-        self.nsub = len(self.drivers)
         energy_history = [0.0]
         #-----------------------------------------------------------------------
         fmt = "{:10s}{:8s}{:24s}{:16s}{:10s}{:10s}{:16s}".format(" ", "Step", "Energy(a.u.)", "dE", "dP", "dC", "Time(s)")
@@ -251,22 +266,21 @@ class Optimization(object):
         return dp_norm
 
     def check_converge_potential(self, dp_norm, **kwargs):
-        pconv = self.options["pconv"]
-        if pconv is not None :
-            if np.any(dp_norm > pconv) : return False
+        # pconv = self.options["pconv"]
+        pconv = self.options["pconv_sub"]
+        if np.any(dp_norm > pconv) : return False
         return True
 
     def check_converge_energy(self, energy_history, **kwargs):
         econv = self.options["econv"]
         ncheck = self.options["ncheck"]
         E = energy_history[-1]
-        if econv is not None :
-            if len(energy_history) < ncheck + 1 :
+        if len(energy_history) < ncheck + 1 :
+            return False
+        for i in range(ncheck):
+            dE = abs(energy_history[-2-i] - E)
+            if abs(dE) > econv :
                 return False
-            for i in range(ncheck):
-                dE = abs(energy_history[-2-i] - E)
-                if abs(dE) > econv :
-                    return False
         return True
 
     def _update_try(self, it, res_norm):

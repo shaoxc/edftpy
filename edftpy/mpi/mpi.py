@@ -374,23 +374,23 @@ class GraphTopo:
                     recv_req.wait()
                     self.region_data[i][index] = buf
             #-----------------------------------------------------------------------
-            nrank = self.comm_region[i].size
-            count = self.region_subs_size(i)
-            displ = np.cumsum(count) - count
+            if self.comm_region[i] is not None :
+                count = self.region_subs_size(i)
+                displ = np.cumsum(count) - count
 
-            if self.rank == self.rank_region[i] :
-                shape_w = self.region_subs_shape(i)
-                index_w = self.region_subs_index(i)
-                for ik in range(0, nrank):
-                    ind = index_w[ik]
-                    shape = shape_w[ik]
-                    # arr = self.region_data[i][ind]
-                    self.region_data_buf[i][displ[ik]:displ[ik]+count[ik]] = self.region_data[i][ind].ravel()
-
-            if self.comm_region[i] is not None and self.comm_region[i].size > 1 :
-                shape = self.graph.region_shape_sub(i)
-                recv_buf = np.empty(shape)
-                self.comm_region[i].Scatterv([self.region_data_buf[i], count, displ, self.MPI.DOUBLE], recv_buf, root=0)
+                if self.rank == self.rank_region[i] :
+                    nrank = self.comm_region[i].size
+                    shape_w = self.region_subs_shape(i)
+                    index_w = self.region_subs_index(i)
+                    for ik in range(0, nrank):
+                        ind = index_w[ik]
+                        shape = shape_w[ik]
+                        # arr = self.region_data[i][ind]
+                        self.region_data_buf[i][displ[ik]:displ[ik]+count[ik]] = self.region_data[i][ind].ravel()
+                if self.comm_region[i].size > 1 :
+                    shape = self.graph.region_shape_sub(i)
+                    recv_buf = np.empty(shape)
+                    self.comm_region[i].Scatterv([self.region_data_buf[i], count, displ, self.MPI.DOUBLE], recv_buf, root=0)
             #-----------------------------------------------------------------------
         else :
             self.region_data[i][index] = sub_data
@@ -416,7 +416,6 @@ class GraphTopo:
             total[index] += sub_data
 
     def sub_to_global(self, sub_data, total, isub = None, grid = None, overwrite = False):
-        #-----------------------------------------------------------------------
         lflag = 1
         if sub_data is None :
             lflag = 0

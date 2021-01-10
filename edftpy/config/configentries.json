@@ -150,6 +150,24 @@
 		}
 	},
 	"SUB": {
+		"decompose": {
+			"method": {
+				"type": "str",
+				"default": "manual",
+				"comment": "The SCF driver of subsystem",
+				"options": "manual, distance"
+			},
+			"rcut":{
+				"type": "float",
+				"default": 3,
+				"unit": "Angstrom"
+			},
+			"radius":{
+				"type" : "cdict",
+				"default": {},
+				"unit": "Angstrom"
+			}
+		},
 		"calculator": {
 			"type": "str",
 			"default": "dftpy",

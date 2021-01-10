@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from collections import OrderedDict
+import copy
 
 from dftpy.constants import LEN_CONV, ENERGY_CONV
 from dftpy.formats import ase_io, io
@@ -113,10 +114,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
     total_evaluator = config2total_evaluator(config, ions, grid, pplist = pplist, total_evaluator=total_evaluator, cell_change = cell_change)
     gsystem.total_evaluator = total_evaluator
     ############################## Subsytem ##############################
-    subkeys = []
-    for key in config :
-        if key.startswith('SUB'):
-            subkeys.append(key)
+    subkeys = [key for key in config if key.startswith('SUB')]
     # subkeys.sort(reverse = True)
     drivers = []
     for i, keysys in enumerate(subkeys):
@@ -166,10 +164,7 @@ def config2graphtopo(config, subkeys = None, graphtopo = None):
         # return graphtopo
 
     if subkeys is None :
-        subkeys = []
-        for key in config :
-            if key.startswith('SUB'):
-                subkeys.append(key)
+        subkeys = [key for key in config if key.startswith('SUB')]
     nprocs = []
     #OF driver set the procs to 0, make sure it use all resources
     for key in subkeys :
@@ -355,7 +350,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         grid_sub = driver.subcell.grid
     else :
         grid_sub = None
-    subcell = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale, mp = mp)
+    subcell = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale, nr = nr, mp = mp)
 
     if cell_change == 'position' :
         if subcell.density.shape == driver.density.shape :
@@ -491,3 +486,18 @@ def _get_gap(config, optimizer):
     config['OPT']['maxiter'] = 10
     optimizer = config2optimizer(config, optimizer.gsystem.ions, optimizer)
     optimizer.optimize()
+
+def config2nsub(config, ions, optimizer = None, cell_change = None, driver = None, mp = None, comm = None):
+    # gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
+    subkeys = [key for key in config if key.startswith('SUB')]
+    for key in subkeys :
+        decompose = config[key]["decompose"]
+        if decompose['method'] == 'manual' :
+            pass
+        elif decompose['method'] == 'distance' :
+            config['N' + key] = config.pop(key)
+        else :
+            raise AttributeError("{} is not supported".format(decompose['method']))
+    nsubkeys = [key for key in config if key.startswith('NSUB')]
+    for key in nsubkeys :
+        decompose = config[key]["decompose"]
