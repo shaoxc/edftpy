@@ -91,9 +91,8 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
             cell_change = 'position'
     #-----------------------------------------------------------------------
     config = config2nsub(config, ions)
-    import pprint
-    pprint.pprint(config)
-    exit()
+    if graphtopo.rank == 0 :
+        write_conf('eDFTpy_running.json', config)
     #-----------------------------------------------------------------------
     nr = config[keysys]["grid"]["nr"]
     spacing = config[keysys]["grid"]["spacing"] * LEN_CONV["Angstrom"]["Bohr"]
@@ -505,7 +504,6 @@ def config2nsub(config, ions):
         else :
             raise AttributeError("{} is not supported".format(decompose['method']))
     nsubkeys = [key for key in config if key.startswith('NSUB')]
-    print('k1', nsubkeys)
     for keysys in nsubkeys :
         prefix = config[keysys]["prefix"]
         if not prefix : prefix = keysys[1:].lower()
@@ -521,11 +519,8 @@ def config2nsub(config, ions):
             config[key]['decompose']['method'] = 'manual'
             config[key]['cell']['index'] = ind
             config[key]["nprocs"] = max(1, config[keysys]["nprocs"] // len(indices))
-            print('k2', key, ind)
 
     config = fix_json_obj(config, ions)
-    write_conf('final.json', config)
-    exit()
     return config
 
 def fix_json_obj(config, ions):
