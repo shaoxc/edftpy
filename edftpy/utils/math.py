@@ -1,7 +1,8 @@
 import numpy as np
 import scipy.special as sp
-from scipy import ndimage
-from scipy import signal
+from scipy import ndimage, signal
+from functools import reduce
+import itertools
 from dftpy.utils import grid_map_index, grid_map_data
 
 from .common import Field, Grid
@@ -56,3 +57,34 @@ def interpolation_3d(data, nr = None, direct = True, index = None, grid = None):
         grid = Grid(data.grid.lattice, nr, direct = True)
     results = Field(grid, data=results)
     return results
+
+def union_mlist(arrs, keys = None, array = False):
+    if keys is None :
+        keys = set(itertools.chain.from_iterable(arrs))
+    for key in keys:
+        comp = [(i, item) for i, item in enumerate(arrs) if key in item]
+        ind, comp = zip(*comp)
+        ind = set(ind)
+        if len(comp) > 0 :
+            arrs = [arrs[i] for i, item in enumerate(arrs) if i not in ind]
+            if len(comp) > 1 :
+                if array :
+                    arrs.append(reduce(np.union1d, comp))
+                else :
+                    arrs.append(set(itertools.chain.from_iterable(comp)))
+            else :
+                arrs.append(comp[0])
+    return arrs
+
+def dict_update(d, u):
+    """
+    ref :
+        https://stackoverflow.com/questions/3232943/update-value-of-a-nested-dictionary-of-varying-depth
+    """
+    import collections.abc
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = dict_update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d

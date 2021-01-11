@@ -3,11 +3,13 @@ import configparser
 import copy
 import os
 from collections import OrderedDict
+import json
 from dftpy.constants import ENERGY_CONV, LEN_CONV
 from dftpy.config.config import ConfigEntry, readJSON, DefaultOptionFromEntries
 from dftpy.config.config import default_json as dftpy_default_json
 from dftpy.config.config import PrintConf as print_conf
 from edftpy.mpi import sprint
+from edftpy.utils.math import dict_update
 
 def merge_dftpy_entries(entries):
 
@@ -119,7 +121,10 @@ def read_conf(infile):
         conf_read = infile
     elif isinstance(infile, str):
         if os.path.isfile(infile):
-            config.read(infile)
+            if infile.lower().endswith('.json') :
+                return read_json(infile)
+            else :
+                config.read(infile)
         elif '=' in infile :
             config.read_string(infile)
         else :
@@ -128,6 +133,28 @@ def read_conf(infile):
 
     conf = dict_format(conf_read)
     return conf
+
+def read_json(infile):
+    with open(infile) as fr:
+        config = json.load(fr, object_pairs_hook=OrderedDict)
+    conf = default_option()
+    subkeys = [key for key in config if key.startswith('SUB')]
+    for key in subkeys:
+        conf[key] = copy.deepcopy(conf['SUB'])
+    conf = option_format(conf)
+    # conf.update(config)
+    conf = dict_update(conf, config)
+    return conf
+
+def write_conf(fname, config):
+    write_json(fname, config)
+
+def write_json(fname, config):
+    # for key, value in config.items() :
+        # print(key, value)
+        # print(key, json.dumps(value))
+    with open(fname, 'w') as fw:
+        json.dump(config, fw, indent=4)
 
 def read_conf_full(infile):
     config = configparser.ConfigParser()

@@ -6,7 +6,7 @@ import copy
 from dftpy.constants import LEN_CONV, ENERGY_CONV
 from dftpy.formats import ase_io, io
 
-from edftpy.config import read_conf, print_conf
+from edftpy.config import read_conf, print_conf, write_conf
 
 from edftpy.pseudopotential import LocalPP
 from edftpy.kedf import KEDF
@@ -89,6 +89,12 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
             raise AttributeError("Not support cell change")
         else :
             cell_change = 'position'
+    #-----------------------------------------------------------------------
+    config = config2nsub(config, ions)
+    import pprint
+    pprint.pprint(config)
+    exit()
+    #-----------------------------------------------------------------------
     nr = config[keysys]["grid"]["nr"]
     spacing = config[keysys]["grid"]["spacing"] * LEN_CONV["Angstrom"]["Bohr"]
     ecut = config[keysys]["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
@@ -487,8 +493,8 @@ def _get_gap(config, optimizer):
     optimizer = config2optimizer(config, optimizer.gsystem.ions, optimizer)
     optimizer.optimize()
 
-def config2nsub(config, ions, optimizer = None, cell_change = None, driver = None, mp = None, comm = None):
-    # gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
+def config2nsub(config, ions):
+    from edftpy.subsystem.decompose import from_distance_to_sub
     subkeys = [key for key in config if key.startswith('SUB')]
     for key in subkeys :
         decompose = config[key]["decompose"]
@@ -499,5 +505,48 @@ def config2nsub(config, ions, optimizer = None, cell_change = None, driver = Non
         else :
             raise AttributeError("{} is not supported".format(decompose['method']))
     nsubkeys = [key for key in config if key.startswith('NSUB')]
-    for key in nsubkeys :
-        decompose = config[key]["decompose"]
+    print('k1', nsubkeys)
+    for keysys in nsubkeys :
+        prefix = config[keysys]["prefix"]
+        if not prefix : prefix = keysys[1:].lower()
+        decompose = config[keysys]["decompose"]
+        if decompose['method'] != 'distance' :
+            raise AttributeError("{} is not supported".format(decompose['method']))
+        index = config[keysys]["cell"]["index"]
+        indices = from_distance_to_sub(ions[index], cutoff = decompose['rcut'])
+        for i, ind in enumerate(indices) :
+            key = keysys[1:] + '_' + str(i)
+            config[key] = copy.deepcopy(config[keysys])
+            config[key]["prefix"] = prefix + '_' + str(i)
+            config[key]['decompose']['method'] = 'manual'
+            config[key]['cell']['index'] = ind
+            config[key]["nprocs"] = max(1, config[keysys]["nprocs"] // len(indices))
+            print('k2', key, ind)
+
+    config = fix_json_obj(config, ions)
+    write_conf('final.json', config)
+    exit()
+    return config
+
+def fix_json_obj(config, ions):
+    """
+    Note :
+        fix some python types that not supported by json.dump
+    """
+    #-----------------------------------------------------------------------
+    # slice and np.ndarray
+    # subkeys = [key for key in config if key.startswith(('SUB', 'NSUB'))]
+    subkeys = [key for key in config if key.startswith('NSUB')]
+    for keysys in subkeys :
+        del config[keysys]
+    subkeys = [key for key in config if key.startswith('SUB')]
+    index_w = np.arange(0, ions.nat)
+    for keysys in subkeys :
+        index = config[keysys]["cell"]["index"]
+        if isinstance(index, slice):
+            index = index_w[index]
+            config[keysys]["cell"]["index"] = index.tolist()
+        elif isinstance(index, np.ndarray):
+            config[keysys]["cell"]["index"] = index.tolist()
+    #-----------------------------------------------------------------------
+    return config

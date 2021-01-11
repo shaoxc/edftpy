@@ -212,6 +212,7 @@ class GraphTopo:
     def distribute_procs(self, nprocs = None):
         if not self.is_mpi :
             self.comm_sub = SerialComm()
+            self.nprocs = np.ones(1, dtype = 'int')
             return
         elif nprocs is None :
             raise AttributeError("Must give the 'nprocs' in parallel version")
@@ -220,6 +221,7 @@ class GraphTopo:
             ns = np.count_nonzero(nprocs > 0)
             if ns == 0 :
                 self.comm_sub = SerialComm()
+                self.nprocs = np.ones(1, dtype = 'int') * nprocs.sum()
                 return
             if nprocs.sum() == ns :
                 av = self.size // ns

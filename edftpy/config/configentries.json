@@ -217,7 +217,9 @@
 			},
 			"index": {
 				"type": "intlist",
-				"default": null
+				"default": null,
+				"comment": "The indices of the atoms",
+				"note": "If not only a slice, you should given the stop for the slice"
 			}
 		},
 		"mix": {
