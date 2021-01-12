@@ -72,6 +72,14 @@ def Field(grid, memo="", rank=1, data = None, direct = True, order = 'C', cplx =
             kwargs['griddata_C'] = data
         else :
             kwargs['griddata_F'] = data
+
+        if isinstance(grid, DirectGrid) :
+            direct = True
+        elif isinstance(grid, ReciprocalGrid) :
+            direct = False
+        else :
+            raise AttributeError("Not support '{}' type grid".format(type(grid)))
+
         if direct :
             obj = DirectField(grid, **kwargs)
         else :

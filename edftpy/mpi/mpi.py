@@ -282,10 +282,11 @@ class GraphTopo:
 
     @property
     def is_mpi(self):
-        self._is_mpi = True
-        if isinstance(self._comm, SerialComm):
-            # if self._comm.size < 2 :
+        # if isinstance(self._comm, SerialComm):
+        if self._comm.size < 2 :
             self._is_mpi = False
+        else :
+            self._is_mpi = True
         return self._is_mpi
 
     @property
@@ -377,22 +378,26 @@ class GraphTopo:
                     self.region_data[i][index] = buf
             #-----------------------------------------------------------------------
             if self.comm_region[i] is not None :
+
                 count = self.region_subs_size(i)
                 displ = np.cumsum(count) - count
 
-                if self.rank == self.rank_region[i] :
-                    nrank = self.comm_region[i].size
-                    shape_w = self.region_subs_shape(i)
-                    index_w = self.region_subs_index(i)
-                    for ik in range(0, nrank):
-                        ind = index_w[ik]
-                        shape = shape_w[ik]
-                        # arr = self.region_data[i][ind]
-                        self.region_data_buf[i][displ[ik]:displ[ik]+count[ik]] = self.region_data[i][ind].ravel()
                 if self.comm_region[i].size > 1 :
+                    if self.rank == self.rank_region[i] :
+                        nrank = self.comm_region[i].size
+                        shape_w = self.region_subs_shape(i)
+                        index_w = self.region_subs_index(i)
+                        for ik in range(0, nrank):
+                            ind = index_w[ik]
+                            shape = shape_w[ik]
+                            # arr = self.region_data[i][ind]
+                            self.region_data_buf[i][displ[ik]:displ[ik]+count[ik]] = self.region_data[i][ind].ravel()
                     shape = self.graph.region_shape_sub(i)
                     recv_buf = np.empty(shape)
                     self.comm_region[i].Scatterv([self.region_data_buf[i], count, displ, self.MPI.DOUBLE], recv_buf, root=0)
+                else :
+                    ind = self.graph.region_index(i)
+                    return self.region_data[i][ind]
             #-----------------------------------------------------------------------
         else :
             self.region_data[i][index] = sub_data

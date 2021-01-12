@@ -374,7 +374,10 @@ class Optimization(object):
         for i, driver in enumerate(self.drivers):
             if driver is None : continue
             if 'XC' in driver.evaluator.funcdicts :
-                driver.evaluator.funcdicts['XC'].core_density = driver.core_density
+                if hasattr(driver, 'core_density_sub') :
+                    driver.evaluator.funcdicts['XC'].core_density = driver.core_density_sub
+                else :
+                    driver.evaluator.funcdicts['XC'].core_density = driver.core_density
             if driver.technique == 'OF' :
                 if 'XC' in driver.evaluator_of.funcdicts :
                     driver.evaluator_of.funcdicts['XC'].core_density = driver.core_density

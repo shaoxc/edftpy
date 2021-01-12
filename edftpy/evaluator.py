@@ -35,12 +35,12 @@ class Evaluator(AbsFunctional):
         return self.compute(density, calcType, **kwargs)
 
     def compute(self, density, calcType=["E","V"], split = False, gather = False, **kwargs):
-        # calcType = ['E', 'V']
+        calcType = ['E', 'V']
         eplist = {}
         results = None
         for key, evalfunctional in self.funcdicts.items():
             obj = evalfunctional(density, calcType, **kwargs)
-            # if hasattr(obj, 'energy'): sprint(key, density.mp.asum(obj.energy * 2))
+            # if hasattr(obj, 'energy'): sprint(key, density.mp.asum(obj.energy * 2), density.asum())
             # if hasattr(obj, 'energy'): sprint(key, density.mp.asum(obj.energy * 27.21138))
             # if hasattr(obj, 'potential'): sprint(key, obj.potential[:3, 0, 0] * 2)
             if results is None :
@@ -84,7 +84,7 @@ class EmbedEvaluator(Evaluator):
         self.embed_potential = None
         self.global_potential = None
 
-    def get_embed_potential(self, rho, gaussian_density = None, with_ke = False, **kwargs):
+    def get_embed_potential(self, rho, gaussian_density = None, with_ke = False, gather = False, **kwargs):
         self.embed_potential = None
         key = 'KE' if hasattr(self, 'KE') else None
         remove_embed = {}
@@ -102,7 +102,11 @@ class EmbedEvaluator(Evaluator):
         self.update_functional(add = remove_embed)
 
         if self.global_potential is not None :
-            self.embed_potential += self.global_potential
+            if gather :
+                self.embed_potential = self.embed_potential.gather()
+                self.embed_potential += self.global_potential
+            else :
+                self.embed_potential += self.global_potential
 
     @property
     def ke_evaluator(self):
