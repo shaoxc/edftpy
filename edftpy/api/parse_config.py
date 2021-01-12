@@ -69,11 +69,9 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
         config = read_conf(config)
     #-----------------------------------------------------------------------
     config = config_correct(config)
-    graphtopo = config2graphtopo(config, graphtopo = graphtopo)
-    # if graphtopo.rank == 0 : print_conf(config)
     #-----------------------------------------------------------------------
-    cell_change = None
     ############################## Gsystem ##############################
+    cell_change = None
     keysys = "GSYSTEM"
     if ions is None :
         try :
@@ -89,10 +87,10 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
             raise AttributeError("Not support cell change")
         else :
             cell_change = 'position'
-    #-----------------------------------------------------------------------
     config = config2nsub(config, ions)
-    if graphtopo.rank == 0 :
-        write_conf('eDFTpy_running.json', config)
+    #-----------------------------------------------------------------------
+    graphtopo = config2graphtopo(config, graphtopo = graphtopo)
+    if graphtopo.rank == 0 : write_conf('eDFTpy_running.json', config)
     #-----------------------------------------------------------------------
     nr = config[keysys]["grid"]["nr"]
     spacing = config[keysys]["grid"]["spacing"] * LEN_CONV["Angstrom"]["Bohr"]
