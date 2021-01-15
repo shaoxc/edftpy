@@ -104,7 +104,7 @@ class PwscfKS(Driver):
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
         if not first :
             # from qe-6.5:run_pwscf.f90
-            pwscfpy.pwpy_electrons.pwpy_electrons_scf(0, 0, self.charge, 0, self.exttype, 0, finish = True)
+            self.end_scf()
             pwscfpy.extrapolation.update_pot()
             pwscfpy.hinit1()
 
@@ -112,13 +112,6 @@ class PwscfKS(Driver):
             grid = self.grid_driver
         else :
             grid = self.grid
-
-        # if self.comm.rank == 0 :
-            # self.core_charge = np.empty((grid.nnr, self.nspin), order = 'F')
-        # else :
-            # self.core_charge = self.atmp2
-        # pwscfpy.pwpy_mod.pwpy_get_rho_core(self.core_charge)
-        # self.core_density = self._format_density_invert(self.core_charge)
 
         if self.comm.rank == 0 :
             core_charge = np.empty((grid.nnr, self.nspin), order = 'F')
@@ -173,6 +166,7 @@ class PwscfKS(Driver):
                     'verbosity' : 'high',
                     'restart_mode' : 'from_scratch',
                     'iprint' : 1,
+                    'disk_io' : 'none', # do not save anything for qe
                     },
                 'system' :
                 {
@@ -198,7 +192,6 @@ class PwscfKS(Driver):
         fix_params = {
                 'control' :
                 {
-                    'disk_io' : 'none', # do not save anything for qe
                     'prefix' : prefix,
                     'outdir' : prefix + '.tmp'  # outdir of qe
                     },
@@ -546,5 +539,8 @@ class PwscfKS(Driver):
     def get_stress(self, **kwargs):
         pass
 
-    def stop_run(self, *arg, **kwargs):
-        pwscfpy.pwpy_stop_run(*arg, **kwargs)
+    def end_scf(self, **kwargs):
+        pwscfpy.pwpy_electrons.pwpy_electrons_scf(0, 0, self.charge, 0, self.exttype, 0, finish = True)
+
+    def stop_run(self, status = 0, **kwargs):
+        pwscfpy.pwpy_stop_run(status, **kwargs)

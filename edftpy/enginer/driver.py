@@ -34,10 +34,13 @@ class Driver(ABC):
     def get_fermi_level(self, **kwargs):
         pass
 
-    def stop_run(self, *arg, **kwargs):
+    def update_workspace(self, *arg, **kwargs):
         pass
 
-    def update_workspace(self, *arg, **kwargs):
+    def end_scf(self, **kwargs):
+        pass
+
+    def stop_run(self, *arg, **kwargs):
         pass
 
     def __call__(self, density = None, gsystem = None, calcType = ['O', 'E'], ext_pot = None, **kwargs):

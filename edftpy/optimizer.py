@@ -229,6 +229,7 @@ class Optimization(object):
         self.energy_all = self.print_energy()
         self.energy = self.energy_all['TOTAL']
         self.density = totalrho
+        self.end_scf()
         return
 
     def get_update(self, driver, istep, residual):
@@ -374,6 +375,18 @@ class Optimization(object):
             sprint("{:>10s} energy: {:22.15E} (eV)  =  {:22.15E} (a.u.) ".format(key, value* ENERGY_CONV["Hartree"]["eV"], value))
         sprint("-" * 80)
         return ep_w
+
+    def end_scf(self):
+        for i, driver in enumerate(self.drivers):
+            if driver is not None :
+                driver.end_scf()
+        return
+
+    def stop_run(self):
+        for i, driver in enumerate(self.drivers):
+            if driver is not None :
+                driver.stop_run()
+        return
 
     def add_xc_correction(self):
         """

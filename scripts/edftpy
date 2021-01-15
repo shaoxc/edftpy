@@ -54,6 +54,7 @@ def run_job(args):
         #-----------------------------------------------------------------------
     sprint("#" * 80)
     sprint("Finished on :", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
+    optimizer.stop_run()
 
 
 if __name__ == "__main__":
