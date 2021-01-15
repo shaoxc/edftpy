@@ -1,11 +1,14 @@
 import numpy as np
 import time
-from dftpy.formats import io
-from dftpy.constants import ENERGY_CONV
-from edftpy.mpi import sprint
-from edftpy.properties import get_total_forces, get_total_stress
 from collections import OrderedDict
 import pprint
+
+from dftpy.formats import io
+from dftpy.constants import ENERGY_CONV
+
+from edftpy.mpi import sprint
+from edftpy.properties import get_total_forces, get_total_stress
+from edftpy.hartree import hartree_energy
 
 
 class Optimization(object):
@@ -23,6 +26,7 @@ class Optimization(object):
             "pconv": None,
             "pconv_sub": None,
             "ncheck": 2,
+            "olevel": 2,
         }
 
         self.options = default_options
@@ -93,7 +97,7 @@ class Optimization(object):
         totalrho = self.gsystem.density.copy()
         return totalrho
 
-    def optimize(self, gsystem = None, olevel = 1, **kwargs):
+    def optimize(self, gsystem = None, **kwargs):
         #-----------------------------------------------------------------------
         sprint('Begin optimize')
         if gsystem is None:
@@ -104,6 +108,7 @@ class Optimization(object):
             self.gsystem = gsystem
 
         self.guess_pconv()
+        olevel = self.options.get('olevel', 2)
 
         self.gsystem.gaussian_density[:] = 0.0
         self.gsystem.density[:] = 0.0
@@ -152,13 +157,15 @@ class Optimization(object):
         res_norm = np.ones(self.nsub)
         totalrho_prev = None
         for it in range(self.options['maxiter']):
+            # update the rhomax for NLKEDF
+            self.set_kedf_params(level = it + 2) # first step without NL
             self.iter = it
             #-----------------------------------------------------------------------
             if self.nsub == len(of_drivers):
                 pass
             else :
                 self.gsystem.total_evaluator.get_embed_potential(totalrho, gaussian_density = self.gsystem.gaussian_density, with_global = True)
-                static_potential = self.gsystem.total_evaluator.static_potential.copy()
+                # static_potential = self.gsystem.total_evaluator.static_potential.copy()
             for isub in range(self.nsub + len(of_drivers)):
                 if isub < self.nsub :
                     driver = self.drivers[isub]
@@ -189,8 +196,8 @@ class Optimization(object):
                     self.gsystem.density[:] = totalrho
                     driver(gsystem = self.gsystem, calcType = ['O'], olevel = olevel)
 
-            if self.nsub == len(of_drivers):
-                static_potential = self.gsystem.total_evaluator.static_potential.copy()
+            # if self.nsub == len(of_drivers):
+                # static_potential = self.gsystem.total_evaluator.static_potential.copy()
             #-----------------------------------------------------------------------
             totalrho, totalrho_prev = totalrho_prev, totalrho
             totalrho = self.update_density(update = update)
@@ -201,18 +208,20 @@ class Optimization(object):
             if self.check_converge_potential(dp_norm):
                 sprint("#### Subsytem Density Optimization Converged (Potential)####")
                 break
-            scf_correction = self.get_scf_correction(static_potential, totalrho, totalrho_prev)
-            totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'])
+            # scf_correction = self.get_scf_correction(static_potential, totalrho, totalrho_prev)
+            totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'], olevel = olevel)
             energy = self.get_energy(totalrho, totalfunc, update = update, olevel = olevel)[0]
             #-----------------------------------------------------------------------
-            energy += scf_correction
+            # energy += scf_correction
             energy_history.append(energy)
             timecost = time.time()
             dE = energy_history[-1] - energy_history[-2]
             d_ehart = np.max(dp_norm)
+            # d_res = np.max(res_norm)
+            d_res= hartree_energy(totalrho-totalrho_prev)
             #-----------------------------------------------------------------------
-            fmt = "{:>10s}{:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format("Embed: ", it, energy, dE, d_ehart, scf_correction, timecost - time_begin)
-            fmt += "\n{:>10s}{:<8d}{:<24.12E}".format("Total: ", it, totalfunc.energy)
+            fmt = "{:>10s}{:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format("Embed: ", it, energy, dE, d_ehart, d_res, timecost - time_begin)
+            # fmt += "\n{:>10s}{:<8d}{:<24.12E}".format("Total: ", it, totalfunc.energy)
             sprint(seq +'\n' + fmt +'\n' + seq)
             if self.check_converge_energy(energy_history):
                 sprint("#### Subsytem Density Optimization Converged (Energy)####")
@@ -343,10 +352,9 @@ class Optimization(object):
         return ene
 
     def print_energy(self):
-        edict = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True)
+        edict = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True, olevel = 0)
         totalfunc = edict.pop('TOTAL')
-        totalfunc.energy *= self.gsystem.grid.mp.size
-        totalfunc = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'])
+        # totalfunc = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'])
         etotal, elist = self.get_energy(self.gsystem.density, totalfunc, olevel = 0)
         keys = list(edict.keys())
         values = [item.energy for item in edict.values()]
@@ -383,3 +391,30 @@ class Optimization(object):
                     driver.evaluator_of.funcdicts['XC'].core_density = driver.core_density
         if 'XC' in self.gsystem.total_evaluator.funcdicts :
             self.gsystem.total_evaluator.funcdicts['XC'].core_density = self.gsystem.core_density
+
+    def set_kedf_params(self, level = 3, rhotol = 1E-4):
+        """
+        This is use to set the rhomax for NLKEDF embeddding
+        """
+        kefunc = self.gsystem.total_evaluator.funcdicts.get('KE', None)
+        update = False
+        if hasattr(kefunc, 'rhomax') :
+            rhomax = self.gsystem.density.amax() + rhotol
+            rho0 = kefunc.rhomax
+            if rho0 is None or rho0 < rhomax :
+                if level > 2 : update = True
+            else :
+                rhomax = rho0
+
+            if update :
+                sprint('Update the rhomax from {} to {}'.format(rho0, rhomax))
+                kefunc.rhomax = rhomax
+            kefunc.level = level
+
+            for i, driver in enumerate(self.drivers):
+                if driver is None : continue
+                if 'KE' in driver.evaluator.funcdicts :
+                    if update :
+                        driver.evaluator.funcdicts['KE'].rhomax = rhomax
+                    driver.evaluator.funcdicts['KE'].level = level
+        return

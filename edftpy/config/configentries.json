@@ -52,7 +52,7 @@
 			"default": null,
 			"comment": "Output of electrostatic_potential"
 		}
-		
+
 	},
 	"OPT": {
 		"method": {
@@ -77,6 +77,10 @@
 			"comment": "The max steps for optimization"
 		},
 		"ncheck": {
+			"type": "int",
+			"default": 2
+		},
+		"olevel": {
 			"type": "int",
 			"default": 2
 		}
@@ -146,6 +150,28 @@
 				"type": "str",
 				"default": "kedf",
 				"comment": "Same config of `DFTpy`"
+			},
+			"kedf": {
+				"type": "str",
+				"default": "GGA"
+			},
+			"interp": {
+				"type": "str",
+				"default": "linear"
+			},
+			"delta": {
+				"type": "float",
+				"default": 0.3,
+				"comment": "The gap of spline"
+			},
+			"kdd": {
+				"type": "int",
+				"default": 1,
+				"comment": "kernel density denpendent"
+			},
+			"k_str": {
+				"type": "str",
+				"default": "revAPBEK"
 			}
 		}
 	},
@@ -163,7 +189,7 @@
 				"unit": "Angstrom"
 			},
 			"radius":{
-				"type" : "cdict",
+				"type" : "cfdict",
 				"default": {},
 				"unit": "Angstrom"
 			}

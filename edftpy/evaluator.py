@@ -2,7 +2,6 @@ import numpy as np
 from .utils.common import Field, Functional, AbsFunctional
 from .utils.math import grid_map_index, grid_map_data
 from .kedf import KEDF
-from dftpy.functionals import FunctionalClass
 from dftpy.formats.io import write
 import scipy.special as sp
 
@@ -35,7 +34,7 @@ class Evaluator(AbsFunctional):
         return self.compute(density, calcType, **kwargs)
 
     def compute(self, density, calcType=["E","V"], split = False, gather = False, **kwargs):
-        calcType = ['E', 'V']
+        # calcType = ['E', 'V']
         eplist = {}
         results = None
         for key, evalfunctional in self.funcdicts.items():
@@ -49,16 +48,11 @@ class Evaluator(AbsFunctional):
                 results += obj
             eplist[key] = obj
         if results is None :
-            # results = Functional(name = 'NONE')
+            results = Functional(name = 'ZERO')
             if 'E' in calcType :
-                energy = 0.0
-            else :
-                energy = None
+                results.energy = 0.0
             if 'V' in calcType :
-                potential = Field(grid=density.grid, rank=1, direct=True)
-            else :
-                potential = None
-            results = Functional(name = 'ZERO', energy=energy, potential=potential)
+                results.potential = Field(grid=density.grid, rank=1, direct=True)
         #-----------------------------------------------------------------------
         if split :
             eplist['TOTAL'] = results
@@ -128,11 +122,9 @@ class EmbedEvaluator(Evaluator):
             obj = super().compute(rho, calcType = calcType, gather = False, **kwargs)
             obj *= -1.0
         else :
+            obj = Functional(name = 'ZERO', energy=0.0)
             if 'V' in calcType :
-                potential = Field(grid=rho.grid, rank=1, direct=True)
-            else :
-                potential = None
-            obj = Functional(name = 'ZERO', energy=0.0, potential=potential)
+                obj.potential = Field(grid=rho.grid, rank=1, direct=True)
 
         if self.ke_evaluator is not None and with_ke:
             obj += self.ke_evaluator(rho, calcType = calcType, **kwargs)
@@ -197,8 +189,9 @@ class EvaluatorOF(Evaluator):
 
     def compute(self, rho, calcType=["E","V"], with_global = True, with_ke = False, with_sub = True, with_embed = True, gather = False, **kwargs):
         if self.nfunc == 0 or not with_sub :
-            potential = Field(grid=rho.grid, rank=1, direct=True)
-            obj = Functional(name = 'ZERO', energy=0.0, potential=potential)
+            obj = Functional(name = 'ZERO', energy=0.0)
+            if 'V' in calcType :
+                obj.potential = Field(grid=rho.grid, rank=1, direct=True)
         else :
             obj = super().compute(rho, calcType = calcType, gather = False, **kwargs)
         #Embedding potential
@@ -228,7 +221,6 @@ class TotalEvaluator(Evaluator):
         super().__init__(**kwargs)
         self.embed_keys = embed_keys
         self.embed_potential = None
-        self.local_potential = None
         self.static_potential = None
 
     def get_embed_potential(self, rho, gaussian_density = None, embed_keys = [], with_global = True, **kwargs):
@@ -259,3 +251,19 @@ class TotalEvaluator(Evaluator):
         self.update_functional(add = remove_global)
 
         self.static_potential = obj_global.potential
+
+    def __call__(self, rho, calcType=["E","V"], **kwargs):
+        return self.compute(rho, calcType, **kwargs)
+
+    def compute(self, rho, calcType=["E","V"], gather = False, olevel = 0, **kwargs):
+        if olevel == 0 :
+            obj = super().compute(rho, calcType = calcType, gather = gather, **kwargs)
+        else :
+            obj = Functional(name = 'ZERO', potential = self.embed_potential)
+            if 'E' in calcType :
+                obj.energy = np.sum(rho * self.embed_potential) * rho.grid.dV
+
+        if 'E' in calcType and gather:
+            obj.energy = rho.mp.vsum(obj.energy)
+
+        return obj

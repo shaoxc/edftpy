@@ -4,20 +4,21 @@ import numpy as np
 from scipy import signal
 import copy
 import os
-from dftpy.formats.ase_io import ions2ase
-from dftpy.constants import LEN_CONV, ENERGY_CONV
 import ase.io.espresso as ase_io_driver
 from ase.calculators.espresso import Espresso as ase_calc_driver
+from collections import OrderedDict
 
-from ..mixer import LinearMixer, PulayMixer, AbstractMixer
-from ..utils.common import Grid, Field, Functional
-from ..utils.math import grid_map_data
-from ..utils import clean_variables
-from ..density import normalization_density
-from .driver import Driver
+from dftpy.formats.ase_io import ions2ase
+from dftpy.constants import LEN_CONV, ENERGY_CONV
+
+from edftpy.mixer import LinearMixer, PulayMixer, AbstractMixer
+from edftpy.utils.common import Grid, Field, Functional
+from edftpy.utils.math import grid_map_data
+from edftpy.utils import clean_variables
+from edftpy.density import normalization_density
+from edftpy.enginer.driver import Driver
 from edftpy.hartree import hartree_energy
 from edftpy.mpi import sprint, SerialComm, MP
-from collections import OrderedDict
 
 from pwscfpy import constants as pwc
 unit_len = LEN_CONV["Bohr"]["Angstrom"] / pwc.BOHR_RADIUS_SI / 1E10
@@ -186,8 +187,6 @@ class PwscfKS(Driver):
                     },
                 'electrons' :
                 {
-                    'electron_maxstep' : 1,
-                    'conv_thr' : 1E-10,
                     'mixing_beta' : 0.5,
                     },
                 'ions' :
@@ -205,7 +204,8 @@ class PwscfKS(Driver):
                     },
                 'electrons' :
                 {
-                    'electron_maxstep' : 1  # only run 1 step for scf
+                    'electron_maxstep' : 1, # only run 1 step for scf
+                    'conv_thr' : 0.0, # set very high accuracy, otherwise pwscf mixer cause davcio (15) error
                     },
                 'ions' :
                 {
@@ -452,14 +452,17 @@ class PwscfKS(Driver):
                 energy = self.energy
 
         if self.comm.rank == 0 :
-            func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = False)
-            if self.exttype == 0 : func.energy = 0.0
+            if olevel == 0 :
+                func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = False)
+            else :
+                func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = True)
         else :
             func = Functional(name = 'ZERO', energy=0.0, potential=None)
-            energy = 0.0
 
         if 'E' in calcType :
             func.energy += energy
+            if self.exttype == 0 : func.energy = 0.0
+            if self.comm.rank > 0 : func.energy = 0.0
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
             sprint(fstr, comm=self.comm)
             pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
@@ -467,15 +470,13 @@ class PwscfKS(Driver):
         return func
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, **kwargs):
-        # olevel =0
         if 'E' in calcType :
             if olevel == 0 :
                 energy = self.get_energy()
+                self.grid_sub.scatter(density, out = self.density_sub)
+                func = self.evaluator(self.density_sub, calcType = ['E'], with_global = False, with_embed = False, gather = True)
             else : # elif olevel == 1 :
-                energy = self.energy
-
-        self.grid_sub.scatter(density, out = self.density_sub)
-        func = self.evaluator(self.density_sub, calcType = ['E'], with_global = False, with_embed = False, gather = True)
+                return self.get_energy_potential_serial(density, calcType, olevel, **kwargs)
 
         if 'E' in calcType :
             func.energy += energy

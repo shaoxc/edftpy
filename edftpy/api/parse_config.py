@@ -177,7 +177,7 @@ def config2graphtopo(config, subkeys = None, graphtopo = None):
             n = config[key]["nprocs"]
         nprocs.append(n)
     graphtopo.distribute_procs(nprocs)
-    sprint('Number of subsystems : ', graphtopo.rank, comm = graphtopo.comm)
+    sprint('Number of subsystems : ', len(nprocs), comm = graphtopo.comm)
     f_str = np.array2string(graphtopo.nprocs, separator=' ', max_line_width=80)[1:-1]
     sprint('Number of processors for each subsystem : \n ', f_str, comm = graphtopo.comm)
     return graphtopo
@@ -509,7 +509,22 @@ def config2nsub(config, ions):
         if decompose['method'] != 'distance' :
             raise AttributeError("{} is not supported".format(decompose['method']))
         index = config[keysys]["cell"]["index"]
-        indices = from_distance_to_sub(ions[index], cutoff = decompose['rcut'])
+        ions_sub = ions[index]
+
+        radius = decompose['radius']
+        if len(radius) == 0 :
+            cutoff = decompose['rcut']
+        else :
+            keys = list(radius.keys())
+            if not set(keys) >= set(list(ions_sub.nsymbols)) :
+                raise AttributeError("The radius should contains all the elements")
+            cutoff = {}
+            for i, k in enumerate(keys):
+                for k1 in keys[i:] :
+                    cutoff[(k, k1)] = radius[k] + radius[k1]
+
+        indices = from_distance_to_sub(ions_sub, cutoff = cutoff)
+
         for i, ind in enumerate(indices) :
             key = keysys[1:] + '_' + str(i)
             config[key] = copy.deepcopy(config[keysys])
