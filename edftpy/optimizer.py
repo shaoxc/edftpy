@@ -41,7 +41,7 @@ class Optimization(object):
             pconv_sub = np.zeros(self.nsub)
             for i, driver in enumerate(self.drivers):
                 if driver is not None and driver.comm.rank == 0 :
-                    pconv_sub[i] = self.options['pconv'] / driver.subcell.ions.nat * self.gsystem.ions.nat
+                    pconv_sub[i] = self.options['pconv'] * driver.subcell.ions.nat / self.gsystem.ions.nat
             self.options['pconv_sub'] = self.gsystem.grid.mp.vsum(pconv_sub)
         pretty_dict_str = 'Optimization options :\n'
         pretty_dict_str += pprint.pformat(self.options)
@@ -203,8 +203,11 @@ class Optimization(object):
             totalrho = self.update_density(update = update)
             res_norm = self.get_diff_residual()
             dp_norm = self.get_diff_potential()
-            sprint('diff_res', res_norm)
-            sprint('dp_norm', dp_norm)
+            f_str = 'Norm of reidual density : \n'
+            f_str += np.array2string(res_norm, separator=' ', max_line_width=80)
+            f_str += '\nEnergy of reidual density : \n'
+            f_str += np.array2string(dp_norm, separator=' ', max_line_width=80)
+            sprint(f_str, level = 2)
             if self.check_converge_potential(dp_norm):
                 sprint("#### Subsytem Density Optimization Converged (Potential)####")
                 break

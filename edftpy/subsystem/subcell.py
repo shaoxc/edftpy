@@ -76,11 +76,24 @@ class SubCell(object):
         if cellsplit is not None :
             if isinstance(cellsplit, (int, float)) or len(cellsplit) == 1 :
                 cellsplit = np.ones(3) * cellsplit
-        pos = ions.pos.to_cart()[index].copy()
         spacings = grid.spacings.copy()
         shift = np.zeros(3, dtype = 'int')
         origin = np.zeros(3)
-
+        #-----------------------------------------------------------------------
+        # pos = ions.pos.to_cart()[index].copy()
+        # print('pos', pos)
+        pos_cry = ions.pos.to_crys()[index].copy()
+        cs = np.mean(pos_cry, axis = 0)
+        pos_cry -= cs
+        for i, p in enumerate(pos_cry) :
+            for j in range(3):
+                if pos_cry[i][j] > 0.5 :
+                    pos_cry[i][j] -= 1.0
+                elif pos_cry[i][j] < -0.5 :
+                    pos_cry[i][j] += 1.0
+        pos = pos_cry.to_cart()
+        cs = cs.to_cart()
+        #-----------------------------------------------------------------------
         cell_size = np.ptp(pos, axis = 0)
         pbc = np.ones(3, dtype = 'int')
 
@@ -129,11 +142,11 @@ class SubCell(object):
         center[origin < 1E-6] = 0.0
         c0 = Coord(center, lattice, basis = 'Crystal').to_cart()
 
-        origin = np.array(c0) - np.array(c1)
+        origin = np.array(c0) - np.array(c1) + cs
         shift[:] = np.array(Coord(origin, lattice, basis = 'Cartesian').to_crys()) * grid.nrR
         origin[:] = shift / grid.nrR
         origin[:] = Coord(origin, lattice, basis = 'Crystal').to_cart()
-        pos -= origin
+        pos -= origin - cs
 
         ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = lattice_sub, basis = 'Cartesian', origin = origin)
         if grid_sub is None :
@@ -143,9 +156,8 @@ class SubCell(object):
         self._ions = ions_sub
         self._ions_index = index
         self.comm = self._grid.mp.comm
-
-        sprint('subcell grid', nr, self._grid.nr, comm=self.comm)
-        sprint('subcell shift', shift, comm=self.comm)
+        sprint('subcell grid', self._grid.nrR, self._grid.nr, comm=self.comm)
+        sprint('subcell shift', self._grid.shift, comm=self.comm)
 
     def _gen_gaussian_density(self, options={}):
         """
@@ -161,7 +173,7 @@ class SubCell(object):
         sigma_min = np.max(gaps) * 2 / fwhm
         for key, option in options.items() :
             rcut = option.get('rcut', 5.0)
-            sigma = option.get('sigma', 0.1)
+            sigma = option.get('sigma', 0.3)
             scale = option.get('scale', 0.0)
             if scale is None or abs(scale) < 1E-10 :
                 continue

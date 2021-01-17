@@ -369,9 +369,10 @@ class GraphTopo:
                 self.region_data[i][index] = sub_data
             else :
                 if self.rank == self.rank_sub[i] :
-                    self.comm.send(sub_data, dest = self.rank_region[i], tag = i)
+                    self.comm.Send(sub_data, dest = self.rank_region[i], tag = i)
                 elif self.rank == self.rank_region[i] :
-                    buf = self.comm.recv(source = self.rank_sub[i], tag = i)
+                    buf = np.empty(self.graph.sub_shape[i])
+                    self.comm.Recv(buf, source = self.rank_sub[i], tag = i)
                     self.region_data[i][index] = buf
             #-----------------------------------------------------------------------
             if self.comm_region[i] is not None :

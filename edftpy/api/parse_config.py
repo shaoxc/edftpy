@@ -178,7 +178,7 @@ def config2graphtopo(config, subkeys = None, graphtopo = None):
         nprocs.append(n)
     graphtopo.distribute_procs(nprocs)
     sprint('Number of subsystems : ', len(nprocs), comm = graphtopo.comm)
-    f_str = np.array2string(graphtopo.nprocs, separator=' ', max_line_width=80)[1:-1]
+    f_str = np.array2string(graphtopo.nprocs, separator=' ', max_line_width=80)
     sprint('Number of processors for each subsystem : \n ', f_str, comm = graphtopo.comm)
     return graphtopo
 
@@ -523,7 +523,8 @@ def config2nsub(config, ions):
                 for k1 in keys[i:] :
                     cutoff[(k, k1)] = radius[k] + radius[k1]
 
-        indices = from_distance_to_sub(ions_sub, cutoff = cutoff)
+        if decompose['method'] == 'distance' :
+            indices = from_distance_to_sub(ions_sub, cutoff = cutoff)
 
         for i, ind in enumerate(indices) :
             key = keysys[1:] + '_' + str(i)

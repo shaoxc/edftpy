@@ -1,7 +1,6 @@
 import pwscfpy
 
 import numpy as np
-from scipy import signal
 import copy
 import os
 import ase.io.espresso as ase_io_driver
@@ -59,11 +58,10 @@ class PwscfKS(Driver):
             self.prefix, self._input_ext= os.path.splitext(base_in_file)
 
         if self.comm.size > 1 : self.comm.Barrier()
-        self._driver_initialise()
         self.mixer = mixer
-
         self._grid = None
         self._grid_sub = None
+        self._driver_initialise()
         self.grid_driver = self.get_grid_driver(self.grid)
         #-----------------------------------------------------------------------
         self.nspin = 1
@@ -75,8 +73,13 @@ class PwscfKS(Driver):
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = 0.5, predecut = 0, delay = 1)
         elif isinstance(self.mixer, float):
             self.mix_driver = self.mixer
+
+        fstr = f'Subcell grid({self.prefix}): {self.subcell.grid.nrR}  {self.subcell.grid.nr}\n'
+        fstr += f'Subcell shift({self.prefix}): {self.subcell.grid.shift}\n'
         if self.grid_driver is not None :
-            sprint('{} has two grids :{} and {}'.format(self.__class__.__name__, self.grid.nr, self.grid_driver.nr), comm=self.comm)
+            fstr += f'{self.__class__.__name__} has two grids :{self.grid.nrR} and {self.grid_driver.nrR}'
+        sprint(fstr, comm=self.comm, level=1)
+        pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
         #-----------------------------------------------------------------------
         self.init_density()
         self.update_workspace(first = True)
@@ -457,7 +460,7 @@ class PwscfKS(Driver):
             if self.exttype == 0 : func.energy = 0.0
             if self.comm.rank > 0 : func.energy = 0.0
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
-            sprint(fstr, comm=self.comm)
+            sprint(fstr, comm=self.comm, level=1)
             pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
             self.energy = func.energy
         return func
@@ -476,7 +479,7 @@ class PwscfKS(Driver):
             if self.exttype == 0 : func.energy = 0.0
             if self.comm.rank > 0 : func.energy = 0.0
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
-            sprint(fstr, comm=self.comm)
+            sprint(fstr, comm=self.comm, level=1)
             pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
             self.energy = func.energy
         return func
@@ -498,7 +501,7 @@ class PwscfKS(Driver):
             self.dp_norm = hartree_energy(r)
             rmax = r.amax()
             fstr = f'res_norm({self.prefix}): {self._iter}  {rmax}  {self.residual_norm}'
-            sprint(fstr, comm=self.comm)
+            sprint(fstr, comm=self.comm, level=1)
             pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
             #-----------------------------------------------------------------------
             if self.mix_driver is None :

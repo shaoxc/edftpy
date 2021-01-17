@@ -11,7 +11,7 @@ from edftpy.mpi import sprint
 
 from dftpy.optimization import Optimization
 from dftpy.formats.io import write
-import dftpy.constants
+from dftpy.constants import environ
 
 
 class DFTpyOF(Driver):
@@ -61,6 +61,12 @@ class DFTpyOF(Driver):
             self.fileobj = open(self.outfile, 'w')
         else :
             self.fileobj = None
+
+        fstr = f'Subcell grid({self.prefix}): {self.subcell.grid.nrR}  {self.subcell.grid.nr}\n'
+        fstr += f'Subcell shift({self.prefix}): {self.subcell.grid.shift}\n'
+        if self.comm.rank == 0 : self.fileobj.write(fstr)
+        sprint(fstr, comm=self.comm)
+
         self.update_workspace(first = True)
 
     def update_workspace(self, subcell = None, first = False, **kwargs):
@@ -189,8 +195,8 @@ class DFTpyOF(Driver):
 
         self.prev_charge[:] = self.charge
         #-----------------------------------------------------------------------
-        stdout = dftpy.constants.STDOUT
-        dftpy.constants.STDOUT = self.fileobj
+        stdout = environ['STDOUT']
+        environ['STDOUT'] = self.fileobj
         if self.options['opt_method'] == 'full' :
             self.get_density_full_opt(**kwargs)
         elif self.options['opt_method'] == 'part' :
@@ -199,7 +205,7 @@ class DFTpyOF(Driver):
             if self.comm.size > 1 :
                 raise AttributeError("Not support parallel")
             self.get_density_hamiltonian(**kwargs)
-        dftpy.constants.STDOUT = stdout
+        environ['STDOUT'] = stdout
         #-----------------------------------------------------------------------
         self._format_density_invert(self.charge, self.grid)
         return self.density
@@ -324,9 +330,9 @@ def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = No
     from edftpy.evaluator import Evaluator
     from edftpy.density.init_density import AtomicDensity
     #-----------------------------------------------------------------------
-    save = dftpy.constants.STDOUT
+    save = environ['STDOUT']
     if stdout is not None :
-        dftpy.constants.STDOUT = stdout
+        environ['STDOUT'] = stdout
     if xc_kwargs is None :
         xc_kwargs = {"x_str":'gga_x_pbe','c_str':'gga_c_pbe'}
     if ke_kwargs is None :
@@ -348,5 +354,5 @@ def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = No
     optimization_options.update(options)
     opt = Optimization(EnergyEvaluator= evaluator, optimization_options = optimization_options, optimization_method = 'CG-HS')
     new_rho = opt.optimize_rho(guess_rho=rho_ini)
-    dftpy.constants.STDOUT = save
+    environ['STDOUT'] = save
     return new_rho
