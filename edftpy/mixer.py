@@ -235,7 +235,7 @@ class PulayMixer(AbstractMixer):
             coef = self.coef
         self._iter += 1
 
-        sprint('mixing parameters : ', coef, comm=self.comm)
+        sprint('mixing parameters : ', coef, comm=self.comm, level = 1)
         # rho0 = np.mean(nin)
         # kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
         # sprint('kf', kf, self.pred.predcoef[1], comm=self.comm)
@@ -258,7 +258,7 @@ class PulayMixer(AbstractMixer):
             if self.restarted and (self._iter-self._delay) %(self.maxm+1)==0 :
                 self.dr_mat = None
                 self.dn_mat = None
-                sprint('Restart history of the mixer', comm=self.comm)
+                sprint('Restart history of the mixer', comm=self.comm, level = 1)
             dn = nin - self.prev_density
             dr = r - self.prev_residual
             if self.dr_mat is None :

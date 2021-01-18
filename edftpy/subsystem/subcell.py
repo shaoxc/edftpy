@@ -92,7 +92,6 @@ class SubCell(object):
                 elif pos_cry[i][j] < -0.5 :
                     pos_cry[i][j] += 1.0
         pos = pos_cry.to_cart()
-        cs = cs.to_cart()
         #-----------------------------------------------------------------------
         cell_size = np.ptp(pos, axis = 0)
         pbc = np.ones(3, dtype = 'int')
@@ -135,18 +134,22 @@ class SubCell(object):
                     nr[i] = grid.nrR[i]
                     origin[i] = 0.0
 
+        cs_d = cs.to_cart()
+
         c1 = Coord(origin, lattice_sub, basis = 'Crystal').to_cart()
 
         c0 = np.mean(pos, axis = 0)
         center = Coord(c0, lattice, basis = 'Cartesian').to_crys()
+        center += cs
         center[origin < 1E-6] = 0.0
         c0 = Coord(center, lattice, basis = 'Crystal').to_cart()
 
-        origin = np.array(c0) - np.array(c1) + cs
+        pos += cs_d
+        origin = np.array(c0) - np.array(c1)
         shift[:] = np.array(Coord(origin, lattice, basis = 'Cartesian').to_crys()) * grid.nrR
         origin[:] = shift / grid.nrR
         origin[:] = Coord(origin, lattice, basis = 'Crystal').to_cart()
-        pos -= origin - cs
+        pos -= origin
 
         ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = lattice_sub, basis = 'Cartesian', origin = origin)
         if grid_sub is None :

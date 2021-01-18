@@ -148,12 +148,14 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
     for i, driver in enumerate(drivers):
         if driver is None : continue
         if (driver.technique == 'OF' and graphtopo.is_root) or (graphtopo.isub == i and graphtopo.comm_sub.rank == 0) or graphtopo.isub is None:
-            # outfile = 'edftpy_subcell_' + str(i) + '.vasp'
             outfile = driver.prefix + '.vasp'
             ase_io.ase_write(outfile, driver.subcell.ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
+            # io.write(driver.prefix +'.xsf', driver.density, driver.subcell.ions)
     if graphtopo.is_root :
         ase_io.ase_write('edftpy_cell.vasp', ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
     #-----------------------------------------------------------------------
+    # io.write('total.xsf', gsystem.density, gsystem.ions)
+    # graphtopo.comm.Barrier()
     optimization_options = config["OPT"].copy()
     optimization_options["econv"] *= ions.nat
     opt = Optimization(drivers = drivers, options = optimization_options, gsystem = gsystem)
