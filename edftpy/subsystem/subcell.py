@@ -159,8 +159,8 @@ class SubCell(object):
         self._ions = ions_sub
         self._ions_index = index
         self.comm = self._grid.mp.comm
-        sprint('subcell grid', self._grid.nrR, self._grid.nr, comm=self.comm)
-        sprint('subcell shift', self._grid.shift, comm=self.comm)
+        # sprint('subcell grid', self._grid.nrR, self._grid.nr, comm=self.comm)
+        # sprint('subcell shift', self._grid.shift, comm=self.comm)
 
     def _gen_gaussian_density(self, options={}):
         """

@@ -119,6 +119,8 @@ class Optimization(object):
                 core_density = None
             else :
                 density = driver.density
+                if driver.gaussian_density is None :
+                    driver.gaussian_density = driver.core_density
                 gaussian_density = driver.gaussian_density
                 core_density = driver.core_density
                 # io.write(str(i) + '_gauss.xsf', gaussian_density, ions = driver.subcell.ions)
@@ -132,7 +134,6 @@ class Optimization(object):
         self.add_xc_correction()
         #-----------------------------------------------------------------------
         # io.write('a.xsf', totalrho, ions = self.gsystem.ions)
-        # exit(0)
         energy_history = [0.0]
         #-----------------------------------------------------------------------
         fmt = "{:10s}{:8s}{:24s}{:16s}{:10s}{:10s}{:16s}".format(" ", "Step", "Energy(a.u.)", "dE", "dP", "dC", "Time(s)")
@@ -226,7 +227,8 @@ class Optimization(object):
             fmt = "{:>10s}{:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format("Embed: ", it, energy, dE, d_ehart, d_res, timecost - time_begin)
             # fmt += "\n{:>10s}{:<8d}{:<24.12E}".format("Total: ", it, totalfunc.energy)
             sprint(seq +'\n' + fmt +'\n' + seq)
-            if self.check_converge_energy(energy_history):
+            # Only check when accurately calculate the energy
+            if olevel == 0 and self.check_converge_energy(energy_history):
                 sprint("#### Subsytem Density Optimization Converged (Energy)####")
                 break
         self.energy_all = self.print_energy()
