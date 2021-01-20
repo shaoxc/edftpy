@@ -41,7 +41,7 @@ class PwscfKS(Driver):
                     6 : hartree + xc                 : 110
                     7 : pseudo + hartree + xc        : 111
         '''
-        super().__init__(options = options, technique = 'KS')
+        super().__init__(options = options, technique = 'KS', **kwargs)
         self._input_ext = '.in'
 
         self.evaluator = evaluator
@@ -107,7 +107,7 @@ class PwscfKS(Driver):
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
         if not first :
             # from qe-6.5:run_pwscf.f90
-            self.end_scf()
+            # self.end_scf()
             pwscfpy.extrapolation.update_pot()
             pwscfpy.hinit1()
 
@@ -166,9 +166,9 @@ class PwscfKS(Driver):
                 'control' :
                 {
                     'calculation' : 'scf',
-                    'verbosity' : 'high',
+                    # 'verbosity' : 'high',
                     'restart_mode' : 'from_scratch',
-                    'iprint' : 1,
+                    # 'iprint' : 1,
                     'disk_io' : 'none', # do not save anything for qe
                     },
                 'system' :
@@ -186,11 +186,8 @@ class PwscfKS(Driver):
                 {
                     'mixing_beta' : 0.5,
                     },
-                'ions' :
-                {
-                    'pot_extrapolation' : 'none',
-                    },
-                'cell' :{}
+                'ions' : {},
+                'cell' : {}
                 })
         fix_params = {
                 'control' :

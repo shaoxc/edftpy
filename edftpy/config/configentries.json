@@ -194,6 +194,11 @@
 				"unit": "Angstrom"
 			}
 		},
+		"subs": {
+			"type": "strlist",
+			"default": null,
+			"comment": "The name of all subsystems in this subsystem"
+		},
 		"calculator": {
 			"type": "str",
 			"default": "dftpy",

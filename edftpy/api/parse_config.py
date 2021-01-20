@@ -90,7 +90,9 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
     config = config2nsub(config, ions)
     #-----------------------------------------------------------------------
     graphtopo = config2graphtopo(config, graphtopo = graphtopo)
-    if graphtopo.rank == 0 : write_conf('eDFTpy_running.json', config)
+    if graphtopo.rank == 0 :
+        config_json = config_to_json(config, ions)
+        write_conf('eDFTpy_running.json', config_json)
     #-----------------------------------------------------------------------
     nr = config[keysys]["grid"]["nr"]
     spacing = config[keysys]["grid"]["spacing"] * LEN_CONV["Angstrom"]["Bohr"]
@@ -404,7 +406,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         evaluator_of = config2evaluator_of(config, keysys, gsystem = gsystem_driver, optimizer = optimizer, cell_change = cell_change)
 
         driver = DFTpyOF(evaluator = embed_evaluator, prefix = prefix, options = opt_options, subcell = subcell,
-                mixer = mixer, evaluator_of = evaluator_of, grid = grid_sub)
+                mixer = mixer, evaluator_of = evaluator_of, grid = grid_sub, key = keysys)
         return driver
 
     margs = {
@@ -416,7 +418,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             'exttype' : exttype,
             'base_in_file' : basefile,
             'mixer' : mixer,
-            'comm' : mp.comm
+            'comm' : mp.comm,
+            'key' : keysys
             }
     if cell_change == 'cell' :
         raise AttributeError("Not support change the cell")
@@ -505,8 +508,6 @@ def config2nsub(config, ions):
             raise AttributeError("{} is not supported".format(decompose['method']))
     nsubkeys = [key for key in config if key.startswith('NSUB')]
     for keysys in nsubkeys :
-        prefix = config[keysys]["prefix"]
-        if not prefix : prefix = keysys[1:].lower()
         decompose = config[keysys]["decompose"]
         if decompose['method'] != 'distance' :
             raise AttributeError("{} is not supported".format(decompose['method']))
@@ -528,36 +529,52 @@ def config2nsub(config, ions):
         if decompose['method'] == 'distance' :
             indices = from_distance_to_sub(ions_sub, cutoff = cutoff)
 
-        for i, ind in enumerate(indices) :
-            key = keysys[1:] + '_' + str(i)
-            config[key] = copy.deepcopy(config[keysys])
-            config[key]["prefix"] = prefix + '_' + str(i)
-            config[key]['decompose']['method'] = 'manual'
-            config[key]['cell']['index'] = ind
-            config[key]["nprocs"] = max(1, config[keysys]["nprocs"] // len(indices))
-
-    config = fix_json_obj(config, ions)
+        config = config_from_index(config, keysys, indices)
     return config
 
-def fix_json_obj(config, ions):
+def config_from_index(config, keysys, indices):
+
+    # removed last step saved subs
+    subs = config[keysys]['subs']
+    for key in subs :
+        del config[key]
+
+    prefix = config[keysys]["prefix"]
+    if not prefix : prefix = keysys[1:].lower()
+    subs = []
+    for i, ind in enumerate(indices) :
+        key = keysys[1:] + '_' + str(i)
+        config[key] = copy.deepcopy(config[keysys])
+        config[key]["prefix"] = prefix + '_' + str(i)
+        config[key]['decompose']['method'] = 'manual'
+        config[key]['cell']['index'] = ind
+        config[key]["nprocs"] = max(1, config[keysys]["nprocs"] // len(indices))
+        if config[key]['density']['output'] :
+            config[key]['density']['output'] = config[key]["prefix"] + '.' + config[key]['density']['output']
+        config[key]['subs'] = None
+        subs.append(key)
+    config[keysys]['subs'] = subs
+    return config
+
+def config_to_json(config, ions):
     """
     Note :
         fix some python types that not supported by json.dump
     """
     #-----------------------------------------------------------------------
     # slice and np.ndarray
-    # subkeys = [key for key in config if key.startswith(('SUB', 'NSUB'))]
-    subkeys = [key for key in config if key.startswith('NSUB')]
-    for keysys in subkeys :
-        del config[keysys]
-    subkeys = [key for key in config if key.startswith('SUB')]
+    config_json = copy.deepcopy(config)
+    # subkeys = [key for key in config_json if key.startswith('NSUB')]
+    # for keysys in subkeys :
+        # del config_json[keysys]
+    subkeys = [key for key in config_json if key.startswith(('SUB', 'NSUB'))]
     index_w = np.arange(0, ions.nat)
     for keysys in subkeys :
-        index = config[keysys]["cell"]["index"]
+        index = config_json[keysys]["cell"]["index"]
         if isinstance(index, slice):
             index = index_w[index]
-            config[keysys]["cell"]["index"] = index.tolist()
+            config_json[keysys]["cell"]["index"] = index.tolist()
         elif isinstance(index, np.ndarray):
-            config[keysys]["cell"]["index"] = index.tolist()
+            config_json[keysys]["cell"]["index"] = index.tolist()
     #-----------------------------------------------------------------------
-    return config
+    return config_json

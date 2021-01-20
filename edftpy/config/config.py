@@ -75,7 +75,7 @@ def option_format(config, mapfunc = None, final = True):
     if 'CONFDICT' in config :
         mapfunc = config['CONFDICT']
         #-----------------------------------------------------------------------
-        subkeys = [key for key in config.keys() if key.startswith('SUB')]
+        subkeys = [key for key in config if key.startswith(('SUB', 'NSUB'))]
         for key in subkeys:
             mapfunc[key] = copy.deepcopy(mapfunc['SUB'])
         del config['SUB']
@@ -98,7 +98,7 @@ def option_format(config, mapfunc = None, final = True):
 def dict_format(config):
     conf = default_option()
     #-----------------------------------------------------------------------
-    subkeys = [key for key in config if key.startswith('SUB')]
+    subkeys = [key for key in config if key.startswith(('SUB', 'NSUB'))]
     for key in subkeys:
         conf[key] = copy.deepcopy(conf['SUB'])
     #-----------------------------------------------------------------------
@@ -138,7 +138,7 @@ def read_json(infile):
     with open(infile) as fr:
         config = json.load(fr, object_pairs_hook=OrderedDict)
     conf = default_option()
-    subkeys = [key for key in config if key.startswith('SUB')]
+    subkeys = [key for key in config if key.startswith(('SUB', 'NSUB'))]
     for key in subkeys:
         conf[key] = copy.deepcopy(conf['SUB'])
     conf = option_format(conf)
@@ -162,7 +162,7 @@ def read_conf_full(infile):
 
     conf = default_option()
     #-----------------------------------------------------------------------
-    subkeys = [key for key in config.sections() if key.startswith('SUB')]
+    subkeys = [key for key in config.sections() if key.startswith(('SUB', 'NSUB'))]
     for key in subkeys:
         conf[key] = copy.deepcopy(conf['SUB'])
     #-----------------------------------------------------------------------

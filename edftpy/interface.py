@@ -1,5 +1,7 @@
 import numpy as np
 from dftpy.constants import LEN_CONV, ENERGY_CONV, FORCE_CONV, STRESS_CONV
+from dftpy.formats.io import write
+from edftpy.properties import get_electrostatic_potential
 
 from edftpy.utils.common import Grid
 from edftpy.subsystem.subcell import GlobalCell
@@ -27,9 +29,6 @@ def optimize_density_conf(config, **kwargs):
     energy = opt.energy
     sprint('Final energy (a.u.)', energy)
     sprint('Final energy (eV)', energy * ENERGY_CONV['Hartree']['eV'])
-    # for i, driver in enumerate(opt.drivers):
-        # io.write('final_sub_' + str(i) + '.xsf', driver.density, driver.subcell.ions)
-    # io.write('final.xsf', opt.density, opt.gsystem.ions)
     return opt
 
 def get_forces(drivers = None, gsystem = None, linearii=True):
@@ -80,3 +79,21 @@ def get_total_density(gsystem, drivers = None, scale = 1):
             gsystem.update_density(rho, isub = i, restart = restart)
         results.insert(0, gsystem.density)
     return results
+
+def conf2output(config, optimizer):
+    if config["GSYSTEM"]["density"]['output']:
+        sprint("Write Density...")
+        outfile = config["GSYSTEM"]["density"]['output']
+        write(outfile, optimizer.density, ions = optimizer.gsystem.ions)
+    if config["OUTPUT"]["electrostatic_potential"]:
+        sprint("Write electrostatic potential...")
+        outfile = config["OUTPUT"]["electrostatic_potential"]
+        v = get_electrostatic_potential(optimizer.gsystem)
+        write(outfile, v, ions = optimizer.gsystem.ions)
+
+    for i, driver in enumerate(optimizer.drivers):
+        if driver is None : continue
+        outfile = config[driver.key]["density"]['output']
+        if outfile :
+            if driver.technique == 'OF' or driver.comm.rank == 0 or graphtopo.isub is None:
+                write(outfile, driver.density, ions = driver.subcell.ions)

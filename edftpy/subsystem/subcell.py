@@ -379,8 +379,8 @@ class GlobalCell(object):
         ewaldobj = ewald(rho=self.density, ions=self.ions, PME=linearii)
         forces_ii = ewaldobj.forces
         forces = forces_ie + forces_ii
-        # sprint('ewald', forces_ii)
-        # sprint('ie', forces_ie)
+        sprint('ewald', forces_ii)
+        sprint('ie', forces_ie)
         return forces
 
     def get_stress(self, **kwargs):

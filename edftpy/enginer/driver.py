@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from edftpy.utils.common import Field
 
 class Driver(ABC):
-    def __init__(self, options=None, technique = 'KS', **kwargs):
+    def __init__(self, options=None, technique = 'KS', key = None, **kwargs):
         default_options = {
                 'update_delay' : 1,
                 'update_freq' : 1
@@ -13,6 +13,7 @@ class Driver(ABC):
         if options is not None :
             self.options.update(options)
         self.technique = technique
+        self.key = key # the key of config
 
     @abstractmethod
     def get_density(self, **kwargs):

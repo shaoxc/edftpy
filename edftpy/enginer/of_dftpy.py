@@ -36,7 +36,7 @@ class DFTpyOF(Driver):
         self.options = default_options
         if options is not None :
             self.options.update(options)
-        super().__init__(options = self.options, technique = 'OF')
+        super().__init__(options = self.options, technique = 'OF', **kwargs)
 
         self.evaluator = evaluator
         self.subcell = subcell
