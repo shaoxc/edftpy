@@ -83,6 +83,7 @@ class PwscfKS(Driver):
         #-----------------------------------------------------------------------
         self.init_density()
         self.update_workspace(first = True)
+        self.embed = pwscfpy.pwpy_embed.embed_base()
 
     def update_workspace(self, subcell = None, first = False, **kwargs):
         """
@@ -105,11 +106,10 @@ class PwscfKS(Driver):
         if subcell is not None :
             self.subcell = subcell
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
+
         if not first :
-            # from qe-6.5:run_pwscf.f90
-            # self.end_scf()
-            pwscfpy.extrapolation.update_pot()
-            pwscfpy.hinit1()
+            pos = self.subcell.ions.pos.to_crys().T
+            pwscfpy.pwpy_mod.pwpy_update_ions(pos)
 
         if self.grid_driver is not None :
             grid = self.grid_driver
@@ -408,7 +408,6 @@ class PwscfKS(Driver):
         #-----------------------------------------------------------------------
         printout = 2
         exxen = 0.0
-        extene = 0.0
         #-----------------------------------------------------------------------
         self._iter += 1
         if self._iter == 1 :
@@ -426,23 +425,35 @@ class PwscfKS(Driver):
 
         self.prev_charge[:] = self.charge
 
-        self.energy, self.dp_norm = pwscfpy.pwpy_electrons.pwpy_electrons_scf(printout, exxen, extpot, extene, self.exttype, initial)
+        pwscfpy.pwpy_mod.pwpy_set_extpot(self.embed, extpot)
+        self.embed.exttype = self.exttype
+        self.embed.initial = initial
+        self.embed.mix_coef = -1.0
+        self.embed.finish = False
+        # print('006')
+        pwscfpy.pwpy_electrons.pwpy_electrons_scf(printout, exxen, self.embed)
+        # print('007')
+        self.energy = self.embed.etotal
+        self.dp_norm = self.embed.dnorm
+        # self.energy, self.dp_norm = pwscfpy.pwpy_electrons.pwpy_electrons_scf(printout, exxen, extpot, extene, self.exttype, initial)
 
         pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
         self.density[:] = self._format_density_invert()
         return self.density
 
-    def get_energy(self, **kwargs):
-        energy = pwscfpy.pwpy_calc_energies(self.exttype) * 0.5
+    def get_energy(self, olevel = 0, **kwargs):
+        if olevel == 0 :
+            # self._format_density() # Here, we directly use saved density
+            extpot = self._get_extpot()
+            pwscfpy.pwpy_mod.pwpy_set_extpot(self.embed, extpot)
+            pwscfpy.pwpy_calc_energies(self.embed)
+        energy = self.embed.etotal * 0.5
         return energy
 
     def get_energy_potential_serial(self, density, calcType = ['E', 'V'], olevel = 1, **kwargs):
         # olevel =0
         if 'E' in calcType :
-            if olevel == 0 :
-                energy = self.get_energy()
-            else : # elif olevel == 1 :
-                energy = self.energy
+            energy = self.get_energy(olevel)
 
         if self.comm.rank == 0 :
             if olevel == 0 :
@@ -509,8 +520,9 @@ class PwscfKS(Driver):
 
         if self.mix_driver is not None :
             if coef is None : coef = self.mix_driver
-            ene, dp_norm = pwscfpy.pwpy_electrons.pwpy_electrons_scf(0, 0, self.charge[:, 0], 0, self.exttype, 0, mix_coef = coef)
-            if self._iter > 1 : self.dp_norm = dp_norm
+            self.embed.mix_coef = coef
+            pwscfpy.pwpy_electrons.pwpy_electrons_scf(0, 0, self.embed)
+            if self._iter > 1 : self.dp_norm = self.embed.dnorm
             pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
             self.density[:] = self._format_density_invert()
 
@@ -533,14 +545,15 @@ class PwscfKS(Driver):
         """
         pwscfpy.pwpy_forces(icalc)
         # forces = pwscfpy.force_mod.force.T
-        forces = pwscfpy.force_mod.get_array_force().T
+        forces = pwscfpy.force_mod.get_array_force().T / 2.0  # Ry to a.u.
         return forces
 
     def get_stress(self, **kwargs):
         pass
 
     def end_scf(self, **kwargs):
-        pwscfpy.pwpy_electrons.pwpy_electrons_scf(0, 0, self.charge, 0, self.exttype, 0, finish = True)
+        self.embed.finish = True
+        pwscfpy.pwpy_electrons.pwpy_electrons_scf(0, 0, self.embed)
 
     def stop_run(self, status = 0, **kwargs):
         pwscfpy.pwpy_stop_run(status, **kwargs)

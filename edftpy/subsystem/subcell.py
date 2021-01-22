@@ -375,12 +375,14 @@ class GlobalCell(object):
                 break
         else :
             sprint('!WARN : There is no `LocalPP` in total_evaluator', comm=self.comm)
-            forces_ie = 0.0
+            forces_ie = np.zeros((self.ions.nat, 3))
         ewaldobj = ewald(rho=self.density, ions=self.ions, PME=linearii)
         forces_ii = ewaldobj.forces
         forces = forces_ie + forces_ii
-        sprint('ewald', forces_ii)
-        sprint('ie', forces_ie)
+        # forces_ii = self.grid.mp.vsum(forces_ii)
+        # forces_ie = self.grid.mp.vsum(forces_ie)
+        # sprint('ewald\n', forces_ii)
+        # sprint('ie\n', forces_ie)
         return forces
 
     def get_stress(self, **kwargs):

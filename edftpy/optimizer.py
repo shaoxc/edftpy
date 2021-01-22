@@ -32,6 +32,12 @@ class Optimization(object):
         self.options = default_options
         self.options.update(options)
         self.nsub = len(self.drivers)
+        self.of_drivers = []
+        self.of_ids = []
+        for i, driver in enumerate(self.drivers):
+            if driver is not None and driver.technique== 'OF' :
+                    self.of_drivers.append(driver)
+                    self.of_ids.append(i)
 
     def guess_pconv(self):
         if not self.options['pconv'] :
@@ -146,59 +152,29 @@ class Optimization(object):
         # dE = energy
         # fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(0, energy, dE, resN, 1, timecost - time_begin)
         # sprint(seq +'\n' + fmt +'\n' + seq)
-        #-----------------------------------------------------------------------
-        of_ids = []
-        of_drivers = []
-        for i, driver in enumerate(self.drivers):
-            if driver is not None and driver.technique== 'OF' :
-                    of_drivers.append(driver)
-                    of_ids.append(i)
-        #-----------------------------------------------------------------------
         update = [True for _ in range(self.nsub)]
         res_norm = np.ones(self.nsub)
         totalrho_prev = None
         for it in range(self.options['maxiter']):
+            self.iter = it
             # update the rhomax for NLKEDF
             self.set_kedf_params(level = it + 2) # first step without NL
-            self.iter = it
-            #-----------------------------------------------------------------------
-            if self.nsub == len(of_drivers):
-                pass
-            else :
-                self.gsystem.total_evaluator.get_embed_potential(totalrho, gaussian_density = self.gsystem.gaussian_density, with_global = True)
-                # static_potential = self.gsystem.total_evaluator.static_potential.copy()
-            for isub in range(self.nsub + len(of_drivers)):
-                if isub < self.nsub :
-                    driver = self.drivers[isub]
-                    # initial the global_potential
-                    if driver is None :
-                        global_potential = None
-                    elif driver.technique == 'OF' :
-                        continue
-                    else :
-                        if driver.evaluator.global_potential is None :
-                            driver.evaluator.global_potential = np.zeros_like(driver.density)
-                        global_potential = driver.evaluator.global_potential
-                    self.gsystem.sub_value(self.gsystem.total_evaluator.embed_potential, global_potential, isub = isub)
-            #-----------------------------------------------------------------------
-            for isub in range(self.nsub + len(of_drivers)):
+            self.set_global_potential()
+            for isub in range(self.nsub + len(self.of_drivers)):
                 if isub < self.nsub :
                     driver = self.drivers[isub]
                     if driver is None or driver.technique == 'OF' :
                         continue
                     i = isub
                 else :
-                    driver = of_drivers[isub - self.nsub]
-                    i = of_ids[isub - self.nsub]
+                    driver = self.of_drivers[isub - self.nsub]
+                    i = self.of_ids[isub - self.nsub]
 
                 update[i] = self.get_update(driver, it, res_norm[i])
 
                 if update[i] :
                     self.gsystem.density[:] = totalrho
                     driver(gsystem = self.gsystem, calcType = ['O'], olevel = olevel)
-
-            # if self.nsub == len(of_drivers):
-                # static_potential = self.gsystem.total_evaluator.static_potential.copy()
             #-----------------------------------------------------------------------
             totalrho, totalrho_prev = totalrho_prev, totalrho
             totalrho = self.update_density(update = update)
@@ -210,7 +186,7 @@ class Optimization(object):
             f_str += np.array2string(dp_norm, separator=' ', max_line_width=80)
             sprint(f_str, level = 2)
             if self.check_converge_potential(dp_norm):
-                sprint("#### Subsytem Density Optimization Converged (Potential)####")
+                sprint("#### Subsytem Density Optimization Converged (Potential) In {} Iterations ####".format(it+1))
                 break
             # scf_correction = self.get_scf_correction(static_potential, totalrho, totalrho_prev)
             totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'], olevel = olevel)
@@ -229,12 +205,33 @@ class Optimization(object):
             sprint(seq +'\n' + fmt +'\n' + seq)
             # Only check when accurately calculate the energy
             if olevel == 0 and self.check_converge_energy(energy_history):
-                sprint("#### Subsytem Density Optimization Converged (Energy)####")
+                sprint("#### Subsytem Density Optimization Converged (Energy) In {} Iterations ####".format(it+1))
                 break
+        self.end_scf()
         self.energy_all = self.print_energy()
         self.energy = self.energy_all['TOTAL']
         self.density = totalrho
-        self.end_scf()
+        return
+
+    def set_global_potential(self):
+        if self.nsub == len(self.of_drivers):
+            pass
+        else :
+            self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = True)
+            # static_potential = self.gsystem.total_evaluator.static_potential.copy()
+        for isub in range(self.nsub + len(self.of_drivers)):
+            if isub < self.nsub :
+                driver = self.drivers[isub]
+                # initial the global_potential
+                if driver is None :
+                    global_potential = None
+                elif driver.technique == 'OF' :
+                    continue
+                else :
+                    if driver.evaluator.global_potential is None :
+                        driver.evaluator.global_potential = np.zeros_like(driver.density)
+                    global_potential = driver.evaluator.global_potential
+                self.gsystem.sub_value(self.gsystem.total_evaluator.embed_potential, global_potential, isub = isub)
         return
 
     def get_update(self, driver, istep, residual):
@@ -358,6 +355,7 @@ class Optimization(object):
         return ene
 
     def print_energy(self):
+        self.set_global_potential()
         edict = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True, olevel = 0)
         totalfunc = edict.pop('TOTAL')
         # totalfunc = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'])

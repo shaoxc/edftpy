@@ -52,4 +52,7 @@ class eDFTpyCalculator(object):
         return self._forces * FORCE_CONV["Ha/Bohr"]["eV/A"]
 
     def get_stress(self, atoms):
-        pass
+        if self.check_restart(atoms):
+            self.update_optimizer(atoms)
+        stress_voigt = np.zeros(6)
+        return stress_voigt

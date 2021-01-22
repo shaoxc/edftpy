@@ -183,6 +183,12 @@
 				"comment": "The SCF driver of subsystem",
 				"options": "manual, distance"
 			},
+			"adaptive": {
+				"type": "str",
+				"default": "manual",
+				"comment": "The decompose method after first step, 'manual' will remove all 'NSUB_'",
+				"options": "manual, distance"
+			},
 			"rcut":{
 				"type": "float",
 				"default": 3,

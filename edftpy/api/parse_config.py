@@ -62,7 +62,7 @@ def config_correct(config):
             config[key]['technique'] = 'KS'
     return config
 
-def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **kwargs):
+def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, pseudo = None, **kwargs):
     if isinstance(config, dict):
         pass
     elif isinstance(config, str):
@@ -81,12 +81,18 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
                 names=config[keysys]["cell"]["elename"])
         except Exception:
             ions = ase_io.ase_read(config["PATH"]["cell"] +os.sep+ config[keysys]["cell"]["file"])
-    elif optimizer is not None :
+
+    if optimizer is not None :
         if not np.allclose(optimizer.gsystem.ions.pos.cell.lattice, ions.pos.cell.lattice):
-            cell_change = 'cell'
-            raise AttributeError("Not support cell change")
+            cell_change = None # cell_change = 'cell'
+            # except PSEUDO, clean everything
+            for i, driver in enumerate(optimizer.drivers):
+                if driver is None : continue
+                driver.stop_run()
+            pseudo = optimizer.gsystem.total_evaluator.funcdicts['PSEUDO']
         else :
             cell_change = 'position'
+
     config = config2nsub(config, ions)
     #-----------------------------------------------------------------------
     graphtopo = config2graphtopo(config, graphtopo = graphtopo)
@@ -116,7 +122,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **
         mp_global = MP(comm = graphtopo.comm, parallel = graphtopo.is_mpi)
         gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo)
     grid = gsystem.grid
-    total_evaluator = config2total_evaluator(config, ions, grid, pplist = pplist, total_evaluator=total_evaluator, cell_change = cell_change)
+    total_evaluator = config2total_evaluator(config, ions, grid, pplist = pplist, total_evaluator=total_evaluator, cell_change = cell_change, pseudo = pseudo)
     gsystem.total_evaluator = total_evaluator
     ############################## Subsytem ##############################
     subkeys = [key for key in config if key.startswith('SUB')]
@@ -186,18 +192,25 @@ def config2graphtopo(config, subkeys = None, graphtopo = None):
     sprint('Number of processors for each subsystem : \n ', f_str, comm = graphtopo.comm)
     return graphtopo
 
-def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= None, cell_change = None):
+def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= None, cell_change = None, pseudo = None):
     keysys = "GSYSTEM"
     pme = config["MATH"]["linearie"]
     xc_kwargs = config[keysys]["exc"].copy()
     ke_kwargs = config[keysys]["kedf"].copy()
     #---------------------------Functional----------------------------------
-    if cell_change == 'position' :
-        pseudo = total_evaluator.funcdicts['PSEUDO']
+    if pseudo is not None :
         pseudo.restart(grid=grid, ions=ions, full=False)
+
+    if cell_change == 'position' and total_evaluator is not None:
+        if pseudo is None :
+            pseudo = total_evaluator.funcdicts['PSEUDO']
+            pseudo.restart(grid=grid, ions=ions, full=False)
         total_evaluator.funcdicts['PSEUDO'] = pseudo
     else :
-        pseudo = LocalPP(grid = grid, ions=ions, PP_list=pplist, PME=pme)
+        if pseudo is None :
+            pseudo = LocalPP(grid = grid, ions=ions, PP_list=pplist, PME=pme)
+            # pseudo(calcType = ['V'])
+            # exit()
         hartree = Hartree()
         xc = XC(**xc_kwargs)
         funcdicts = {'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
@@ -209,7 +222,7 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
         total_evaluator = TotalEvaluator(**funcdicts)
     return total_evaluator
 
-def config2embed_evaluator(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None):
+def config2embed_evaluator(config, keysys, ions, grid, pplist = None, cell_change = None):
     emb_ke_kwargs = config['GSYSTEM']["kedf"].copy()
     emb_xc_kwargs = config['GSYSTEM']["exc"].copy()
     pme = config["MATH"]["linearie"]
@@ -258,7 +271,7 @@ def config2embed_evaluator(config, keysys, ions, grid, pplist = None, optimizer 
     embed_evaluator = EmbedEvaluator(ke_evaluator = ke_evaluator, **emb_funcdicts)
     return embed_evaluator, exttype
 
-def config2evaluator_of(config, keysys, gsystem = None, optimizer = None, cell_change = None):
+def config2evaluator_of(config, keysys, gsystem = None, cell_change = None):
     ke_kwargs = config[keysys]["kedf"].copy()
     xc_kwargs = config[keysys]["exc"].copy()
 
@@ -382,7 +395,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     else :
         raise AttributeError("!!!ERROR : NOT support ", mix_kwargs['scheme'])
     #-----------------------------------------------------------------------
-    embed_evaluator, exttype = config2embed_evaluator(config, keysys, subcell.ions, subcell.grid, pplist = pplist, optimizer = optimizer, cell_change = cell_change)
+    embed_evaluator, exttype = config2embed_evaluator(config, keysys, subcell.ions, subcell.grid, pplist = pplist, cell_change = cell_change)
 
     def get_dftpy_driver(embed_evaluator):
         opt_options['econv'] *= subcell.ions.nat
@@ -403,7 +416,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             grid_sub = None
             gsystem_driver = None
 
-        evaluator_of = config2evaluator_of(config, keysys, gsystem = gsystem_driver, optimizer = optimizer, cell_change = cell_change)
+        evaluator_of = config2evaluator_of(config, keysys, gsystem = gsystem_driver, cell_change = cell_change)
 
         driver = DFTpyOF(evaluator = embed_evaluator, prefix = prefix, options = opt_options, subcell = subcell,
                 mixer = mixer, evaluator_of = evaluator_of, grid = grid_sub, key = keysys)
@@ -533,11 +546,10 @@ def config2nsub(config, ions):
     return config
 
 def config_from_index(config, keysys, indices):
-
     # removed last step saved subs
     subs = config[keysys]['subs']
-    for key in subs :
-        del config[key]
+    if subs is not None :
+        for key in subs : del config[key]
 
     prefix = config[keysys]["prefix"]
     if not prefix : prefix = keysys[1:].lower()
@@ -547,6 +559,7 @@ def config_from_index(config, keysys, indices):
         config[key] = copy.deepcopy(config[keysys])
         config[key]["prefix"] = prefix + '_' + str(i)
         config[key]['decompose']['method'] = 'manual'
+        config[key]['decompose']['adaptive'] = 'manual'
         config[key]['cell']['index'] = ind
         config[key]["nprocs"] = max(1, config[keysys]["nprocs"] // len(indices))
         if config[key]['density']['output'] :
@@ -554,6 +567,8 @@ def config_from_index(config, keysys, indices):
         config[key]['subs'] = None
         subs.append(key)
     config[keysys]['subs'] = subs
+    if config[keysys]['decompose']['adaptive'] == 'manual' :
+        del config[keysys]
     return config
 
 def config_to_json(config, ions):
@@ -565,8 +580,7 @@ def config_to_json(config, ions):
     # slice and np.ndarray
     config_json = copy.deepcopy(config)
     # subkeys = [key for key in config_json if key.startswith('NSUB')]
-    # for keysys in subkeys :
-        # del config_json[keysys]
+    # for keysys in subkeys : del config_json[keysys]
     subkeys = [key for key in config_json if key.startswith(('SUB', 'NSUB'))]
     index_w = np.arange(0, ions.nat)
     for keysys in subkeys :
