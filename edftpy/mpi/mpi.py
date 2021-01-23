@@ -248,6 +248,7 @@ class GraphTopo:
         # print('isub', self.isub, self.rank, self.comm_sub, self.comm)
 
     def build_region(self, grid = None, drivers = None, **kwargs):
+        self.free_comm_region()
         self._set_default_vars(grid = grid, drivers = drivers, **kwargs)
         of_id = {}
         for i, driver in enumerate(self.drivers):
@@ -281,15 +282,22 @@ class GraphTopo:
             self.comm.Allreduce(self.MPI.IN_PLACE, self.rank_region, op=self.MPI.SUM)
 
     def free_comm(self):
+        self.free_comm_sub()
+        self.free_comm_region()
+        return
+
+    def free_comm_sub(self):
         if self.is_mpi :
             if self.comm_sub != self.comm :
                 self.comm_sub.Free()
                 self.comm_sub = self.comm
+        return
 
-            for i in range(self.nsub):
-                if self.comm_region[i] is not None :
-                    self.comm_region[i].Free()
-                    self.comm_region[i] = None
+    def free_comm_region(self):
+        for i, comm in enumerate(self.comm_region):
+            if comm is not None :
+                comm.Free()
+                self.comm_region[i] = None
         return
 
     @property
