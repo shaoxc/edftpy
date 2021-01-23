@@ -110,6 +110,9 @@ class PwscfKS(Driver):
         if not first :
             pos = self.subcell.ions.pos.to_crys().T
             pwscfpy.pwpy_mod.pwpy_update_ions(self.embed, pos)
+            # get new density
+            pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
+            self.density[:] = self._format_density_invert()
 
         if self.grid_driver is not None :
             grid = self.grid_driver
@@ -186,7 +189,11 @@ class PwscfKS(Driver):
                 {
                     'mixing_beta' : 0.5,
                     },
-                'ions' : {},
+                'ions' :
+                {
+                    'pot_extrapolation' : 'atomic',  # extrapolation for potential from preceding ionic steps
+                    'wfc_extrapolation' : 'none'   # no extrapolation for wfc from preceding ionic steps
+                    },
                 'cell' : {}
                 })
         fix_params = {
@@ -199,11 +206,6 @@ class PwscfKS(Driver):
                 {
                     'electron_maxstep' : 1, # only run 1 step for scf
                     'conv_thr' : 0.0, # set very high accuracy, otherwise pwscf mixer cause davcio (15) error
-                    },
-                'ions' :
-                {
-                    'pot_extrapolation' : 'none',  # no extrapolation for potential from preceding ionic steps
-                    'wfc_extrapolation' : 'none'   # no extrapolation for wfc from preceding ionic steps
                     },
                 }
         if not params :

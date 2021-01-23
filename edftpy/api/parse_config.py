@@ -169,25 +169,36 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     opt = Optimization(drivers = drivers, options = optimization_options, gsystem = gsystem)
     return opt
 
-def config2graphtopo(config, subkeys = None, graphtopo = None):
+def config2graphtopo(config, graphtopo = None):
+    """
+    Base on config generate new graphtopo
+
+    Args:
+        config: dict
+        graphtopo: graphtopo
+
+    Note :
+        If change the size of subsystem, should free the comm_sub before this.s
+    """
     if graphtopo is None :
         graphtopo = GraphTopo()
-    # elif graphtopo.comm_sub is not None :
-        # # already initialize the comm_sub
-        # return graphtopo
 
-    if subkeys is None :
+    if graphtopo.comm_sub == graphtopo.comm :
+        # if not initialize the comm_sub
         subkeys = [key for key in config if key.startswith('SUB')]
-    nprocs = []
-    #OF driver set the procs to 0, make sure it use all resources
-    for key in subkeys :
-        if config[key]["technique"] == 'OF' :
-            n = 0
-        else :
-            n = config[key]["nprocs"]
-        nprocs.append(n)
-    graphtopo.distribute_procs(nprocs)
-    sprint('Number of subsystems : ', len(nprocs), comm = graphtopo.comm)
+        nprocs = []
+        #OF driver set the procs to 0, make sure it use all resources
+        for key in subkeys :
+            if config[key]["technique"] == 'OF' :
+                n = 0
+            else :
+                n = config[key]["nprocs"]
+            nprocs.append(n)
+        graphtopo.distribute_procs(nprocs)
+        sprint('Communicators recreated : ', graphtopo.comm.size, comm = graphtopo.comm)
+    else :
+        sprint('Communicators already created : ', graphtopo.comm.size, comm = graphtopo.comm)
+    sprint('Number of subsystems : ', len(graphtopo.nprocs), comm = graphtopo.comm)
     f_str = np.array2string(graphtopo.nprocs, separator=' ', max_line_width=80)
     sprint('Number of processors for each subsystem : \n ', f_str, comm = graphtopo.comm)
     return graphtopo

@@ -17,6 +17,11 @@ def get_total_forces(drivers = None, gsystem = None, linearii=True):
         # sprint('ind\n', ind, comm = driver.comm)
         # sprint('fs\n', fs, comm = driver.comm)
     forces = gsystem.grid.mp.vsum(forces)
+    #-----------------------------------------------------------------------
+    forces_shift = np.mean(forces, axis = 0)
+    sprint('Forces shift :', forces_shift)
+    forces -= forces_shift
+    #-----------------------------------------------------------------------
     sprint('Total forces : \n', forces)
     return forces
 

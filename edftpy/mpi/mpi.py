@@ -84,13 +84,13 @@ class GraphTopo:
                 comm = MPI.COMM_WORLD
             else :
                 comm = SerialComm(**kwargs)
-        self._comm = comm
         self._is_mpi = parallel
         self._MPI = MPI
         self.isub = None
-        # self.comm_sub = None
-        self.comm_sub = comm
         self.nprocs = [1]
+        self._comm = comm # for global, also used for OF subsystem
+        self._comm_sub = None # for subsystem, each processor only belong to one
+        self.comm_region = [None] # for the data region of each subsystem
 
     def _set_default_vars(self, grid = None, drivers = None):
         self.grid = grid
@@ -280,6 +280,18 @@ class GraphTopo:
                     self.rank_region[i] = self.rank
             self.comm.Allreduce(self.MPI.IN_PLACE, self.rank_region, op=self.MPI.SUM)
 
+    def free_comm(self):
+        if self.is_mpi :
+            if self.comm_sub != self.comm :
+                self.comm_sub.Free()
+                self.comm_sub = self.comm
+
+            for i in range(self.nsub):
+                if self.comm_region[i] is not None :
+                    self.comm_region[i].Free()
+                    self.comm_region[i] = None
+        return
+
     @property
     def is_mpi(self):
         # if isinstance(self._comm, SerialComm):
@@ -308,6 +320,17 @@ class GraphTopo:
     @comm.setter
     def comm(self, value):
         self._comm = value
+
+    @property
+    def comm_sub(self):
+        if self._comm_sub is None :
+            return self.comm
+        else :
+            return self._comm_sub
+
+    @comm_sub.setter
+    def comm_sub(self, value):
+        self._comm_sub = value
 
     @property
     def is_root(self):
