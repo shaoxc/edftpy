@@ -109,7 +109,7 @@ class PwscfKS(Driver):
 
         if not first :
             pos = self.subcell.ions.pos.to_crys().T
-            pwscfpy.pwpy_mod.pwpy_update_ions(pos)
+            pwscfpy.pwpy_mod.pwpy_update_ions(self.embed, pos)
 
         if self.grid_driver is not None :
             grid = self.grid_driver
@@ -411,6 +411,7 @@ class PwscfKS(Driver):
         #-----------------------------------------------------------------------
         self._iter += 1
         if self._iter == 1 :
+            # The first step density mixing also need keep initial = True
             initial = True
         else :
             initial = False
@@ -430,12 +431,9 @@ class PwscfKS(Driver):
         self.embed.initial = initial
         self.embed.mix_coef = -1.0
         self.embed.finish = False
-        # print('006')
         pwscfpy.pwpy_electrons.pwpy_electrons_scf(printout, exxen, self.embed)
-        # print('007')
         self.energy = self.embed.etotal
         self.dp_norm = self.embed.dnorm
-        # self.energy, self.dp_norm = pwscfpy.pwpy_electrons.pwpy_electrons_scf(printout, exxen, extpot, extene, self.exttype, initial)
 
         pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
         self.density[:] = self._format_density_invert()
@@ -450,42 +448,22 @@ class PwscfKS(Driver):
         energy = self.embed.etotal * 0.5
         return energy
 
-    def get_energy_potential_serial(self, density, calcType = ['E', 'V'], olevel = 1, **kwargs):
-        # olevel =0
-        if 'E' in calcType :
-            energy = self.get_energy(olevel)
-
-        if self.comm.rank == 0 :
-            if olevel == 0 :
-                func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = False)
-            else :
-                func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = True)
-        else :
-            func = Functional(name = 'ZERO', energy=0.0, potential=None)
-
-        if 'E' in calcType :
-            func.energy += energy
-            if self.exttype == 0 : func.energy = 0.0
-            if self.comm.rank > 0 : func.energy = 0.0
-            fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
-            sprint(fstr, comm=self.comm, level=1)
-            pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
-            self.energy = func.energy
-        return func
-
     def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, **kwargs):
         if 'E' in calcType :
+            energy = self.get_energy(olevel = olevel)
             if olevel == 0 :
-                energy = self.get_energy()
                 self.grid_sub.scatter(density, out = self.density_sub)
                 func = self.evaluator(self.density_sub, calcType = ['E'], with_global = False, with_embed = False, gather = True)
             else : # elif olevel == 1 :
-                return self.get_energy_potential_serial(density, calcType, olevel, **kwargs)
+                if self.comm.rank == 0 :
+                    func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = True)
+                else :
+                    func = Functional(name = 'ZERO', energy=0.0, potential=None)
 
-        if 'E' in calcType :
             func.energy += energy
             if self.exttype == 0 : func.energy = 0.0
             if self.comm.rank > 0 : func.energy = 0.0
+
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
             sprint(fstr, comm=self.comm, level=1)
             pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
@@ -493,7 +471,6 @@ class PwscfKS(Driver):
         return func
 
     def update_density(self, coef = None, **kwargs):
-        # exit()
         if self.comm.rank == 0 :
             mix_grid = False
             # mix_grid = True
