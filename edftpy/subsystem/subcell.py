@@ -344,22 +344,23 @@ class GlobalCell(object):
         self._grid = grid
         sprint('GlobalCell grid', nr, comm=self.comm)
 
-    def update_density(self, subrho, isub = None, grid = None, restart = False, fake = False, core = False):
+    def update_density(self, subrho, isub = None, grid = None, fake = False, core = False, overwrite = False, **kwargs):
         if fake :
-            self.graphtopo.sub_to_global(subrho, self._gaussian_density, isub = isub, grid = grid)
+            total = self._gaussian_density
         elif core :
-            self.graphtopo.sub_to_global(subrho, self._core_density, isub = isub, grid = grid)
+            total = self._core_density
         else :
-            self.graphtopo.sub_to_global(subrho, self._density, isub = isub, grid = grid)
+            total = self._density
+        self.graphtopo.sub_to_global(subrho, total, isub = isub, grid = grid, overwrite = overwrite)
 
-    def set_density(self, subrho, isub = None, grid = None, fake = False):
-        if fake :
-            self.graphtopo.sub_to_global(subrho, self._gaussian_density, overwrite = True, isub = isub, grid = grid)
-        else :
-            self.graphtopo.sub_to_global(subrho, self._density, overwrite = True, isub = isub, grid = grid)
+    def set_density(self, subrho, isub = None, grid = None, fake = False, core = False):
+        self.update_density(subrho, isub = isub, grid = grid, overwrite = True, fake = fake, core = core)
 
-    def add_to_sub(self, total, subrho, isub = None, grid = None):
-        self.graphtopo.global_to_sub(total, subrho, isub = isub, grid = grid, add = True)
+    def add_to_sub(self, total, subrho, isub = None, grid = None, add = True):
+        self.graphtopo.global_to_sub(total, subrho, isub = isub, grid = grid, add = add)
+
+    def add_to_global(self, subrho, total, isub = None, grid = None, overwrite = False):
+        self.graphtopo.sub_to_global(subrho, total, isub = isub, grid = grid, overwrite = overwrite)
 
     def sub_value(self, total, subrho, isub = None, grid = None, **kwargs):
         self.graphtopo.global_to_sub(total, subrho, isub = isub, grid = grid, **kwargs)

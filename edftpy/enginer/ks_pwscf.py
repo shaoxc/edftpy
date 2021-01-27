@@ -368,31 +368,31 @@ class PwscfKS(Driver):
         rho *= unit_vol
         return rho
 
-    def _get_extpot_serial(self, **kwargs):
+    def _get_extpot_serial(self, with_global = True, **kwargs):
         if self.comm.rank == 0 :
-            self.evaluator.get_embed_potential(self.density, gaussian_density = self.gaussian_density)
+            self.evaluator.get_embed_potential(self.density, gaussian_density = self.gaussian_density, with_global = with_global)
             extpot = self.evaluator.embed_potential
-            if self.grid_driver is not None :
-                extpot = grid_map_data(extpot, grid = self.grid_driver)
         else :
             extpot = self.atmp
-        extpot = extpot.ravel(order = 'F') * 2.0 # a.u. to Ry
         return extpot
 
-    def _get_extpot_mpi(self, **kwargs):
+    def _get_extpot_mpi(self, with_global = True, **kwargs):
         self.grid_sub.scatter(self.density, out = self.density_sub)
         if self.gaussian_density is not None :
             self.grid_sub.scatter(self.gaussian_density, out = self.gaussian_density_sub)
-        self.evaluator.get_embed_potential(self.density_sub, gaussian_density = self.gaussian_density_sub, gather = True)
+        self.evaluator.get_embed_potential(self.density_sub, gaussian_density = self.gaussian_density_sub, gather = True, with_global = with_global)
         extpot = self.evaluator.embed_potential
-        if self.grid_driver is not None and self.comm.rank == 0:
-            extpot = grid_map_data(extpot, grid = self.grid_driver)
-        extpot = extpot.ravel(order = 'F') * 2.0 # a.u. to Ry
         return extpot
 
-    def _get_extpot(self, **kwargs):
-        # return self._get_extpot_serial(**kwargs)
-        return self._get_extpot_mpi(**kwargs)
+    def get_extpot(self, extpot = None, mapping = True, **kwargs):
+        if extpot is None :
+            # extpot = self._get_extpot_serial(**kwargs)
+            extpot = self._get_extpot_mpi(**kwargs)
+        if mapping :
+            if self.grid_driver is not None and self.comm.rank == 0:
+                extpot = grid_map_data(extpot, grid = self.grid_driver)
+            extpot = extpot.ravel(order = 'F') * 2.0 # a.u. to Ry
+        return extpot
 
     def _get_extene(self, extpot, **kwargs):
         if self.comm.rank == 0 :
@@ -404,7 +404,7 @@ class PwscfKS(Driver):
             extene = self.comm.bcast(extene, root = 0)
         return extene
 
-    def get_density(self, vext = None, **kwargs):
+    def get_density(self, vext = None, sdft = 'sdft', **kwargs):
         '''
         '''
         #-----------------------------------------------------------------------
@@ -424,7 +424,16 @@ class PwscfKS(Driver):
         else :
             self._format_density()
 
-        extpot = self._get_extpot()
+        if sdft == 'pdft' :
+            extpot = self.evaluator.embed_potential
+            extpot = self.get_extpot(extpot, mapping = True)
+            self.embed.lewald = False
+        else :
+            extpot = self.get_extpot()
+
+        if self.comm.rank == 0:
+            from dftpy.formats import io
+            io.write(self.prefix + '.xsf', self.evaluator.embed_potential, self.subcell.ions)
 
         self.prev_charge[:] = self.charge
 
@@ -441,29 +450,36 @@ class PwscfKS(Driver):
         self.density[:] = self._format_density_invert()
         return self.density
 
-    def get_energy(self, olevel = 0, **kwargs):
+    def get_energy(self, olevel = 0, sdft = 'sdft', **kwargs):
         if olevel == 0 :
             # self._format_density() # Here, we directly use saved density
-            extpot = self._get_extpot()
+            if sdft == 'pdft' :
+                extpot = self.evaluator.embed_potential
+                extpot = self.get_extpot(extpot, mapping = True)
+            else :
+                extpot = self.get_extpot()
             pwscfpy.pwpy_mod.pwpy_set_extpot(self.embed, extpot)
             pwscfpy.pwpy_calc_energies(self.embed)
         energy = self.embed.etotal * 0.5
         return energy
 
-    def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, **kwargs):
+    def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, sdft = 'sdft', **kwargs):
         if 'E' in calcType :
-            energy = self.get_energy(olevel = olevel)
-            if olevel == 0 :
-                self.grid_sub.scatter(density, out = self.density_sub)
-                func = self.evaluator(self.density_sub, calcType = ['E'], with_global = False, with_embed = False, gather = True)
-            else : # elif olevel == 1 :
-                if self.comm.rank == 0 :
-                    func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = True)
-                else :
-                    func = Functional(name = 'ZERO', energy=0.0, potential=None)
+            energy = self.get_energy(olevel = olevel, sdft = sdft)
+            if sdft == 'pdft' :
+                func = Functional(name = 'ZERO', energy=0.0, potential=None)
+            else :
+                if olevel == 0 :
+                    self.grid_sub.scatter(density, out = self.density_sub)
+                    func = self.evaluator(self.density_sub, calcType = ['E'], with_global = False, with_embed = False, gather = True)
+                else : # elif olevel == 1 :
+                    if self.comm.rank == 0 :
+                        func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = True)
+                    else :
+                        func = Functional(name = 'ZERO', energy=0.0, potential=None)
 
             func.energy += energy
-            if self.exttype == 0 : func.energy = 0.0
+            if sdft == 'sdft' and self.exttype == 0 : func.energy = 0.0
             if self.comm.rank > 0 : func.energy = 0.0
 
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'

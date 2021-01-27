@@ -44,10 +44,10 @@ class Driver(ABC):
     def stop_run(self, *arg, **kwargs):
         pass
 
-    def __call__(self, density = None, gsystem = None, calcType = ['O', 'E'], ext_pot = None, **kwargs):
-        return self.compute(density, gsystem, calcType, ext_pot, **kwargs)
+    def __call__(self, density = None, gsystem = None, calcType = ['O', 'E'], **kwargs):
+        return self.compute(density, gsystem, calcType, **kwargs)
 
-    def compute(self, density = None, gsystem = None, calcType = ['O', 'E'], ext_pot = None, **kwargs):
+    def compute(self, density = None, gsystem = None, calcType = ['O', 'E'], **kwargs):
         if 'O' in calcType :
             # if density is None and self.prev_density is None:
                 # raise AttributeError("Must provide a guess density")

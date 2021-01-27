@@ -83,6 +83,10 @@
 		"olevel": {
 			"type": "int",
 			"default": 2
+		},
+		"sdft": {
+			"type": "str",
+			"default": "sdft"
 		}
 	},
 	"GSYSTEM": {

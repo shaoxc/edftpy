@@ -32,8 +32,8 @@ def run_job(args):
         TimeData.Begin("TOTAL")
 
         optimizer = optimize_density_conf(config, graphtopo = graphtopo)
-        if "Force" in config["JOB"]["calctype"]:
-            forces = optimizer.get_forces()
+        # if "Force" in config["JOB"]["calctype"]:
+        #     forces = optimizer.get_forces()
 
         TimeData.End("TOTAL")
         if graphtopo.rank == 0 :

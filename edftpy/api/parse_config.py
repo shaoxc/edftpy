@@ -144,9 +144,9 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
             driver = config2driver(config, keysys, ions, grid, pplist, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp)
             #-----------------------------------------------------------------------
             #PSEUDO was evaluated on all processors, so directly remove from embedding
-            if 'PSEUDO' in driver.evaluator.funcdicts :
-                driver.evaluator.update_functional(remove = ['PSEUDO'])
-                gsystem.total_evaluator.update_functional(remove = ['PSEUDO'])
+            # if 'PSEUDO' in driver.evaluator.funcdicts :
+            #     driver.evaluator.update_functional(remove = ['PSEUDO'])
+            #     gsystem.total_evaluator.update_functional(remove = ['PSEUDO'])
             #-----------------------------------------------------------------------
         drivers.append(driver)
     #-----------------------------------------------------------------------

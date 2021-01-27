@@ -34,6 +34,7 @@ def conf2output(config, optimizer):
         sprint("Write Density...")
         outfile = config["GSYSTEM"]["density"]['output']
         write(outfile, optimizer.density, ions = optimizer.gsystem.ions)
+
     if config["OUTPUT"]["electrostatic_potential"]:
         sprint("Write electrostatic potential...")
         outfile = config["OUTPUT"]["electrostatic_potential"]
@@ -46,3 +47,21 @@ def conf2output(config, optimizer):
         if outfile :
             if driver.technique == 'OF' or driver.comm.rank == 0 or graphtopo.isub is None:
                 write(outfile, driver.density, ions = driver.subcell.ions)
+
+    if "Force" in config["JOB"]["calctype"]:
+        sprint("Calculate Force...")
+        forces = optimizer.get_forces()
+        ############################## Output Force ##############################
+        if optimizer.gsystem.grid.mp.rank == 0 :
+            sprint("-" * 80)
+            fabs = np.abs(forces)
+            fmax, fmin, fave = fabs.max(axis = 0), fabs.min(axis = 0), fabs.mean(axis = 0)
+            fmsd = (fabs * fabs).mean(axis = 0)
+            fstr_f = " " * 4 + "{0:>12s} : {1:< 22.10f} {2:< 22.10f} {3:< 22.10f}"
+            sprint(fstr_f.format("Max force (a.u.)", *fmax))
+            sprint(fstr_f.format("Min force (a.u.)", *fmin))
+            sprint(fstr_f.format("Ave force (a.u.)", *fave))
+            sprint(fstr_f.format("MSD force (a.u.)", *fmsd))
+            sprint("-" * 80)
+        optimizer.gsystem.grid.mp.comm.Barrier()
+    return

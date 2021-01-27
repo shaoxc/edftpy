@@ -6,8 +6,8 @@ import os
 from edftpy import __version__, __author__, __contact__, __license__
 
 
-description = "EDFTpy"
-long_description = """EDFTpy"""
+description = "eDFTpy"
+long_description = """eDFTpy"""
 scripts=[]
 
 setup(name='edftpy',
@@ -31,4 +31,4 @@ setup(name='edftpy',
       packages=find_packages(),
       scripts=scripts,
       include_package_data=True,
-      install_requires=['numpy>=1.8.0', 'scipy>=0.10.0', 'ase'])
+      install_requires=['numpy>=1.11.0', 'scipy>=0.18.0', 'ase'])

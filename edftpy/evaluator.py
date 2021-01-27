@@ -78,7 +78,7 @@ class EmbedEvaluator(Evaluator):
         self.embed_potential = None
         self.global_potential = None
 
-    def get_embed_potential(self, rho, gaussian_density = None, with_ke = False, gather = False, **kwargs):
+    def get_embed_potential(self, rho, gaussian_density = None, with_ke = False, gather = False, with_global = True, **kwargs):
         self.embed_potential = None
         key = 'KE' if hasattr(self, 'KE') else None
         remove_embed = {}
@@ -95,12 +95,11 @@ class EmbedEvaluator(Evaluator):
 
         self.update_functional(add = remove_embed)
 
+        if gather :
+            self.embed_potential = self.embed_potential.gather()
+
         if self.global_potential is not None :
-            if gather :
-                self.embed_potential = self.embed_potential.gather()
-                self.embed_potential += self.global_potential
-            else :
-                self.embed_potential += self.global_potential
+            self.embed_potential += self.global_potential
 
     @property
     def ke_evaluator(self):
