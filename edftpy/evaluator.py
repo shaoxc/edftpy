@@ -98,7 +98,7 @@ class EmbedEvaluator(Evaluator):
         if gather :
             self.embed_potential = self.embed_potential.gather()
 
-        if self.global_potential is not None :
+        if self.global_potential is not None and with_global:
             self.embed_potential += self.global_potential
 
     @property

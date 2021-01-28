@@ -431,9 +431,9 @@ class PwscfKS(Driver):
         else :
             extpot = self.get_extpot()
 
-        if self.comm.rank == 0:
-            from dftpy.formats import io
-            io.write(self.prefix + '.xsf', self.evaluator.embed_potential, self.subcell.ions)
+        # if self.comm.rank == 0:
+        #     from dftpy.formats import io
+        #     io.write(self.prefix + '.xsf', self.evaluator.embed_potential, self.subcell.ions)
 
         self.prev_charge[:] = self.charge
 

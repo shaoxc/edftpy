@@ -216,14 +216,14 @@ class Optimization(object):
         self.density = totalrho
         return
 
-    def set_global_potential(self):
+    def set_global_potential(self, **kwargs):
         sdft = self.options['sdft']
         if sdft == 'sdft' :
-            return self.set_global_potential_sdft()
+            return self.set_global_potential_sdft(**kwargs)
         elif sdft == 'pdft' :
-            return self.set_global_potential_pdft()
+            return self.set_global_potential_pdft(**kwargs)
 
-    def set_global_potential_sdft(self):
+    def set_global_potential_sdft(self, **kwargs):
         if self.nsub == len(self.of_drivers):
             pass
         else :
@@ -251,7 +251,7 @@ class Optimization(object):
             self.gsystem.sub_value(self.gsystem.total_evaluator.embed_potential, global_potential, isub = i)
         return
 
-    def set_global_potential_pdft(self, approximate = 'same'):
+    def set_global_potential_pdft(self, approximate = 'same', **kwargs):
         r"""
         .. math::
             v_{PDFT}^{I}= v_{ie}+v_{H}+v_{T_{s}}+v_{XC}-
@@ -260,7 +260,8 @@ class Optimization(object):
             v_{PDFT}^{I}= \frac{1}{\rho}\Bigl(\rho \left(v_{ie}+v_{H}+v_{T_{s}}+v_{XC}\right) -
               \sum_{J \neq I}^{N_{s}}\rho^{J}\left(v_{H}^{J}+v_{XC}^{J}+v_{ie}^{J}+v_{T_{s}}^{J}\right)\Bigr) (2)
         """
-        approximate = 'density'
+        approximate = 'density2'
+        # approximate = 'density'
 
         if len(self.of_drivers) > 0 :
             raise AttributeError("'PDFT' method is not available for OF-DFT")
@@ -271,27 +272,47 @@ class Optimization(object):
             pass
         elif approximate == 'density' :
             self.gsystem.total_evaluator.embed_potential *= self.gsystem.density
+        elif approximate == 'density2' :
+            pass
         else :
             raise AttributeError("{} not supported now".format(approximate))
 
+        # enel = []
+        # ene = np.sum(self.gsystem.total_evaluator.embed_potential * self.gsystem.density) * self.gsystem.grid.dV
+        # enel.append(ene)
         for isub in range(self.nsub) :
             driver = self.drivers[isub]
             if driver is None :
+                global_potential = None
                 extpot = None
             else :
-                extpot = driver.get_extpot(mapping = False)
-                if approximate == 'same' :
-                    pass
-                elif approximate == 'density' :
+                if driver.evaluator.global_potential is None :
+                    if driver.comm.rank == 0 :
+                        driver.evaluator.global_potential = Field(grid=driver.grid)
+                    else :
+                        driver.evaluator.global_potential = driver.atmp
+                global_potential = driver.evaluator.global_potential
+                global_potential[:] = 0.0
+
+                extpot = driver.get_extpot(mapping = False, with_global = False)
+
+            if approximate == 'density' :
+                if driver is not None and driver.comm.rank == 0 :
                     extpot *= driver.density
+            elif approximate == 'density2' :
+                self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
+                if driver is not None and driver.comm.rank == 0 :
+                    factor = np.minimum(np.abs(driver.density/global_potential), 1.0)
+                    extpot *= factor
+
             self.gsystem.add_to_global(extpot, self.gsystem.total_evaluator.embed_potential, isub = isub)
 
-        if approximate == 'same' :
-            pass
-        elif approximate == 'density' :
-            # self.gsystem.total_evaluator.embed_potential /= self.gsystem.density
-            mask = self.gsystem.density > 1E-6
-            self.gsystem.total_evaluator.embed_potential[mask] /= self.gsystem.density[mask]
+        if approximate == 'density' :
+            # mask = self.gsystem.density > 1E-6
+            self.gsystem.total_evaluator.embed_potential /= self.gsystem.density
+
+        # io.write(str(self.iter) + '.xsf', self.gsystem.total_evaluator.embed_potential, self.gsystem.ions)
+        # io.write(str(self.iter) + '_den.xsf', self.gsystem.density, self.gsystem.ions)
 
         for isub in range(self.nsub) :
             driver = self.drivers[isub]
@@ -307,6 +328,16 @@ class Optimization(object):
             self.gsystem.sub_value(self.gsystem.total_evaluator.embed_potential, global_potential, isub = isub)
             if driver is not None :
                 driver.evaluator.embed_potential = driver.evaluator.global_potential
+
+            # if driver is not None and driver.comm.rank == 0 :
+            #     ene = (driver.evaluator.embed_potential * driver.density).sum() * driver.grid.dV
+            # else :
+            #     ene = 0.0
+            # enel.append(ene)
+
+        # enel = np.asarray(enel)
+        # energy = enel.sum()
+        # energy = self.gsystem.grid.mp.asum(energy)
         return
 
     def get_update(self, driver, istep, residual):
@@ -429,29 +460,51 @@ class Optimization(object):
     def print_energy(self):
         self.set_global_potential()
         sdft = self.options['sdft']
+        edict = {}
+        etype = 1
         if sdft == 'sdft' :
             edict = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True, olevel = 0)
             total_energy = edict.pop('TOTAL').energy
         else :
-            edict = {}
-            total_energy = 0.0
+            if etype == 0 :
+                total_energy = np.sum(self.gsystem.total_evaluator.embed_potential * self.gsystem.density) * self.gsystem.grid.dV
+                edict['EMB'] = Functional(name = 'ZERO', energy=total_energy, potential=None)
+            else :
+                total_func= self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], olevel = 0)
+                edict['E_GLOBAL'] = total_func
+                total_energy = total_func.energy + 0
+                for i, driver in enumerate(self.drivers):
+                    if driver is None :
+                        func = Functional(name = 'ZERO', energy=0.0, potential=None)
+                    else :
+                        driver.grid_sub.scatter(driver.density, out = driver.density_sub)
+                        func = driver.evaluator(driver.density_sub, calcType = ['E'], gather = False)
+                    key = "E_SUB_"+str(i)
+                    edict[key] = func
+                    total_energy += func.energy
+
         etotal, elist = self.get_energy(self.gsystem.density, total_energy, olevel = 0)
+
         keys = list(edict.keys())
         values = [item.energy for item in edict.values()]
         keys.append('II')
         values.append(self.gsystem.ewald.energy)
         values = self.gsystem.grid.mp.vsum(values)
+
+        # etotal = values.sum()
+        # etotal += elist[1:].sum()
+
         ep_w = OrderedDict()
         for i, key in sorted(enumerate(keys), key=lambda x:x[1]):
             ep_w[key] = values[i]
         for i, item in enumerate(elist[1:]):
-            key = "SUB-"+str(i)
+            key = "SUB_"+str(i)
             ep_w[key] = item
         key = "TOTAL"
         ep_w[key] = etotal
         sprint(format("Energy information", "-^80"))
         for key, value in ep_w.items():
-            sprint("{:>10s} energy: {:22.15E} (eV)  =  {:22.15E} (a.u.) ".format(key, value* ENERGY_CONV["Hartree"]["eV"], value))
+            sprint("{:>12s} energy: {:22.15E} (eV) = {:22.15E} (a.u.)".format(key, value* ENERGY_CONV["Hartree"]["eV"], value))
         sprint("-" * 80)
         return ep_w
 
