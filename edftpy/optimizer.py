@@ -132,6 +132,7 @@ class Optimization(object):
                 gaussian_density = driver.gaussian_density
                 core_density = driver.core_density
                 # io.write(str(i) + '_gauss.xsf', gaussian_density, ions = driver.subcell.ions)
+            # if i == 0 : continue
             self.gsystem.update_density(density, isub = i)
             self.gsystem.update_density(gaussian_density, isub = i, fake = True)
             self.gsystem.update_density(core_density, isub = i, core = True)
@@ -142,6 +143,7 @@ class Optimization(object):
         self.add_xc_correction()
         #-----------------------------------------------------------------------
         # io.write('a.xsf', totalrho, ions = self.gsystem.ions)
+        # exit()
         energy_history = [0.0]
         #-----------------------------------------------------------------------
         fmt = "{:10s}{:8s}{:24s}{:16s}{:10s}{:10s}{:16s}".format(" ", "Step", "Energy(a.u.)", "dE", "dP", "dC", "Time(s)")
@@ -261,6 +263,7 @@ class Optimization(object):
               \sum_{J \neq I}^{N_{s}}\rho^{J}\left(v_{H}^{J}+v_{XC}^{J}+v_{ie}^{J}+v_{T_{s}}^{J}\right)\Bigr) (2)
         """
         approximate = 'density2'
+        # approximate = 'same'
 
         if len(self.of_drivers) > 0 :
             raise AttributeError("'PDFT' method is not available for OF-DFT")
@@ -455,13 +458,13 @@ class Optimization(object):
             if etype == 0 :
                 total_energy = np.sum(self.gsystem.total_evaluator.embed_potential * self.gsystem.density) * self.gsystem.grid.dV
                 edict['EMB'] = Functional(name = 'ZERO', energy=total_energy + 0, potential=None)
-                for i, driver in enumerate(self.drivers):
-                    func = Functional(name = 'ZERO', energy=0.0, potential=None)
-                    if driver is not None and driver.comm.rank == 0 :
-                        func.energy = np.sum(driver.evaluator.embed_potential * driver.density) * driver.grid.dV
-                    key = "E_SUB_"+str(i)
-                    edict[key] = func
-                    total_energy += func.energy
+                # for i, driver in enumerate(self.drivers):
+                #     func = Functional(name = 'ZERO', energy=0.0, potential=None)
+                #     if driver is not None and driver.comm.rank == 0 :
+                #         func.energy = np.sum(driver.evaluator.embed_potential * driver.density) * driver.grid.dV
+                #     key = "E_SUB_"+str(i)
+                #     edict[key] = func
+                #     total_energy += func.energy
             else :
                 total_func= self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], olevel = 0)
                 edict['E_GLOBAL'] = total_func

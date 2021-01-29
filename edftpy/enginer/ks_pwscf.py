@@ -128,6 +128,27 @@ class PwscfKS(Driver):
 
         self.core_density_sub = Field(grid = self.grid_sub)
         self.grid_sub.scatter(self.core_density, out = self.core_density_sub)
+        #-----------------------------------------------------------------------
+        if self.ncharge is not None :
+            nelec = pwscfpy.klist.get_nelec()
+            # if self.comm.rank == 0 :
+            #     self.density[:] *= (nelec + self.ncharge)/ nelec
+            if self.exttype < 0 :
+                if self.comm.rank == 0 :
+                    self.density[:] = nelec / self.grid.volume
+                self.exttype = abs(self.exttype)
+                self.core_density[:] = 0.0
+                self.core_density_sub[:] = 0.0
+                core_charge[:] = 0.0
+                pwscfpy.pwpy_mod.pwpy_set_rho_core(core_charge)
+                self._format_density()
+            # pwscfpy.klist.set_tot_charge(self.ncharge)
+            # pwscfpy.klist.set_nelec(nelec+self.ncharge)
+            # self._format_density()
+        if self.comm.rank == 0 :
+            print('ncharge_sub', self.density.integral())
+            # print('ncharge_core', self.core_density.integral())
+        #-----------------------------------------------------------------------
 
         clean_variables(core_charge)
         return
@@ -292,6 +313,8 @@ class PwscfKS(Driver):
         cell_params['pseudopotentials'] = value
         # For QE, all pseudopotentials should at same directory
         params['control']['pseudo_dir'] = os.path.dirname(v2)
+        if self.ncharge is not None :
+            params['system']['tot_charge'] = self.ncharge
         fileobj = open(outfile, 'w')
         if 'kpts' not in cell_params :
             self._update_kpoints(cell_params, cards)
