@@ -145,7 +145,7 @@ class Optimization(object):
         global_density = self.gsystem.density.gather()
         global_density = self.gsystem.grid.mp.comm.bcast(global_density, root = 0)
         for i, driver in enumerate(self.drivers):
-            if driver is None or driver.exttype >= 0:
+            if driver is None or driver.technique == 'OF' or driver.exttype >= 0:
                 continue
             else :
                 density = driver.density
