@@ -1,6 +1,5 @@
 import numpy as np
-# from dftpy.kedf import KEDFunctional, KEDFStress
-from dftpy.kedf import KEDF
+from dftpy.kedf import KEDF, KEDFunctional, KEDFStress
 
 from ..utils.common import AbsFunctional
 

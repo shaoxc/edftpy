@@ -132,7 +132,6 @@ class Optimization(object):
                 gaussian_density = driver.gaussian_density
                 core_density = driver.core_density
                 # io.write(str(i) + '_gauss.xsf', gaussian_density, ions = driver.subcell.ions)
-            # if i == 0 : continue
             self.gsystem.update_density(density, isub = i)
             self.gsystem.update_density(gaussian_density, isub = i, fake = True)
             self.gsystem.update_density(core_density, isub = i, core = True)
@@ -141,6 +140,21 @@ class Optimization(object):
         totalrho = self.gsystem.density.copy()
         #-----------------------------------------------------------------------
         self.add_xc_correction()
+        #-----------------------------------------------------------------------
+        thr = 1E-2
+        global_density = self.gsystem.density.gather()
+        global_density = self.gsystem.grid.mp.comm.bcast(global_density, root = 0)
+        for i, driver in enumerate(self.drivers):
+            if driver is None or driver.exttype >= 0:
+                continue
+            else :
+                density = driver.density
+                if driver.comm.rank == 0 :
+                    nelec = np.sum(density)
+                    mask = global_density > thr
+                    density[mask] = 0.0
+                    density *= nelec/np.sum(density)
+
         #-----------------------------------------------------------------------
         # io.write('a.xsf', totalrho, ions = self.gsystem.ions)
         # exit()
@@ -165,6 +179,7 @@ class Optimization(object):
             # update the rhomax for NLKEDF
             self.set_kedf_params(level = it + 2) # first step without NL
             self.set_global_potential()
+            # io.write('pot.xsf', self.gsystem.total_evaluator.embed_potential, ions = self.gsystem.ions)
             for isub in range(self.nsub + len(self.of_drivers)):
                 if isub < self.nsub :
                     driver = self.drivers[isub]

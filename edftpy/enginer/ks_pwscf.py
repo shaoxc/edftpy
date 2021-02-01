@@ -18,6 +18,7 @@ from edftpy.density import normalization_density
 from edftpy.enginer.driver import Driver
 from edftpy.hartree import hartree_energy
 from edftpy.mpi import sprint, SerialComm, MP
+from edftpy.kedf import KEDFunctional
 
 from pwscfpy import constants as pwc
 unit_len = LEN_CONV["Bohr"]["Angstrom"] / pwc.BOHR_RADIUS_SI / 1E10
@@ -136,18 +137,21 @@ class PwscfKS(Driver):
             if self.exttype < 0 :
                 if self.comm.rank == 0 :
                     self.density[:] = nelec / self.grid.volume
-                self.exttype = abs(self.exttype)
                 self.core_density[:] = 0.0
                 self.core_density_sub[:] = 0.0
                 core_charge[:] = 0.0
                 pwscfpy.pwpy_mod.pwpy_set_rho_core(core_charge)
                 self._format_density()
+                if self.gaussian_density is not None :
+                    self.gaussian_density_inter = self.gaussian_density.copy()
+                    self.gaussian_density[:] = 0.0
+                else :
+                    self.gaussian_density_inter = None
             # pwscfpy.klist.set_tot_charge(self.ncharge)
             # pwscfpy.klist.set_nelec(nelec+self.ncharge)
             # self._format_density()
         if self.comm.rank == 0 :
             print('ncharge_sub', self.density.integral())
-            # print('ncharge_core', self.core_density.integral())
         #-----------------------------------------------------------------------
 
         clean_variables(core_charge)
@@ -449,6 +453,9 @@ class PwscfKS(Driver):
 
         if sdft == 'pdft' :
             extpot = self.evaluator.embed_potential
+            if self.exttype < 0 and self.gaussian_density_inter is not None:
+                # kepot = KEDFunctional(self.gaussian_density_inter, name = 'GGA', calcType = ['V'], k_str = 'REVAPBEK').potential
+                extpot[self.gaussian_density_inter > 1E-4] = 0.0
             extpot = self.get_extpot(extpot, mapping = True)
             self.embed.lewald = False
         else :
@@ -461,7 +468,9 @@ class PwscfKS(Driver):
         self.prev_charge[:] = self.charge
 
         pwscfpy.pwpy_mod.pwpy_set_extpot(self.embed, extpot)
-        self.embed.exttype = self.exttype
+        self.embed.exttype = abs(self.exttype)
+        # self.embed.exttype = self.exttype
+        # self.embed.exttype = 0
         self.embed.initial = initial
         self.embed.mix_coef = -1.0
         self.embed.finish = False
