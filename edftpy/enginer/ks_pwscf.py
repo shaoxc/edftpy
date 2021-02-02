@@ -83,8 +83,8 @@ class PwscfKS(Driver):
         pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
         #-----------------------------------------------------------------------
         self.init_density()
-        self.update_workspace(first = True)
         self.embed = pwscfpy.pwpy_embed.embed_base()
+        self.update_workspace(first = True)
 
     def update_workspace(self, subcell = None, first = False, **kwargs):
         """
@@ -130,28 +130,29 @@ class PwscfKS(Driver):
         self.core_density_sub = Field(grid = self.grid_sub)
         self.grid_sub.scatter(self.core_density, out = self.core_density_sub)
         #-----------------------------------------------------------------------
-        if self.ncharge is not None :
-            nelec = pwscfpy.klist.get_nelec()
-            # if self.comm.rank == 0 :
-            #     self.density[:] *= (nelec + self.ncharge)/ nelec
-            if self.exttype < 0 :
-                if self.comm.rank == 0 :
-                    self.density[:] = nelec / self.grid.volume
-                self.core_density[:] = 0.0
-                self.core_density_sub[:] = 0.0
-                core_charge[:] = 0.0
-                pwscfpy.pwpy_mod.pwpy_set_rho_core(core_charge)
-                self._format_density()
-                if self.gaussian_density is not None :
-                    self.gaussian_density_inter = self.gaussian_density.copy()
-                    self.gaussian_density[:] = 0.0
-                else :
-                    self.gaussian_density_inter = None
-            # pwscfpy.klist.set_tot_charge(self.ncharge)
-            # pwscfpy.klist.set_nelec(nelec+self.ncharge)
-            # self._format_density()
-        if self.comm.rank == 0 :
-            print('ncharge_sub', self.density.integral())
+        # if self.ncharge is not None :
+        #     nelec = pwscfpy.klist.get_nelec()
+        #     # if self.comm.rank == 0 :
+        #     #     self.density[:] *= (nelec + self.ncharge)/ nelec
+        #     if self.exttype < 0 :
+        #         if self.comm.rank == 0 :
+        #             self.density[:] = nelec / self.grid.volume
+        #         self.core_density[:] = 0.0
+        #         self.core_density_sub[:] = 0.0
+        #         core_charge[:] = 0.0
+        #         pwscfpy.pwpy_mod.pwpy_set_rho_core(core_charge)
+        #         self._format_density()
+        #         if self.gaussian_density is not None :
+        #             self.gaussian_density_inter = self.gaussian_density.copy()
+        #             self.gaussian_density[:] = 0.0
+        #         else :
+        #             self.gaussian_density_inter = None
+        #         self.embed.nlpp = True
+        #     # pwscfpy.klist.set_tot_charge(self.ncharge)
+        #     # pwscfpy.klist.set_nelec(nelec+self.ncharge)
+        #     # self._format_density()
+        # if self.comm.rank == 0 :
+        #     print('ncharge_sub', self.density.integral())
         #-----------------------------------------------------------------------
 
         clean_variables(core_charge)
@@ -453,9 +454,6 @@ class PwscfKS(Driver):
 
         if sdft == 'pdft' :
             extpot = self.evaluator.embed_potential
-            if self.exttype < 0 and self.gaussian_density_inter is not None:
-                # kepot = KEDFunctional(self.gaussian_density_inter, name = 'GGA', calcType = ['V'], k_str = 'REVAPBEK').potential
-                extpot[self.gaussian_density_inter > 1E-4] = 0.0
             extpot = self.get_extpot(extpot, mapping = True)
             self.embed.lewald = False
         else :
@@ -468,9 +466,7 @@ class PwscfKS(Driver):
         self.prev_charge[:] = self.charge
 
         pwscfpy.pwpy_mod.pwpy_set_extpot(self.embed, extpot)
-        self.embed.exttype = abs(self.exttype)
-        # self.embed.exttype = self.exttype
-        # self.embed.exttype = 0
+        self.embed.exttype = self.exttype
         self.embed.initial = initial
         self.embed.mix_coef = -1.0
         self.embed.finish = False
@@ -498,17 +494,15 @@ class PwscfKS(Driver):
     def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, sdft = 'sdft', **kwargs):
         if 'E' in calcType :
             energy = self.get_energy(olevel = olevel, sdft = sdft)
-            if sdft == 'pdft' :
-                func = Functional(name = 'ZERO', energy=0.0, potential=None)
-            else :
-                if olevel == 0 :
-                    self.grid_sub.scatter(density, out = self.density_sub)
-                    func = self.evaluator(self.density_sub, calcType = ['E'], with_global = False, with_embed = False, gather = True)
-                else : # elif olevel == 1 :
-                    if self.comm.rank == 0 :
-                        func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = True)
-                    else :
-                        func = Functional(name = 'ZERO', energy=0.0, potential=None)
+
+            if olevel == 0 :
+                self.grid_sub.scatter(density, out = self.density_sub)
+                func = self.evaluator(self.density_sub, calcType = ['E'], with_global = False, with_embed = False, gather = True)
+            else : # elif olevel == 1 :
+                if self.comm.rank == 0 :
+                    func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = True)
+                else :
+                    func = Functional(name = 'ZERO', energy=0.0, potential=None)
 
             func.energy += energy
             if sdft == 'sdft' and self.exttype == 0 : func.energy = 0.0

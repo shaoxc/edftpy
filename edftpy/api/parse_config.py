@@ -282,9 +282,10 @@ def config2embed_evaluator(config, keysys, ions, grid, pplist = None, cell_chang
     embed_evaluator = EmbedEvaluator(ke_evaluator = ke_evaluator, **emb_funcdicts)
     return embed_evaluator, exttype
 
-def config2evaluator_of(config, keysys, gsystem = None, cell_change = None):
+def config2evaluator_of(config, keysys, ions=None, grid=None, pplist = None, gsystem = None, cell_change = None):
     ke_kwargs = config[keysys]["kedf"].copy()
     xc_kwargs = config[keysys]["exc"].copy()
+    pme = config["MATH"]["linearie"]
 
     embed = config[keysys]["embed"]
     exttype = config[keysys]["exttype"]
@@ -304,6 +305,14 @@ def config2evaluator_of(config, keysys, gsystem = None, cell_change = None):
     if 'XC' in embed :
         xc_sub = XC(**xc_kwargs)
         sub_funcdicts['XC'] = xc_sub
+
+    if 'HARTREE' in embed :
+        hartree = Hartree()
+        sub_funcdicts['HARTREE'] = hartree
+
+    if 'PSEUDO' in embed :
+        pseudo = LocalPP(grid = grid, ions=ions,PP_list=pplist,PME=pme)
+        sub_funcdicts['PSEUDO'] = pseudo
 
     if opt_options['opt_method'] == 'full' :
         sub_funcdicts['KE'] = ke_sub
@@ -427,7 +436,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             grid_sub = None
             gsystem_driver = None
 
-        evaluator_of = config2evaluator_of(config, keysys, gsystem = gsystem_driver, cell_change = cell_change)
+        evaluator_of = config2evaluator_of(config, keysys, subcell.ions, subcell.grid, pplist = pplist, gsystem = gsystem_driver, cell_change = cell_change)
 
         driver = DFTpyOF(evaluator = embed_evaluator, prefix = prefix, options = opt_options, subcell = subcell,
                 mixer = mixer, evaluator_of = evaluator_of, grid = grid_sub, key = keysys)

@@ -34,14 +34,14 @@ class Evaluator(AbsFunctional):
         return self.compute(density, calcType, **kwargs)
 
     def compute(self, density, calcType=["E","V"], split = False, gather = False, **kwargs):
-        calcType = ['E', 'V']
+        # calcType = ['E', 'V']
         eplist = {}
         results = None
         for key, evalfunctional in self.funcdicts.items():
             obj = evalfunctional(density, calcType, **kwargs)
             # if hasattr(obj, 'energy'): sprint(key, density.mp.asum(obj.energy), comm = density.mp.comm)
-            # if hasattr(obj, 'energy'): sprint(key, density.mp.asum(obj.energy * 27.21138))
-            # if hasattr(obj, 'potential'): sprint(key, obj.potential[:3, 0, 0] * 2)
+            # if hasattr(obj, 'energy'): sprint(key, density.mp.asum(obj.energy * 27.21138), comm = density.mp.comm)
+            # if hasattr(obj, 'potential'): sprint(key, obj.potential[:3, 0, 0] * 2, comm = density.mp.comm)
             if results is None :
                 results = obj
             else :
