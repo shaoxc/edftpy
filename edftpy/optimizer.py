@@ -152,7 +152,6 @@ class Optimization(object):
                 density *= factor
         #-----------------------------------------------------------------------
         # io.write('a.xsf', totalrho, ions = self.gsystem.ions)
-        # exit()
         energy_history = [0.0]
         #-----------------------------------------------------------------------
         fmt = "{:10s}{:8s}{:24s}{:16s}{:10s}{:10s}{:16s}".format(" ", "Step", "Energy(a.u.)", "dE", "dP", "dC", "Time(s)")
@@ -273,10 +272,6 @@ class Optimization(object):
         approximate = 'density2'
         # approximate = 'same'
 
-        # if len(self.of_drivers) > 0 :
-        #     raise AttributeError("'PDFT' method is not available for OF-DFT")
-        # else :
-            # self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = True)
         self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = True)
 
         if approximate == 'same' :
@@ -288,12 +283,6 @@ class Optimization(object):
         else :
             raise AttributeError("{} not supported now".format(approximate))
 
-        # for isub in range(self.nsub + len(self.of_drivers)):
-        #     if isub < self.nsub :
-        #         driver = self.drivers[isub]
-        #     else :
-        #         driver = self.of_drivers[isub - self.nsub]
-        #         isub = self.of_ids[isub - self.nsub]
         for isub in range(self.nsub):
             driver = self.drivers[isub]
             if driver is None :
@@ -315,13 +304,15 @@ class Optimization(object):
                 extpot = driver.get_extpot(mapping = False, with_global = False)
 
             if approximate == 'density' :
-                if driver is not None and driver.comm.rank == 0 :
-                    extpot *= driver.density
+                if driver is not None :
+                    if driver.technique == 'OF' or driver.comm.rank == 0 :
+                        extpot *= driver.density
             elif approximate == 'density2' :
                 self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
-                if driver is not None and driver.comm.rank == 0 :
-                    factor = np.minimum(np.abs(driver.density/global_potential), 1.0)
-                    extpot *= factor
+                if driver is not None :
+                    if driver.technique == 'OF' or driver.comm.rank == 0 :
+                        factor = np.minimum(np.abs(driver.density/global_potential), 1.0)
+                        extpot *= factor
 
             self.gsystem.add_to_global(extpot, self.gsystem.total_evaluator.embed_potential, isub = isub)
 

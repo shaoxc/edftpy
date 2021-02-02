@@ -18,7 +18,6 @@ from edftpy.density import normalization_density
 from edftpy.enginer.driver import Driver
 from edftpy.hartree import hartree_energy
 from edftpy.mpi import sprint, SerialComm, MP
-from edftpy.kedf import KEDFunctional
 
 from pwscfpy import constants as pwc
 unit_len = LEN_CONV["Bohr"]["Angstrom"] / pwc.BOHR_RADIUS_SI / 1E10

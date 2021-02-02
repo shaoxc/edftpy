@@ -13,11 +13,13 @@ from dftpy.optimization import Optimization
 from dftpy.formats.io import write
 from dftpy.constants import environ
 
+from edftpy.kedf import KEDFunctional
+
 
 class DFTpyOF(Driver):
     """description"""
     def __init__(self, evaluator = None, subcell = None, prefix = 'sub_of', options = None, mixer = None,
-            grid = None, evaluator_of = None, **kwargs):
+            grid = None, evaluator_of = None, exttype = 3, ncharge = None, **kwargs):
         default_options = {
             "opt_method" : 'full',
             "method" :'CG-HS',
@@ -44,6 +46,8 @@ class DFTpyOF(Driver):
         self.grid_driver = grid
         self.evaluator_of = evaluator_of
         self.prefix = prefix
+        self.exttype = exttype
+        self.ncharge = ncharge
         #-----------------------------------------------------------------------
         self.mixer = mixer
         if self.options['opt_method'] == 'full' :
@@ -94,6 +98,24 @@ class DFTpyOF(Driver):
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
         if not first :
             self.options['econv'] = self.options['econv0'] / 1E4
+
+        if self.ncharge is not None and self.ncharge > 0.0:
+            nelec = self.density.integral()
+            # sprint('nelec', nelec, self.ncharge, self.exttype)
+            if self.exttype < 0 :
+                self.density[:] = (nelec - self.ncharge) / self.grid.volume
+                if self.core_density is not None :
+                    self.core_density[:] = 0.0
+
+                if self.gaussian_density is not None :
+                    self.gaussian_density_inter = self.gaussian_density.copy()
+                    self.gaussian_density[:] = 0.0
+                else :
+                    self.gaussian_density_inter = None
+            else :
+                self.density[:] *= (nelec - self.ncharge)/ nelec
+            self._format_density()
+            sprint('ncharge_sub', self.density.integral())
         return
 
     @property
@@ -202,17 +224,16 @@ class DFTpyOF(Driver):
             if not hamil :
                 raise AttributeError("Only 'part' and 'hamiltonian' method can use PDFT")
             extpot = self.evaluator.embed_potential
+            #-----------------------------------------------------------------------
+            if self.exttype < 0 and self.gaussian_density_inter is not None:
+                kepot = KEDFunctional(self.gaussian_density_inter, name = 'GGA', calcType = ['V'], k_str = 'REVAPBEK').potential
+                extpot += kepot
+                # extpot[self.gaussian_density_inter > 1E-5] = 0.0
+            #-----------------------------------------------------------------------
             extpot = self.get_extpot(extpot, mapping = True, with_global = False)
         else :
             self.get_extpot(with_all = hamil)
-        #-----------------------------------------------------------------------
-        # if sdft == 'pdft' :
-        #     extpot = self.evaluator.embed_potential
-        #     if self.exttype < 0 and self.gaussian_density_inter is not None:
-        #         # kepot = KEDFunctional(self.gaussian_density_inter, name = 'GGA', calcType = ['V'], k_str = 'REVAPBEK').potential
-        #         # extpot += kepot
-        #         extpot[self.gaussian_density_inter > 1E-5] = 0.0
-        #-----------------------------------------------------------------------
+
         if self.evaluator_of.nfunc > 0 and hamil:
             self.evaluator_of.embed_potential += self.evaluator_of(self.charge, calcType = ['V'], with_global = False, with_ke = False, with_embed = False).potential
 

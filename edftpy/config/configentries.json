@@ -358,7 +358,7 @@
 			"initial": {
 				"type": "cstr",
 				"default": null,
-				"options": "None, Atomic, Read, Ofdft",
+				"options": "None, Atomic, Read, Ofdft, Heg",
 				"comment": "For OFDFT subsystem must given one method except `None`."
 			},
 			"use_gaussians": {

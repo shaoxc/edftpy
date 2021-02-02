@@ -126,7 +126,6 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     gsystem.total_evaluator = total_evaluator
     ############################## Subsytem ##############################
     subkeys = [key for key in config if key.startswith('SUB')]
-    # subkeys.sort(reverse = True)
     drivers = []
     for i, keysys in enumerate(subkeys):
         if cell_change == 'position' :
@@ -246,10 +245,13 @@ def config2embed_evaluator(config, keysys, ions, grid, pplist = None, cell_chang
     calculator = config[keysys]["calculator"]
     #Embedding Functional---------------------------------------------------
     if exttype is not None :
-        embed = ['KE']
-        if not exttype & 1 : embed.append('PSEUDO')
-        if not exttype & 2 : embed.append('HARTREE')
-        if not exttype & 4 : embed.append('XC')
+        if exttype == -1 :
+            embed = ['HARTREE', 'KE', 'XC']
+        else :
+            embed = ['KE']
+            if not exttype & 1 : embed.append('PSEUDO')
+            if not exttype & 2 : embed.append('HARTREE')
+            if not exttype & 4 : embed.append('XC')
 
     emb_funcdicts = {}
     if 'KE' in embed :
@@ -401,6 +403,9 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         elif initial == 'Atomic' and len(atomicfiles) > 0 :
             atomicd = AtomicDensity(files = atomicfiles)
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
+        elif initial == 'Heg' :
+            atomicd = AtomicDensity()
+            subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
         elif initial or technique == 'OF' :
             atomicd = AtomicDensity()
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
@@ -416,8 +421,12 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         raise AttributeError("!!!ERROR : NOT support ", mix_kwargs['scheme'])
     #-----------------------------------------------------------------------
     embed_evaluator, exttype = config2embed_evaluator(config, keysys, subcell.ions, subcell.grid, pplist = pplist, cell_change = cell_change)
+    ncharge = config[keysys]["density"]["ncharge"]
+    if config[keysys]["exttype"] and config[keysys]["exttype"] < 0 :
+        exttype = config[keysys]["exttype"]
 
-    def get_dftpy_driver(embed_evaluator):
+    def get_dftpy_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, margs = {}, **kwargs):
+        subcell = margs.get('subcell')
         opt_options['econv'] *= subcell.ions.nat
         if ecut and abs(ecut - gsystem_ecut) > 1.0 :
             if comm.size > 1 :
@@ -438,8 +447,13 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
 
         evaluator_of = config2evaluator_of(config, keysys, subcell.ions, subcell.grid, pplist = pplist, gsystem = gsystem_driver, cell_change = cell_change)
 
-        driver = DFTpyOF(evaluator = embed_evaluator, prefix = prefix, options = opt_options, subcell = subcell,
-                mixer = mixer, evaluator_of = evaluator_of, grid = grid_sub, key = keysys)
+        add = {
+                'options': opt_options,
+                'evaluator_of': evaluator_of,
+                'grid': grid_sub,
+                }
+        margs.update(add)
+        driver = DFTpyOF(**margs)
         return driver
 
     margs = {
@@ -452,8 +466,10 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             'base_in_file' : basefile,
             'mixer' : mixer,
             'comm' : mp.comm,
-            'key' : keysys
+            'key' : keysys,
+            'ncharge' : ncharge
             }
+
     if cell_change == 'cell' :
         raise AttributeError("Not support change the cell")
 
@@ -461,7 +477,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         driver.update_workspace(subcell)
     else :
         if calculator == 'dftpy' :
-            driver = get_dftpy_driver(embed_evaluator)
+            driver = get_dftpy_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
         elif calculator == 'pwscf' :
             driver = get_pwscf_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
         elif calculator == 'castep' :
