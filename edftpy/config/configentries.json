@@ -221,9 +221,10 @@
 			"comment": "The technique (OF|KS) of the driver"
 		},
 		"nprocs": {
-			"type": "int",
+			"type": "float",
 			"default": 1,
-			"comment": "The number of processors for the subsystem"
+			"comment": "The number of processors for the subsystem",
+			"note": "If the minimum of all subsystems is 1, can also be used as ratio of number os processors of each subsystem"
 		},
 		"embed": {
 			"type": "strlist",

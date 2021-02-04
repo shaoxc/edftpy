@@ -60,6 +60,14 @@ def config_correct(config):
             config[key]['technique'] = 'OF'
         else :
             config[key]['technique'] = 'KS'
+
+        if not config[key]["prefix"] :
+            config[key]["prefix"] = key[1:].lower()
+
+        if config[key]['density']['output'] :
+            if config[key]['density']['output'].startswith('.') :
+                config[key]['density']['output'] = config[key]["prefix"] + config[key]['density']['output']
+
     return config
 
 def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, pseudo = None, **kwargs):
@@ -67,9 +75,6 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         pass
     elif isinstance(config, str):
         config = read_conf(config)
-    #-----------------------------------------------------------------------
-    config = config_correct(config)
-    #-----------------------------------------------------------------------
     ############################## Gsystem ##############################
     cell_change = None
     keysys = "GSYSTEM"
@@ -94,6 +99,8 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
             cell_change = 'position'
 
     config = config2nsub(config, ions)
+    #-----------------------------------------------------------------------
+    config = config_correct(config)
     #-----------------------------------------------------------------------
     graphtopo = config2graphtopo(config, graphtopo = graphtopo)
     if graphtopo.rank == 0 :
@@ -245,13 +252,11 @@ def config2embed_evaluator(config, keysys, ions, grid, pplist = None, cell_chang
     calculator = config[keysys]["calculator"]
     #Embedding Functional---------------------------------------------------
     if exttype is not None :
-        if exttype == -1 :
-            embed = ['HARTREE', 'KE', 'XC']
-        else :
-            embed = ['KE']
-            if not exttype & 1 : embed.append('PSEUDO')
-            if not exttype & 2 : embed.append('HARTREE')
-            if not exttype & 4 : embed.append('XC')
+        if exttype == -1 : exttype = 0
+        embed = ['KE']
+        if not exttype & 1 : embed.append('PSEUDO')
+        if not exttype & 2 : embed.append('HARTREE')
+        if not exttype & 4 : embed.append('XC')
 
     emb_funcdicts = {}
     if 'KE' in embed :
@@ -295,6 +300,7 @@ def config2evaluator_of(config, keysys, ions=None, grid=None, pplist = None, gsy
     opt_options = config[keysys]["opt"].copy()
 
     if exttype is not None :
+        if exttype == -1 : exttype = 1
         embed = ['KE']
         if not exttype & 1 : embed.append('PSEUDO')
         if not exttype & 2 : embed.append('HARTREE')
@@ -364,8 +370,6 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         for k, v in atomicfiles.copy().items():
             if not os.path.exists(v):
                 atomicfiles[k] = pp_path + os.sep + v
-    if not prefix :
-        prefix = keysys.lower()
     #-----------------------------------------------------------------------
     if ecut :
         ecut *= ENERGY_CONV["eV"]["Hartree"]
@@ -598,8 +602,6 @@ def config_from_index(config, keysys, indices):
         config[key]['decompose']['adaptive'] = 'manual'
         config[key]['cell']['index'] = ind
         config[key]["nprocs"] = max(1, config[keysys]["nprocs"] // len(indices))
-        if config[key]['density']['output'] :
-            config[key]['density']['output'] = config[key]["prefix"] + '.' + config[key]['density']['output']
         config[key]['subs'] = None
         subs.append(key)
     config[keysys]['subs'] = subs

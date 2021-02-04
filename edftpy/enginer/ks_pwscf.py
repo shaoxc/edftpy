@@ -458,10 +458,6 @@ class PwscfKS(Driver):
         else :
             extpot = self.get_extpot()
 
-        # if self.comm.rank == 0:
-        #     from dftpy.formats import io
-        #     io.write(self.prefix + '.xsf', self.evaluator.embed_potential, self.subcell.ions)
-
         self.prev_charge[:] = self.charge
 
         pwscfpy.pwpy_mod.pwpy_set_extpot(self.embed, extpot)
@@ -469,7 +465,7 @@ class PwscfKS(Driver):
         self.embed.initial = initial
         self.embed.mix_coef = -1.0
         self.embed.finish = False
-        pwscfpy.pwpy_electrons.pwpy_electrons_scf(printout, exxen, self.embed)
+        pwscfpy.pwpy_electrons_scf(printout, exxen, self.embed)
         self.energy = self.embed.etotal
         self.dp_norm = self.embed.dnorm
 
@@ -541,7 +537,7 @@ class PwscfKS(Driver):
         if self.mix_driver is not None :
             if coef is None : coef = self.mix_driver
             self.embed.mix_coef = coef
-            pwscfpy.pwpy_electrons.pwpy_electrons_scf(0, 0, self.embed)
+            pwscfpy.pwpy_electrons_scf(0, 0, self.embed)
             if self._iter > 1 : self.dp_norm = self.embed.dnorm
             pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
             self.density[:] = self._format_density_invert()
@@ -573,7 +569,7 @@ class PwscfKS(Driver):
 
     def end_scf(self, **kwargs):
         self.embed.finish = True
-        pwscfpy.pwpy_electrons.pwpy_electrons_scf(0, 0, self.embed)
+        pwscfpy.pwpy_electrons_scf(0, 0, self.embed)
 
     def stop_run(self, status = 0, **kwargs):
         pwscfpy.pwpy_stop_run(status, **kwargs)

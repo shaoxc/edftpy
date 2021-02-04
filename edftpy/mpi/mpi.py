@@ -216,30 +216,35 @@ class GraphTopo:
             return
         elif nprocs is None :
             raise AttributeError("Must give the 'nprocs' in parallel version")
-        nprocs = np.asarray(nprocs)
+        nprocs = np.asarray(nprocs, dtype = 'float')
         if nprocs.sum() != self.comm.size :
             ns = np.count_nonzero(nprocs > 0)
             if ns == 0 :
                 self.comm_sub = SerialComm()
-                self.nprocs = np.ones(1, dtype = 'int') * nprocs.sum()
+                self.nprocs = np.ones(1, dtype = 'int') * int(nprocs.sum())
                 return
-            if nprocs.sum() == ns :
-                av = self.size // ns
-                nprocs[:] = nprocs * av
-            else :
-                nprocs[:] = nprocs * self.size / nprocs.sum()
-            res = self.size - nprocs.sum()
-            if res < 0 :
-                nprocs[nprocs > 0] -= 1
+            nmin = np.min(nprocs[nprocs > 0.1])
+            if nmin < 1.1 : # ratio of processors
+                if nprocs.sum() == ns :
+                    av = self.size // ns
+                    nprocs[:] = nprocs * av
+                else :
+                    nprocs[:] = nprocs * self.size / nprocs.sum()
                 res = self.size - nprocs.sum()
-            for i, n in enumerate(nprocs):
-                if res == 0 : break
-                if n > 0 :
-                    nprocs[i] += 1
-                    res -= 1
-        self.nprocs = nprocs
+                if res < 0 :
+                    nprocs[nprocs > 0] -= 1
+                    res = self.size - nprocs.sum()
+                for i, n in enumerate(nprocs):
+                    if res == 0 : break
+                    if n > 0 :
+                        nprocs[i] += 1
+                        res -= 1
+            else : # set as maximum of processors
+                pass
+        self.nprocs = nprocs.astype(dtype = 'int')
         ub = 0
-        for i, n in enumerate(nprocs):
+        self.isub = len(self.nprocs) + 100
+        for i, n in enumerate(self.nprocs):
             ub += n
             if self.rank < ub :
                 self.isub = i
