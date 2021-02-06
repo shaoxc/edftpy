@@ -29,7 +29,8 @@ class PwscfKS(Driver):
         The extpot separated into two parts : v.of_r and vltot will be a better and safe way
     """
     def __init__(self, evaluator = None, subcell = None, prefix = 'sub_ks', params = None, cell_params = None,
-            exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None, **kwargs):
+            exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None, 
+            diag_conv = 1E-10, **kwargs):
         '''
         Here, prefix is the name of the input file
         exttype :
@@ -82,7 +83,8 @@ class PwscfKS(Driver):
         pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
         #-----------------------------------------------------------------------
         self.init_density()
-        self.embed = pwscfpy.pwpy_embed.embed_base()
+        self.embed = pwscfpy.pwpy_mod.embed_base()
+        self.embed.diag_conv = diag_conv
         self.update_workspace(first = True)
 
     def update_workspace(self, subcell = None, first = False, **kwargs):

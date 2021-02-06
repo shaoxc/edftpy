@@ -1,2 +1,5 @@
-numpy
-scipy
+numpy>=1.11.0
+scipy>=0.18.0
+ase
+git+https://github.com/jameskermode/f90wrap.git
+git+https://gitlab.com/pavanello-research-group/dftpy.git

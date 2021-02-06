@@ -1,14 +1,35 @@
 #!/usr/bin/env python3
 from setuptools import setup, find_packages
-import re
 import sys
 import os
 from edftpy import __version__, __author__, __contact__, __license__
 
+def parse_requirements():
+    requires = []
+    with open('requirements.txt', 'r') as fr :
+        for line in fr :
+            pkg = line.strip()
+            if pkg.startswith('git+'):
+                pip_install_git(pkg)
+            else:
+                requires.append(pkg)
+    return requires
+
+def pip_install_git(link):
+    os.system('pip install {}'.format(link))
+    return
+
+
+assert sys.version_info >= (3, 6)
 
 description = "eDFTpy"
 long_description = """eDFTpy"""
-scripts=[]
+
+scripts=['scripts/edftpy']
+
+extras_require = {
+        'libxc' : ['libxc @ git+https://gitlab.com/libxc/libxc.git'],
+        }
 
 setup(name='edftpy',
       description=description,
@@ -25,10 +46,13 @@ setup(name='edftpy',
           'Programming Language :: Python :: 3',
           'Programming Language :: Python :: 3.6',
           'Programming Language :: Python :: 3.7',
+          'Programming Language :: Python :: 3.8',
+          'Programming Language :: Python :: 3.9',
           'Topic :: Scientific/Engineering :: Chemistry',
           'Topic :: Scientific/Engineering :: Physics'
       ],
       packages=find_packages(),
       scripts=scripts,
       include_package_data=True,
-      install_requires=['numpy>=1.11.0', 'scipy>=0.18.0', 'ase'])
+      extras_require = extras_require,
+      install_requires= parse_requirements())
