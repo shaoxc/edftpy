@@ -16,7 +16,7 @@ def parse_requirements():
     return requires
 
 def pip_install_git(link):
-    os.system('pip install {}'.format(link))
+    os.system('pip install --upgrade {}'.format(link))
     return
 
 
@@ -29,6 +29,7 @@ scripts=['scripts/edftpy']
 
 extras_require = {
         'libxc' : ['libxc @ git+https://gitlab.com/libxc/libxc.git'],
+        'f90wrap' : ['f90wrap @ git+https://github.com/jameskermode/f90wrap.git'],
         }
 
 setup(name='edftpy',

@@ -9,4 +9,7 @@ This is firstly created at PRG March Hackathon.
  - [Numpy](https://numpy.org/doc/stable)
  - [Scipy](https://docs.scipy.org/doc/scipy/reference)
  - [ASE](http://wiki.fysik.dtu.dk/ase)
+
+### Optional (highly recommended):
  - [Libxc](https://gitlab.com/libxc/libxc)
+ - [f90wrap](https://github.com/jameskermode/f90wrap) (latest)
