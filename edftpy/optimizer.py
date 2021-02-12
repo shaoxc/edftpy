@@ -233,12 +233,15 @@ class Optimization(object):
         elif sdft == 'pdft' :
             return self.set_global_potential_pdft(**kwargs)
 
-    def set_global_potential_sdft(self, **kwargs):
+    def set_global_potential_sdft(self, approximate = 'same', **kwargs):
+        calcType = ['V']
+        if approximate == 'density3' :
+            calcType.append('D')
         if self.nsub == len(self.of_drivers):
             pass
         else :
             # initial the global_potential
-            self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = True)
+            self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = calcType)
             # static_potential = self.gsystem.total_evaluator.static_potential.copy()
         for isub in range(self.nsub + len(self.of_drivers)):
             if isub < self.nsub :
@@ -248,6 +251,7 @@ class Optimization(object):
                 isub = self.of_ids[isub - self.nsub]
             if driver is None :
                 global_potential = None
+                global_density = None
             elif driver.technique == 'OF' :
                 continue
             else :
@@ -257,7 +261,43 @@ class Optimization(object):
                     else :
                         driver.evaluator.global_potential = driver.atmp
                 global_potential = driver.evaluator.global_potential
+
+                if approximate != 'same' :
+                    if driver.evaluator.embed_potential is None :
+                        if driver.comm.rank == 0 :
+                            driver.evaluator.embed_potential = Field(grid=driver.grid)
+                        else :
+                            driver.evaluator.embed_potential = driver.atmp
+                    global_density = driver.evaluator.embed_potential
             self.gsystem.sub_value(self.gsystem.total_evaluator.embed_potential, global_potential, isub = isub)
+
+            if approximate == 'density' :
+                self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
+                if driver is not None and driver.comm.rank == 0 :
+                    factor = np.minimum(np.abs(driver.density/global_density), 1.0)
+                    global_potential *= factor
+            elif approximate == 'density2' :
+                self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
+                if driver is not None and driver.comm.rank == 0 :
+                    factor = np.minimum(np.abs(driver.density/global_density), 1.0)
+                    factor = 2.0 - factor
+                    global_potential *= factor
+            elif approximate == 'density3' :
+                self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
+                if driver is not None :
+                    if driver.comm.rank == 0 :
+                        energydensity = Field(grid=driver.grid)
+                    else :
+                        energydensity = driver.atmp
+                else :
+                    energydensity = None
+
+                self.gsystem.sub_value(self.gsystem.total_evaluator.embed_energydensity, energydensity, isub = isub)
+
+                if driver is not None and driver.comm.rank == 0 :
+                    factor = np.maximum((global_density - driver.density)/global_density ** 2, 0.0)
+                    factor = np.minimum(factor, 1E6)
+                    global_potential += factor * energydensity
         return
 
     def set_global_potential_pdft(self, approximate = 'same', **kwargs):
@@ -269,8 +309,9 @@ class Optimization(object):
             v_{PDFT}^{I}= \frac{1}{\rho}\Bigl(\rho \left(v_{ie}+v_{H}+v_{T_{s}}+v_{XC}\right) -
               \sum_{J \neq I}^{N_{s}}\rho^{J}\left(v_{H}^{J}+v_{XC}^{J}+v_{ie}^{J}+v_{T_{s}}^{J}\right)\Bigr) (2)
         """
-        approximate = 'density2'
+        # approximate = 'density2'
         # approximate = 'same'
+        approximate = 'density3'
 
         self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = True)
 
@@ -278,7 +319,7 @@ class Optimization(object):
             pass
         elif approximate == 'density' :
             self.gsystem.total_evaluator.embed_potential *= self.gsystem.density
-        elif approximate == 'density2' :
+        elif approximate == 'density2' or approximate == 'density3' :
             pass
         else :
             raise AttributeError("{} not supported now".format(approximate))
@@ -307,7 +348,7 @@ class Optimization(object):
                 if driver is not None :
                     if driver.technique == 'OF' or driver.comm.rank == 0 :
                         extpot *= driver.density
-            elif approximate == 'density2' :
+            elif approximate == 'density2' or approximate == 'density3' :
                 self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
                 if driver is not None :
                     if driver.technique == 'OF' or driver.comm.rank == 0 :
@@ -329,7 +370,15 @@ class Optimization(object):
             else :
                 global_potential = driver.evaluator.global_potential
             self.gsystem.sub_value(self.gsystem.total_evaluator.embed_potential, global_potential, isub = isub)
+            if approximate == 'density3' :
+                if driver is not None :
+                    potential = global_potential.copy()
+                self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
             if driver is not None :
+                if approximate == 'density3' :
+                    if driver.technique == 'OF' or driver.comm.rank == 0 :
+                        factor = np.minimum(np.abs(driver.density/global_potential), 1.0)
+                        driver.evaluator.global_potential = potential * factor
                 driver.evaluator.embed_potential = driver.evaluator.global_potential
         return
 
@@ -463,9 +512,11 @@ class Optimization(object):
                 total_energy = np.sum(self.gsystem.total_evaluator.embed_potential * self.gsystem.density) * self.gsystem.grid.dV
                 edict['EMB'] = Functional(name = 'ZERO', energy=total_energy + 0, potential=None)
             else :
-                total_func= self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], olevel = 0)
-                edict['E_GLOBAL'] = total_func
-                total_energy = total_func.energy.copy()
+                edict = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True, olevel = 0)
+                total_energy = edict.pop('TOTAL').energy
+                # total_func= self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], olevel = 0)
+                # edict['E_GLOBAL'] = total_func
+                # total_energy = total_func.energy.copy()
 
         etotal, elist = self.get_energy(self.gsystem.density, total_energy, olevel = 0)
 

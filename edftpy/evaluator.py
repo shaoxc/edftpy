@@ -221,8 +221,9 @@ class TotalEvaluator(Evaluator):
         self.embed_keys = embed_keys
         self.embed_potential = None
         self.static_potential = None
+        self.embed_energydensity= None
 
-    def get_embed_potential(self, rho, gaussian_density = None, embed_keys = [], with_global = True, **kwargs):
+    def get_embed_potential(self, rho, gaussian_density = None, embed_keys = [], with_global = True, calcType = ['V'], **kwargs):
         self.embed_potential = None
         if embed_keys :
             embed_keys = self.embed_keys
@@ -232,22 +233,29 @@ class TotalEvaluator(Evaluator):
             func = getattr(self, key)
             remove_global = {key : func}
             if gaussian_density is not None :
-                obj_global = func(rho + gaussian_density, calcType = ['V'], **kwargs)
+                obj_global = func(rho + gaussian_density, calcType = calcType, **kwargs)
             else :
-                obj_global = func(rho, calcType = ['V'], **kwargs)
+                obj_global = func(rho, calcType = calcType, **kwargs)
             self.embed_potential = obj_global.potential
+            if 'D' in calcType :
+                self.embed_energydensity = obj_global.energydensity
         #-----------------------------------------------------------------------
         if not with_global :
             for key in self.funcdicts:
                 if key not in embed_keys :
                     remove_global[key] = self.funcdicts[key]
         self.update_functional(remove = remove_global)
-        obj_global = self.compute(rho, calcType = ['V'], **kwargs)
+        obj_global = self.compute(rho, calcType = calcType, **kwargs)
         if self.embed_potential is None :
             self.embed_potential = obj_global.potential
         else :
             self.embed_potential += obj_global.potential
         self.update_functional(add = remove_global)
+        if 'D' in calcType :
+            if self.embed_energydensity is None :
+                self.embed_energydensity = obj_global.energydensity
+            else :
+                self.embed_energydensity += obj_global.energydensity
 
         self.static_potential = obj_global.potential
 
