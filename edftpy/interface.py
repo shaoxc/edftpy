@@ -27,6 +27,7 @@ def optimize_density_conf(config, **kwargs):
     energy = opt.energy
     sprint('Final energy (a.u.)', energy)
     sprint('Final energy (eV)', energy * ENERGY_CONV['Hartree']['eV'])
+    sprint('Final energy (eV/atom)', energy * ENERGY_CONV['Hartree']['eV']/opt.gsystem.ions.nat)
     return opt
 
 def conf2output(config, optimizer):

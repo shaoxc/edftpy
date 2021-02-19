@@ -62,7 +62,7 @@ def config_correct(config):
             config[key]['technique'] = 'KS'
 
         if not config[key]["prefix"] :
-            config[key]["prefix"] = key[1:].lower()
+            config[key]["prefix"] = key.lower()
 
         if config[key]['density']['output'] :
             if config[key]['density']['output'].startswith('.') :
