@@ -60,21 +60,16 @@ def config_correct(config):
             config[key]['technique'] = 'OF'
         else :
             config[key]['technique'] = 'KS'
-
-        if not config[key]["prefix"] :
-            config[key]["prefix"] = key.lower()
-
-        if config[key]['density']['output'] :
-            if config[key]['density']['output'].startswith('.') :
-                config[key]['density']['output'] = config[key]["prefix"] + config[key]['density']['output']
-
     return config
 
-def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, pseudo = None, **kwargs):
+def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, **kwargs):
     if isinstance(config, dict):
         pass
     elif isinstance(config, str):
         config = read_conf(config)
+    #-----------------------------------------------------------------------
+    config = config_correct(config)
+    #-----------------------------------------------------------------------
     ############################## Gsystem ##############################
     cell_change = None
     keysys = "GSYSTEM"
@@ -86,26 +81,16 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
                 names=config[keysys]["cell"]["elename"])
         except Exception:
             ions = ase_io.ase_read(config["PATH"]["cell"] +os.sep+ config[keysys]["cell"]["file"])
-
-    if optimizer is not None :
+    elif optimizer is not None :
         if not np.allclose(optimizer.gsystem.ions.pos.cell.lattice, ions.pos.cell.lattice):
-            cell_change = None # cell_change = 'cell'
-            # except PSEUDO, clean everything
-            for i, driver in enumerate(optimizer.drivers):
-                if driver is None : continue
-                driver.stop_run()
-            pseudo = optimizer.gsystem.total_evaluator.funcdicts['PSEUDO']
+            cell_change = 'cell'
+            raise AttributeError("Not support cell change")
         else :
             cell_change = 'position'
-
     config = config2nsub(config, ions)
     #-----------------------------------------------------------------------
-    config = config_correct(config)
-    #-----------------------------------------------------------------------
     graphtopo = config2graphtopo(config, graphtopo = graphtopo)
-    if graphtopo.rank == 0 :
-        config_json = config_to_json(config, ions)
-        write_conf('eDFTpy_running.json', config_json)
+    if graphtopo.rank == 0 : write_conf('eDFTpy_running.json', config)
     #-----------------------------------------------------------------------
     nr = config[keysys]["grid"]["nr"]
     spacing = config[keysys]["grid"]["spacing"] * LEN_CONV["Angstrom"]["Bohr"]
@@ -114,12 +99,10 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     max_prime = config[keysys]["grid"]["maxprime"]
     grid_scale = config[keysys]["grid"]["scale"]
     optfft = config[keysys]["grid"]["optfft"]
-    labels = set(ions.labels)
     pplist = {}
     for key in config["PP"]:
         ele = key.capitalize()
-        if ele in labels :
-            pplist[ele] = config["PATH"]["pp"] +os.sep+ config["PP"][key]
+        pplist[ele] = config["PATH"]["pp"] +os.sep+ config["PP"][key]
     #---------------------------Functional----------------------------------
     if cell_change == 'position' :
         total_evaluator = optimizer.gsystem.total_evaluator
@@ -131,10 +114,11 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         mp_global = MP(comm = graphtopo.comm, parallel = graphtopo.is_mpi)
         gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo)
     grid = gsystem.grid
-    total_evaluator = config2total_evaluator(config, ions, grid, pplist = pplist, total_evaluator=total_evaluator, cell_change = cell_change, pseudo = pseudo)
+    total_evaluator = config2total_evaluator(config, ions, grid, pplist = pplist, total_evaluator=total_evaluator, cell_change = cell_change)
     gsystem.total_evaluator = total_evaluator
     ############################## Subsytem ##############################
     subkeys = [key for key in config if key.startswith('SUB')]
+    # subkeys.sort(reverse = True)
     drivers = []
     for i, keysys in enumerate(subkeys):
         if cell_change == 'position' :
@@ -152,9 +136,9 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
             driver = config2driver(config, keysys, ions, grid, pplist, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp)
             #-----------------------------------------------------------------------
             #PSEUDO was evaluated on all processors, so directly remove from embedding
-            # if 'PSEUDO' in driver.evaluator.funcdicts :
-            #     driver.evaluator.update_functional(remove = ['PSEUDO'])
-            #     gsystem.total_evaluator.update_functional(remove = ['PSEUDO'])
+            if 'PSEUDO' in driver.evaluator.funcdicts :
+                driver.evaluator.update_functional(remove = ['PSEUDO'])
+                gsystem.total_evaluator.update_functional(remove = ['PSEUDO'])
             #-----------------------------------------------------------------------
         drivers.append(driver)
     #-----------------------------------------------------------------------
@@ -164,72 +148,52 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     for i, driver in enumerate(drivers):
         if driver is None : continue
         if (driver.technique == 'OF' and graphtopo.is_root) or (graphtopo.isub == i and graphtopo.comm_sub.rank == 0) or graphtopo.isub is None:
+            # outfile = 'edftpy_subcell_' + str(i) + '.vasp'
             outfile = driver.prefix + '.vasp'
             ase_io.ase_write(outfile, driver.subcell.ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
-            # io.write(driver.prefix +'.xsf', driver.density, driver.subcell.ions)
     if graphtopo.is_root :
         ase_io.ase_write('edftpy_cell.vasp', ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
     #-----------------------------------------------------------------------
-    # io.write('total.xsf', gsystem.density, gsystem.ions)
-    # graphtopo.comm.Barrier()
     optimization_options = config["OPT"].copy()
     optimization_options["econv"] *= ions.nat
     opt = Optimization(drivers = drivers, options = optimization_options, gsystem = gsystem)
     return opt
 
-def config2graphtopo(config, graphtopo = None):
-    """
-    Base on config generate new graphtopo
-
-    Args:
-        config: dict
-        graphtopo: graphtopo
-
-    Note :
-        If change the size of subsystem, should free the comm_sub before this.
-    """
+def config2graphtopo(config, subkeys = None, graphtopo = None):
     if graphtopo is None :
         graphtopo = GraphTopo()
+    # elif graphtopo.comm_sub is not None :
+        # # already initialize the comm_sub
+        # return graphtopo
 
-    if graphtopo.comm_sub == graphtopo.comm :
-        # if not initialize the comm_sub
+    if subkeys is None :
         subkeys = [key for key in config if key.startswith('SUB')]
-        nprocs = []
-        #OF driver set the procs to 0, make sure it use all resources
-        for key in subkeys :
-            if config[key]["technique"] == 'OF' :
-                n = 0
-            else :
-                n = config[key]["nprocs"]
-            nprocs.append(n)
-        graphtopo.distribute_procs(nprocs)
-        sprint('Communicators recreated : ', graphtopo.comm.size, comm = graphtopo.comm)
-    else :
-        sprint('Communicators already created : ', graphtopo.comm.size, comm = graphtopo.comm)
-    sprint('Number of subsystems : ', len(graphtopo.nprocs), comm = graphtopo.comm)
+    nprocs = []
+    #OF driver set the procs to 0, make sure it use all resources
+    for key in subkeys :
+        if config[key]["technique"] == 'OF' :
+            n = 0
+        else :
+            n = config[key]["nprocs"]
+        nprocs.append(n)
+    graphtopo.distribute_procs(nprocs)
+    sprint('Number of subsystems : ', len(nprocs), comm = graphtopo.comm)
     f_str = np.array2string(graphtopo.nprocs, separator=' ', max_line_width=80)
     sprint('Number of processors for each subsystem : \n ', f_str, comm = graphtopo.comm)
     return graphtopo
 
-def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= None, cell_change = None, pseudo = None):
+def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= None, cell_change = None):
     keysys = "GSYSTEM"
     pme = config["MATH"]["linearie"]
     xc_kwargs = config[keysys]["exc"].copy()
     ke_kwargs = config[keysys]["kedf"].copy()
     #---------------------------Functional----------------------------------
-    if pseudo is not None :
+    if cell_change == 'position' :
+        pseudo = total_evaluator.funcdicts['PSEUDO']
         pseudo.restart(grid=grid, ions=ions, full=False)
-
-    if cell_change == 'position' and total_evaluator is not None:
-        if pseudo is None :
-            pseudo = total_evaluator.funcdicts['PSEUDO']
-            pseudo.restart(grid=grid, ions=ions, full=False)
         total_evaluator.funcdicts['PSEUDO'] = pseudo
     else :
-        if pseudo is None :
-            pseudo = LocalPP(grid = grid, ions=ions, PP_list=pplist, PME=pme)
-            # pseudo(calcType = ['V'])
-            # exit()
+        pseudo = LocalPP(grid = grid, ions=ions, PP_list=pplist, PME=pme)
         hartree = Hartree()
         xc = XC(**xc_kwargs)
         funcdicts = {'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
@@ -241,7 +205,7 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
         total_evaluator = TotalEvaluator(**funcdicts)
     return total_evaluator
 
-def config2embed_evaluator(config, keysys, ions, grid, pplist = None, cell_change = None):
+def config2embed_evaluator(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None):
     emb_ke_kwargs = config['GSYSTEM']["kedf"].copy()
     emb_xc_kwargs = config['GSYSTEM']["exc"].copy()
     pme = config["MATH"]["linearie"]
@@ -254,7 +218,6 @@ def config2embed_evaluator(config, keysys, ions, grid, pplist = None, cell_chang
     calculator = config[keysys]["calculator"]
     #Embedding Functional---------------------------------------------------
     if exttype is not None :
-        if exttype == -1 : exttype = 0
         embed = ['KE']
         if not exttype & 1 : embed.append('PSEUDO')
         if not exttype & 2 : embed.append('HARTREE')
@@ -291,10 +254,9 @@ def config2embed_evaluator(config, keysys, ions, grid, pplist = None, cell_chang
     embed_evaluator = EmbedEvaluator(ke_evaluator = ke_evaluator, **emb_funcdicts)
     return embed_evaluator, exttype
 
-def config2evaluator_of(config, keysys, ions=None, grid=None, pplist = None, gsystem = None, cell_change = None):
+def config2evaluator_of(config, keysys, gsystem = None, optimizer = None, cell_change = None):
     ke_kwargs = config[keysys]["kedf"].copy()
     xc_kwargs = config[keysys]["exc"].copy()
-    pme = config["MATH"]["linearie"]
 
     embed = config[keysys]["embed"]
     exttype = config[keysys]["exttype"]
@@ -302,7 +264,6 @@ def config2evaluator_of(config, keysys, ions=None, grid=None, pplist = None, gsy
     opt_options = config[keysys]["opt"].copy()
 
     if exttype is not None :
-        if exttype == -1 : exttype = 1
         embed = ['KE']
         if not exttype & 1 : embed.append('PSEUDO')
         if not exttype & 2 : embed.append('HARTREE')
@@ -315,14 +276,6 @@ def config2evaluator_of(config, keysys, ions=None, grid=None, pplist = None, gsy
     if 'XC' in embed :
         xc_sub = XC(**xc_kwargs)
         sub_funcdicts['XC'] = xc_sub
-
-    if 'HARTREE' in embed :
-        hartree = Hartree()
-        sub_funcdicts['HARTREE'] = hartree
-
-    if 'PSEUDO' in embed :
-        pseudo = LocalPP(grid = grid, ions=ions,PP_list=pplist,PME=pme)
-        sub_funcdicts['PSEUDO'] = pseudo
 
     if opt_options['opt_method'] == 'full' :
         sub_funcdicts['KE'] = ke_sub
@@ -372,6 +325,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         for k, v in atomicfiles.copy().items():
             if not os.path.exists(v):
                 atomicfiles[k] = pp_path + os.sep + v
+    if not prefix :
+        prefix = keysys.lower()
     #-----------------------------------------------------------------------
     if ecut :
         ecut *= ENERGY_CONV["eV"]["Hartree"]
@@ -409,9 +364,6 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         elif initial == 'Atomic' and len(atomicfiles) > 0 :
             atomicd = AtomicDensity(files = atomicfiles)
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
-        elif initial == 'Heg' :
-            atomicd = AtomicDensity()
-            subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
         elif initial or technique == 'OF' :
             atomicd = AtomicDensity()
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
@@ -426,13 +378,9 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     else :
         raise AttributeError("!!!ERROR : NOT support ", mix_kwargs['scheme'])
     #-----------------------------------------------------------------------
-    embed_evaluator, exttype = config2embed_evaluator(config, keysys, subcell.ions, subcell.grid, pplist = pplist, cell_change = cell_change)
-    ncharge = config[keysys]["density"]["ncharge"]
-    if config[keysys]["exttype"] and config[keysys]["exttype"] < 0 :
-        exttype = config[keysys]["exttype"]
+    embed_evaluator, exttype = config2embed_evaluator(config, keysys, subcell.ions, subcell.grid, pplist = pplist, optimizer = optimizer, cell_change = cell_change)
 
-    def get_dftpy_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, margs = {}, **kwargs):
-        subcell = margs.get('subcell')
+    def get_dftpy_driver(embed_evaluator):
         opt_options['econv'] *= subcell.ions.nat
         if ecut and abs(ecut - gsystem_ecut) > 1.0 :
             if comm.size > 1 :
@@ -451,15 +399,10 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             grid_sub = None
             gsystem_driver = None
 
-        evaluator_of = config2evaluator_of(config, keysys, subcell.ions, subcell.grid, pplist = pplist, gsystem = gsystem_driver, cell_change = cell_change)
+        evaluator_of = config2evaluator_of(config, keysys, gsystem = gsystem_driver, optimizer = optimizer, cell_change = cell_change)
 
-        add = {
-                'options': opt_options,
-                'evaluator_of': evaluator_of,
-                'grid': grid_sub,
-                }
-        margs.update(add)
-        driver = DFTpyOF(**margs)
+        driver = DFTpyOF(evaluator = embed_evaluator, prefix = prefix, options = opt_options, subcell = subcell,
+                mixer = mixer, evaluator_of = evaluator_of, grid = grid_sub)
         return driver
 
     margs = {
@@ -471,11 +414,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             'exttype' : exttype,
             'base_in_file' : basefile,
             'mixer' : mixer,
-            'comm' : mp.comm,
-            'key' : keysys,
-            'ncharge' : ncharge
+            'comm' : mp.comm
             }
-
     if cell_change == 'cell' :
         raise AttributeError("Not support change the cell")
 
@@ -483,7 +423,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         driver.update_workspace(subcell)
     else :
         if calculator == 'dftpy' :
-            driver = get_dftpy_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
+            driver = get_dftpy_driver(embed_evaluator)
         elif calculator == 'pwscf' :
             driver = get_pwscf_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
         elif calculator == 'castep' :
@@ -563,6 +503,8 @@ def config2nsub(config, ions):
             raise AttributeError("{} is not supported".format(decompose['method']))
     nsubkeys = [key for key in config if key.startswith('NSUB')]
     for keysys in nsubkeys :
+        prefix = config[keysys]["prefix"]
+        if not prefix : prefix = keysys[1:].lower()
         decompose = config[keysys]["decompose"]
         if decompose['method'] != 'distance' :
             raise AttributeError("{} is not supported".format(decompose['method']))
@@ -584,51 +526,36 @@ def config2nsub(config, ions):
         if decompose['method'] == 'distance' :
             indices = from_distance_to_sub(ions_sub, cutoff = cutoff)
 
-        config = config_from_index(config, keysys, indices)
+        for i, ind in enumerate(indices) :
+            key = keysys[1:] + '_' + str(i)
+            config[key] = copy.deepcopy(config[keysys])
+            config[key]["prefix"] = prefix + '_' + str(i)
+            config[key]['decompose']['method'] = 'manual'
+            config[key]['cell']['index'] = ind
+            config[key]["nprocs"] = max(1, config[keysys]["nprocs"] // len(indices))
+
+    config = fix_json_obj(config, ions)
     return config
 
-def config_from_index(config, keysys, indices):
-    # removed last step saved subs
-    subs = config[keysys]['subs']
-    if subs is not None :
-        for key in subs : del config[key]
-
-    prefix = config[keysys]["prefix"]
-    if not prefix : prefix = keysys[1:].lower()
-    subs = []
-    for i, ind in enumerate(indices) :
-        key = keysys[1:] + '_' + str(i)
-        config[key] = copy.deepcopy(config[keysys])
-        config[key]["prefix"] = prefix + '_' + str(i)
-        config[key]['decompose']['method'] = 'manual'
-        config[key]['decompose']['adaptive'] = 'manual'
-        config[key]['cell']['index'] = ind
-        config[key]["nprocs"] = max(1, config[keysys]["nprocs"] // len(indices))
-        config[key]['subs'] = None
-        subs.append(key)
-    config[keysys]['subs'] = subs
-    if config[keysys]['decompose']['adaptive'] == 'manual' :
-        del config[keysys]
-    return config
-
-def config_to_json(config, ions):
+def fix_json_obj(config, ions):
     """
     Note :
         fix some python types that not supported by json.dump
     """
     #-----------------------------------------------------------------------
     # slice and np.ndarray
-    config_json = copy.deepcopy(config)
-    # subkeys = [key for key in config_json if key.startswith('NSUB')]
-    # for keysys in subkeys : del config_json[keysys]
-    subkeys = [key for key in config_json if key.startswith(('SUB', 'NSUB'))]
+    # subkeys = [key for key in config if key.startswith(('SUB', 'NSUB'))]
+    subkeys = [key for key in config if key.startswith('NSUB')]
+    for keysys in subkeys :
+        del config[keysys]
+    subkeys = [key for key in config if key.startswith('SUB')]
     index_w = np.arange(0, ions.nat)
     for keysys in subkeys :
-        index = config_json[keysys]["cell"]["index"]
+        index = config[keysys]["cell"]["index"]
         if isinstance(index, slice):
             index = index_w[index]
-            config_json[keysys]["cell"]["index"] = index.tolist()
+            config[keysys]["cell"]["index"] = index.tolist()
         elif isinstance(index, np.ndarray):
-            config_json[keysys]["cell"]["index"] = index.tolist()
+            config[keysys]["cell"]["index"] = index.tolist()
     #-----------------------------------------------------------------------
-    return config_json
+    return config

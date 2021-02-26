@@ -42,10 +42,10 @@ class Optimization(object):
                     self.of_ids.append(i)
 
     def guess_pconv(self):
-        if not self.options['pconv'] :
+        if self.options['pconv'] is None:
             self.options['pconv'] = self.options['econv'] / 1E2
 
-        if not self.options['pconv_sub'] :
+        if self.options['pconv_sub'] is None :
             pconv_sub = np.zeros(self.nsub)
             for i, driver in enumerate(self.drivers):
                 if driver is not None and driver.comm.rank == 0 :
@@ -140,17 +140,6 @@ class Optimization(object):
         totalrho = self.gsystem.density.copy()
         #-----------------------------------------------------------------------
         self.add_xc_correction()
-        #-----------------------------------------------------------------------
-        thr = 1E-2
-        for i, driver in enumerate(self.drivers):
-            if driver is not None and driver.technique == 'OF' and driver.options['interspace'] :
-                density = driver.density
-                nelec = density.integral()
-                mask = self.gsystem.density > thr
-                density[mask] = 0.0
-                factor = nelec / density.integral()
-                density *= factor
-        #-----------------------------------------------------------------------
         # io.write('a.xsf', totalrho, ions = self.gsystem.ions)
         energy_history = [0.0]
         #-----------------------------------------------------------------------
@@ -615,13 +604,13 @@ class Optimization(object):
         if 'XC' in self.gsystem.total_evaluator.funcdicts :
             self.gsystem.total_evaluator.funcdicts['XC'].core_density = self.gsystem.core_density
 
-    def set_kedf_params(self, level = 3, rhotol = 1E-4):
+    def set_kedf_params(self, level = 3, rhotol = 1E-4, thr_ratio = 0.1):
         """
         This is use to set the rhomax for NLKEDF embeddding
         """
         kefunc = self.gsystem.total_evaluator.funcdicts.get('KE', None)
         update = False
-        if hasattr(kefunc, 'rhomax') :
+        if kefunc.name.startswith('STV+GGA+'):
             rhomax = self.gsystem.density.amax() + rhotol
             rho0 = kefunc.rhomax
             if rho0 is None or rho0 < rhomax :
@@ -640,4 +629,50 @@ class Optimization(object):
                     if update :
                         driver.evaluator.funcdicts['KE'].rhomax = rhomax
                     driver.evaluator.funcdicts['KE'].level = level
+
+        elif kefunc.name.startswith('MIX_'):
+            if level >= 0 : return
+            rhomax_all = np.zeros(self.nsub)
+            for isub in range(self.nsub):
+                driver = self.drivers[isub]
+                if driver is None :
+                    global_potential = None
+                else :
+                    if driver.evaluator.global_potential is None :
+                        if driver.technique == 'OF' :
+                            driver.evaluator.global_potential = Field(grid=driver.grid)
+                        else :
+                            if driver.comm.rank == 0 :
+                                driver.evaluator.global_potential = Field(grid=driver.grid)
+                            else :
+                                driver.evaluator.global_potential = driver.atmp
+
+                    global_potential = driver.evaluator.global_potential
+                    global_potential[:] = 0.0
+
+                self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
+                rhomax = 0.0
+                if driver is not None :
+                    if driver.technique == 'OF' or driver.comm.rank == 0 :
+                        mask = np.abs(driver.density/global_potential - 0.5) < thr_ratio
+                        ns = np.count_nonzero(mask)
+                        if ns > 0 :
+                            rho_w = global_potential[mask]
+                            rho_s = driver.density[mask]
+                            rhomax = rho_w.max() + rho_s.max() + (rho_w - rho_s).max()
+                            rhomax *= 3.0/4.0
+                    if driver.technique == 'OF' :
+                        rhomax = driver.grid.mp.amax(rhomax)
+                    else :
+                        rhomax = driver.comm.bcast(rhomax, root = 0)
+
+                    if 'KE' in driver.evaluator.funcdicts :
+                        driver.evaluator.funcdicts['KE'].rhomax = rhomax
+
+                rhomax = self.gsystem.grid.mp.amax(rhomax)
+                rhomax_all[isub] = rhomax
+
+            rhomax = rhomax_all.mean()
+            sprint('Update the rhomax :', rhomax_all, rhomax)
+            kefunc.rhomax = rhomax
         return

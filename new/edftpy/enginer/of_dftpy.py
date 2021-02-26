@@ -13,13 +13,11 @@ from dftpy.optimization import Optimization
 from dftpy.formats.io import write
 from dftpy.constants import environ
 
-from edftpy.kedf import KEDFunctional
-
 
 class DFTpyOF(Driver):
     """description"""
     def __init__(self, evaluator = None, subcell = None, prefix = 'sub_of', options = None, mixer = None,
-            grid = None, evaluator_of = None, exttype = 3, ncharge = None, **kwargs):
+            grid = None, evaluator_of = None, **kwargs):
         default_options = {
             "opt_method" : 'full',
             "method" :'CG-HS',
@@ -34,20 +32,17 @@ class DFTpyOF(Driver):
             "c2": 0.2,
             "algorithm": "EMM",
             "vector": "Orthogonalization",
-            "interspace": False,
         }
         self.options = default_options
         if options is not None :
             self.options.update(options)
-        super().__init__(options = self.options, technique = 'OF', **kwargs)
+        super().__init__(options = self.options, technique = 'OF')
 
         self.evaluator = evaluator
         self.subcell = subcell
         self.grid_driver = grid
         self.evaluator_of = evaluator_of
         self.prefix = prefix
-        self.exttype = exttype
-        self.ncharge = ncharge
         #-----------------------------------------------------------------------
         self.mixer = mixer
         if self.options['opt_method'] == 'full' :
@@ -95,29 +90,9 @@ class DFTpyOF(Driver):
             self.mixer.restart()
         if subcell is not None :
             self.subcell = subcell
-
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
-
         if not first :
             self.options['econv'] = self.options['econv0'] / 1E4
-
-        if self.ncharge is not None and self.ncharge > 0.0:
-            nelec = self.density.integral()
-            # sprint('nelec', nelec, self.ncharge, self.exttype)
-            if self.exttype < 0 :
-                self.density[:] = (nelec - self.ncharge) / self.grid.volume
-                if self.core_density is not None :
-                    self.core_density[:] = 0.0
-
-                if self.gaussian_density is not None :
-                    self.gaussian_density_inter = self.gaussian_density.copy()
-                    self.gaussian_density[:] = 0.0
-                else :
-                    self.gaussian_density_inter = None
-            else :
-                self.density[:] *= (nelec - self.ncharge)/ nelec
-            self._format_density()
-            sprint('ncharge_sub', self.density.integral())
         return
 
     @property
@@ -153,28 +128,20 @@ class DFTpyOF(Driver):
             self.density[:]= grid_map_data(charge, grid = grid)
         return self.density
 
-    def get_extpot(self, extpot = None, with_global = True, mapping = True, with_all = False, **kwargs):
-        '''
-        This is different compare to KS-driver, because here can use different embedding from KS-driver
-        '''
-        if extpot is None :
-            self.evaluator.get_embed_potential(self.density, gaussian_density = self.subcell.gaussian_density, with_ke = True, with_global = False)
-            extpot = self.evaluator.embed_potential
-
-        if with_global :
-            self._map_gsystem()
-            gsystem = self.evaluator.gsystem
-            embed_keys = []
-            if self.evaluator.nfunc > 0 :
-                embed_keys = self.evaluator.funcdicts.keys()
-            gsystem.total_evaluator.get_embed_potential(gsystem.density, gaussian_density = gsystem.gaussian_density, embed_keys = embed_keys, with_global = with_all)
-            gsystem.add_to_sub(gsystem.total_evaluator.embed_potential, extpot)
-
-        if mapping :
-            if self.grid_driver is not None :
-                extpot = grid_map_data(extpot, grid = self.grid_driver)
-            self.evaluator_of.embed_potential = extpot
-        return extpot
+    def _get_extpot(self, with_global = False, first = False, **kwargs):
+        self._map_gsystem()
+        gsystem = self.evaluator.gsystem
+        embed_keys = []
+        if self.evaluator.nfunc > 0 :
+            embed_keys = self.evaluator.funcdicts.keys()
+        gsystem.total_evaluator.get_embed_potential(gsystem.density, gaussian_density = gsystem.gaussian_density, embed_keys = embed_keys, with_global = with_global)
+        self.evaluator.get_embed_potential(self.density, gaussian_density = self.subcell.gaussian_density, with_ke = True)
+        gsystem.add_to_sub(gsystem.total_evaluator.embed_potential, self.evaluator.embed_potential)
+        if self.grid_driver is not None :
+            self.evaluator_of.embed_potential = grid_map_data(self.evaluator.embed_potential, grid = self.grid_driver)
+        else :
+            self.evaluator_of.embed_potential = self.evaluator.embed_potential
+        return
 
     def _map_gsystem(self):
         if self.evaluator_of.gsystem is None :
@@ -189,7 +156,7 @@ class DFTpyOF(Driver):
         self.evaluator_of.set_rest_rho(self.charge)
         return
 
-    def get_density(self, res_max = None, sdft = 'sdft', **kwargs):
+    def get_density(self, res_max = None, **kwargs):
         self._iter += 1
         #-----------------------------------------------------------------------
         if res_max is None :
@@ -222,20 +189,7 @@ class DFTpyOF(Driver):
         if hamil or self._iter == 1 :
             self._format_density()
 
-        if sdft == 'pdft' :
-            if not hamil :
-                raise AttributeError("Only 'part' and 'hamiltonian' method can use PDFT")
-            extpot = self.evaluator.embed_potential
-            #-----------------------------------------------------------------------
-            if self.exttype < 0 and self.gaussian_density_inter is not None:
-                kepot = KEDFunctional(self.gaussian_density_inter, name = 'GGA', calcType = ['V'], k_str = 'REVAPBEK').potential
-                extpot += kepot
-                # extpot[self.gaussian_density_inter > 1E-5] = 0.0
-            #-----------------------------------------------------------------------
-            extpot = self.get_extpot(extpot, mapping = True, with_global = False)
-        else :
-            self.get_extpot(with_all = hamil)
-
+        self._get_extpot(with_global = hamil)
         if self.evaluator_of.nfunc > 0 and hamil:
             self.evaluator_of.embed_potential += self.evaluator_of(self.charge, calcType = ['V'], with_global = False, with_ke = False, with_embed = False).potential
 
@@ -296,7 +250,7 @@ class DFTpyOF(Driver):
         self.fermi_level = self.calc.mu
         return
 
-    def get_density_hamiltonian(self, num_eig = 1, **kwargs):
+    def get_density_hamiltonian(self, num_eig = 2, **kwargs):
         potential = self.evaluator_of.embed_potential
         hamiltonian = Hamiltonian(potential, grid = self.subcell.grid)
         self.options.update(kwargs)
@@ -321,7 +275,7 @@ class DFTpyOF(Driver):
         obj = self.evaluator_of.compute(density, calcType = ['E'], with_sub = True, with_global = False, with_embed = False, with_ke = False)
         return obj.energy
 
-    def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, sdft = 'sdft', **kwargs):
+    def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, **kwargs):
         if olevel == 0 :
             func = self.evaluator.compute(density, calcType = calcType, with_global = False)
         elif olevel == 1 :
@@ -364,11 +318,11 @@ class DFTpyOF(Driver):
     def get_stress(self, **kwargs):
         pass
 
-    def stop_run(self, **kwargs):
-        if self.comm.rank == 0 :
-            self.fileobj.close()
-
 def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = None, options = {}):
+    from dftpy.interface import OptimizeDensityConf
+    from dftpy.config import DefaultOption, OptionFormat
+    from dftpy.system import System
+
     from edftpy.pseudopotential import LocalPP
     from edftpy.kedf import KEDF
     from edftpy.hartree import Hartree

@@ -21,7 +21,7 @@ from edftpy.mpi import GraphTopo, MP
 
 class Test(unittest.TestCase):
     def test_optim(self):
-        xc_kwargs = {"x_str":'lda_x','c_str':'lda_c_pz'}
+        xc_kwargs = {"x_str":'lda_x','c_str':'lda_c_pz', 'libxc' :False}
         for method in ['full', 'part', 'hamiltonian'] :
             # Test TFvW-KE
             ke_kwargs = {'name' :'TF'}
@@ -80,6 +80,7 @@ class Test(unittest.TestCase):
         opt = Optimization(drivers = drivers, options = optimization_options)
         opt.optimize(gsystem = gsystem)
         energy = opt.energy
+        opt.stop_run()
         return energy
 
     def gen_sub_of(self, ions, grid, pplist = None, index = None, atomicd = None, xc_kwargs = {}, ke_kwargs = {}, emb_ke_kwargs = {}, gsystem = None, method = 'part', mp = None, **kwargs):
@@ -115,6 +116,9 @@ class Test(unittest.TestCase):
         options = {"method" :'CG-HS', "maxiter": 220, "econv": 1.0e-6, "ncheck": 2, "opt_method" : method}
         of_enginer_a = DFTpyOF(evaluator = embed_evaluator, mixer = mixer, options = options, subcell = subsys_a, evaluator_of = evaluator_of)
         return of_enginer_a
+
+    def tearDown(self):
+        os.remove('sub_of.out')
 
 
 if __name__ == "__main__":

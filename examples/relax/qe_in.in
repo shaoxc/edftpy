@@ -1,0 +1,10 @@
+&SYSTEM
+   ecutwfc          = 40
+   nosym            = .true.
+   occupations      = 'smearing'
+   degauss          = 0.001
+   smearing         = 'gaussian'
+/
+&ELECTRONS
+   mixing_beta      = 0.5
+/

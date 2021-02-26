@@ -29,8 +29,7 @@ class PwscfKS(Driver):
         The extpot separated into two parts : v.of_r and vltot will be a better and safe way
     """
     def __init__(self, evaluator = None, subcell = None, prefix = 'sub_ks', params = None, cell_params = None,
-            exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None, 
-            diag_conv = 1E-10, **kwargs):
+            exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None, **kwargs):
         '''
         Here, prefix is the name of the input file
         exttype :
@@ -42,7 +41,7 @@ class PwscfKS(Driver):
                     6 : hartree + xc                 : 110
                     7 : pseudo + hartree + xc        : 111
         '''
-        super().__init__(options = options, technique = 'KS', **kwargs)
+        super().__init__(options = options, technique = 'KS')
         self._input_ext = '.in'
 
         self.evaluator = evaluator
@@ -83,8 +82,6 @@ class PwscfKS(Driver):
         pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
         #-----------------------------------------------------------------------
         self.init_density()
-        self.embed = pwscfpy.pwpy_mod.embed_base()
-        self.embed.diag_conv = diag_conv
         self.update_workspace(first = True)
 
     def update_workspace(self, subcell = None, first = False, **kwargs):
@@ -107,15 +104,12 @@ class PwscfKS(Driver):
             self.mixer.restart()
         if subcell is not None :
             self.subcell = subcell
-
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
-
         if not first :
-            pos = self.subcell.ions.pos.to_crys().T
-            pwscfpy.pwpy_mod.pwpy_update_ions(self.embed, pos)
-            # get new density
-            pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
-            self.density[:] = self._format_density_invert()
+            # from qe-6.5:run_pwscf.f90
+            self.end_scf()
+            pwscfpy.extrapolation.update_pot()
+            pwscfpy.hinit1()
 
         if self.grid_driver is not None :
             grid = self.grid_driver
@@ -131,31 +125,6 @@ class PwscfKS(Driver):
 
         self.core_density_sub = Field(grid = self.grid_sub)
         self.grid_sub.scatter(self.core_density, out = self.core_density_sub)
-        #-----------------------------------------------------------------------
-        # if self.ncharge is not None :
-        #     nelec = pwscfpy.klist.get_nelec()
-        #     # if self.comm.rank == 0 :
-        #     #     self.density[:] *= (nelec + self.ncharge)/ nelec
-        #     if self.exttype < 0 :
-        #         if self.comm.rank == 0 :
-        #             self.density[:] = nelec / self.grid.volume
-        #         self.core_density[:] = 0.0
-        #         self.core_density_sub[:] = 0.0
-        #         core_charge[:] = 0.0
-        #         pwscfpy.pwpy_mod.pwpy_set_rho_core(core_charge)
-        #         self._format_density()
-        #         if self.gaussian_density is not None :
-        #             self.gaussian_density_inter = self.gaussian_density.copy()
-        #             self.gaussian_density[:] = 0.0
-        #         else :
-        #             self.gaussian_density_inter = None
-        #         self.embed.nlpp = True
-        #     # pwscfpy.klist.set_tot_charge(self.ncharge)
-        #     # pwscfpy.klist.set_nelec(nelec+self.ncharge)
-        #     # self._format_density()
-        # if self.comm.rank == 0 :
-        #     print('ncharge_sub', self.density.integral())
-        #-----------------------------------------------------------------------
 
         clean_variables(core_charge)
         return
@@ -197,9 +166,9 @@ class PwscfKS(Driver):
                 'control' :
                 {
                     'calculation' : 'scf',
-                    # 'verbosity' : 'high',
+                    'verbosity' : 'high',
                     'restart_mode' : 'from_scratch',
-                    # 'iprint' : 1,
+                    'iprint' : 1,
                     'disk_io' : 'none', # do not save anything for qe
                     },
                 'system' :
@@ -219,10 +188,9 @@ class PwscfKS(Driver):
                     },
                 'ions' :
                 {
-                    'pot_extrapolation' : 'atomic',  # extrapolation for potential from preceding ionic steps
-                    'wfc_extrapolation' : 'none'   # no extrapolation for wfc from preceding ionic steps
+                    'pot_extrapolation' : 'none',
                     },
-                'cell' : {}
+                'cell' :{}
                 })
         fix_params = {
                 'control' :
@@ -234,6 +202,11 @@ class PwscfKS(Driver):
                 {
                     'electron_maxstep' : 1, # only run 1 step for scf
                     'conv_thr' : 0.0, # set very high accuracy, otherwise pwscf mixer cause davcio (15) error
+                    },
+                'ions' :
+                {
+                    'pot_extrapolation' : 'none',  # no extrapolation for potential from preceding ionic steps
+                    'wfc_extrapolation' : 'none'   # no extrapolation for wfc from preceding ionic steps
                     },
                 }
         if not params :
@@ -320,8 +293,6 @@ class PwscfKS(Driver):
         cell_params['pseudopotentials'] = value
         # For QE, all pseudopotentials should at same directory
         params['control']['pseudo_dir'] = os.path.dirname(v2)
-        if self.ncharge is not None :
-            params['system']['tot_charge'] = self.ncharge
         fileobj = open(outfile, 'w')
         if 'kpts' not in cell_params :
             self._update_kpoints(cell_params, cards)
@@ -398,31 +369,31 @@ class PwscfKS(Driver):
         rho *= unit_vol
         return rho
 
-    def _get_extpot_serial(self, with_global = True, **kwargs):
+    def _get_extpot_serial(self, **kwargs):
         if self.comm.rank == 0 :
-            self.evaluator.get_embed_potential(self.density, gaussian_density = self.gaussian_density, with_global = with_global)
+            self.evaluator.get_embed_potential(self.density, gaussian_density = self.gaussian_density)
             extpot = self.evaluator.embed_potential
+            if self.grid_driver is not None :
+                extpot = grid_map_data(extpot, grid = self.grid_driver)
         else :
             extpot = self.atmp
+        extpot = extpot.ravel(order = 'F') * 2.0 # a.u. to Ry
         return extpot
 
-    def _get_extpot_mpi(self, with_global = True, **kwargs):
+    def _get_extpot_mpi(self, **kwargs):
         self.grid_sub.scatter(self.density, out = self.density_sub)
         if self.gaussian_density is not None :
             self.grid_sub.scatter(self.gaussian_density, out = self.gaussian_density_sub)
-        self.evaluator.get_embed_potential(self.density_sub, gaussian_density = self.gaussian_density_sub, gather = True, with_global = with_global)
+        self.evaluator.get_embed_potential(self.density_sub, gaussian_density = self.gaussian_density_sub, gather = True)
         extpot = self.evaluator.embed_potential
+        if self.grid_driver is not None and self.comm.rank == 0:
+            extpot = grid_map_data(extpot, grid = self.grid_driver)
+        extpot = extpot.ravel(order = 'F') * 2.0 # a.u. to Ry
         return extpot
 
-    def get_extpot(self, extpot = None, mapping = True, **kwargs):
-        if extpot is None :
-            # extpot = self._get_extpot_serial(**kwargs)
-            extpot = self._get_extpot_mpi(**kwargs)
-        if mapping :
-            if self.grid_driver is not None and self.comm.rank == 0:
-                extpot = grid_map_data(extpot, grid = self.grid_driver)
-            extpot = extpot.ravel(order = 'F') * 2.0 # a.u. to Ry
-        return extpot
+    def _get_extpot(self, **kwargs):
+        # return self._get_extpot_serial(**kwargs)
+        return self._get_extpot_mpi(**kwargs)
 
     def _get_extene(self, extpot, **kwargs):
         if self.comm.rank == 0 :
@@ -434,16 +405,16 @@ class PwscfKS(Driver):
             extene = self.comm.bcast(extene, root = 0)
         return extene
 
-    def get_density(self, vext = None, sdft = 'sdft', **kwargs):
+    def get_density(self, vext = None, **kwargs):
         '''
         '''
         #-----------------------------------------------------------------------
         printout = 2
         exxen = 0.0
+        extene = 0.0
         #-----------------------------------------------------------------------
         self._iter += 1
         if self._iter == 1 :
-            # The first step density mixing also need keep initial = True
             initial = True
         else :
             initial = False
@@ -454,58 +425,59 @@ class PwscfKS(Driver):
         else :
             self._format_density()
 
-        if sdft == 'pdft' :
-            extpot = self.evaluator.embed_potential
-            extpot = self.get_extpot(extpot, mapping = True)
-            self.embed.lewald = False
-        else :
-            extpot = self.get_extpot()
+        extpot = self._get_extpot()
 
         self.prev_charge[:] = self.charge
 
-        pwscfpy.pwpy_mod.pwpy_set_extpot(self.embed, extpot)
-        self.embed.exttype = self.exttype
-        self.embed.initial = initial
-        self.embed.mix_coef = -1.0
-        self.embed.finish = False
-        pwscfpy.pwpy_electrons_scf(printout, exxen, self.embed)
-        self.energy = self.embed.etotal
-        self.dp_norm = self.embed.dnorm
+        self.energy, self.dp_norm = pwscfpy.pwpy_electrons.pwpy_electrons_scf(printout, exxen, extpot, extene, self.exttype, initial)
 
         pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
         self.density[:] = self._format_density_invert()
         return self.density
 
-    def get_energy(self, olevel = 0, sdft = 'sdft', **kwargs):
-        if olevel == 0 :
-            # self._format_density() # Here, we directly use saved density
-            if sdft == 'pdft' :
-                extpot = self.evaluator.embed_potential
-                extpot = self.get_extpot(extpot, mapping = True)
-            else :
-                extpot = self.get_extpot()
-            pwscfpy.pwpy_mod.pwpy_set_extpot(self.embed, extpot)
-            pwscfpy.pwpy_calc_energies(self.embed)
-        energy = self.embed.etotal * 0.5
+    def get_energy(self, **kwargs):
+        energy = pwscfpy.pwpy_calc_energies(self.exttype) * 0.5
         return energy
 
-    def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, sdft = 'sdft', **kwargs):
+    def get_energy_potential_serial(self, density, calcType = ['E', 'V'], olevel = 1, **kwargs):
+        # olevel =0
         if 'E' in calcType :
-            energy = self.get_energy(olevel = olevel, sdft = sdft)
-
             if olevel == 0 :
+                energy = self.get_energy()
+            else : # elif olevel == 1 :
+                energy = self.energy
+
+        if self.comm.rank == 0 :
+            if olevel == 0 :
+                func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = False)
+            else :
+                func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = True)
+        else :
+            func = Functional(name = 'ZERO', energy=0.0, potential=None)
+
+        if 'E' in calcType :
+            func.energy += energy
+            if self.exttype == 0 : func.energy = 0.0
+            if self.comm.rank > 0 : func.energy = 0.0
+            fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
+            sprint(fstr, comm=self.comm, level=1)
+            pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
+            self.energy = func.energy
+        return func
+
+    def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, **kwargs):
+        if 'E' in calcType :
+            if olevel == 0 :
+                energy = self.get_energy()
                 self.grid_sub.scatter(density, out = self.density_sub)
                 func = self.evaluator(self.density_sub, calcType = ['E'], with_global = False, with_embed = False, gather = True)
             else : # elif olevel == 1 :
-                if self.comm.rank == 0 :
-                    func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = True)
-                else :
-                    func = Functional(name = 'ZERO', energy=0.0, potential=None)
+                return self.get_energy_potential_serial(density, calcType, olevel, **kwargs)
 
+        if 'E' in calcType :
             func.energy += energy
-            if sdft == 'sdft' and self.exttype == 0 : func.energy = 0.0
+            if self.exttype == 0 : func.energy = 0.0
             if self.comm.rank > 0 : func.energy = 0.0
-
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
             sprint(fstr, comm=self.comm, level=1)
             pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
@@ -513,6 +485,7 @@ class PwscfKS(Driver):
         return func
 
     def update_density(self, coef = None, **kwargs):
+        # exit()
         if self.comm.rank == 0 :
             mix_grid = False
             # mix_grid = True
@@ -539,9 +512,8 @@ class PwscfKS(Driver):
 
         if self.mix_driver is not None :
             if coef is None : coef = self.mix_driver
-            self.embed.mix_coef = coef
-            pwscfpy.pwpy_electrons_scf(0, 0, self.embed)
-            if self._iter > 1 : self.dp_norm = self.embed.dnorm
+            ene, dp_norm = pwscfpy.pwpy_electrons.pwpy_electrons_scf(0, 0, self.charge[:, 0], 0, self.exttype, 0, mix_coef = coef)
+            if self._iter > 1 : self.dp_norm = dp_norm
             pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
             self.density[:] = self._format_density_invert()
 
@@ -564,15 +536,14 @@ class PwscfKS(Driver):
         """
         pwscfpy.pwpy_forces(icalc)
         # forces = pwscfpy.force_mod.force.T
-        forces = pwscfpy.force_mod.get_array_force().T / 2.0  # Ry to a.u.
+        forces = pwscfpy.force_mod.get_array_force().T
         return forces
 
     def get_stress(self, **kwargs):
         pass
 
     def end_scf(self, **kwargs):
-        self.embed.finish = True
-        pwscfpy.pwpy_electrons_scf(0, 0, self.embed)
+        pwscfpy.pwpy_electrons.pwpy_electrons_scf(0, 0, self.charge, 0, self.exttype, 0, finish = True)
 
     def stop_run(self, status = 0, **kwargs):
         pwscfpy.pwpy_stop_run(status, **kwargs)
