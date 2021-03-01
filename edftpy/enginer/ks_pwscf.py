@@ -11,7 +11,7 @@ from dftpy.formats.ase_io import ions2ase
 from dftpy.constants import LEN_CONV, ENERGY_CONV
 
 from edftpy.mixer import LinearMixer, PulayMixer, AbstractMixer
-from edftpy.utils.common import Grid, Field, Functional
+from edftpy.utils.common import Grid, Field, Functional, Atoms
 from edftpy.utils.math import grid_map_data
 from edftpy.utils import clean_variables
 from edftpy.density import normalization_density
@@ -83,7 +83,7 @@ class PwscfKS(Driver):
         pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
         #-----------------------------------------------------------------------
         self.init_density()
-        self.embed = pwscfpy.pwpy_mod.embed_base()
+        self.embed = pwscfpy.pwpy_common.embed_base()
         self.embed.diag_conv = diag_conv
         self.update_workspace(first = True)
 
@@ -574,5 +574,48 @@ class PwscfKS(Driver):
         self.embed.finish = True
         pwscfpy.pwpy_electrons_scf(0, 0, self.embed)
 
-    def stop_run(self, status = 0, **kwargs):
+    @staticmethod
+    def stop_run(status = 0, **kwargs):
+        # what = 'all' will write wavefunctions and density
         pwscfpy.pwpy_stop_run(status, **kwargs)
+        pwscfpy.pwpy_clean_saved()
+
+    @staticmethod
+    def get_ions_from_pw():
+        alat = pwscfpy.cell_base.get_alat()
+        lattice = pwscfpy.cell_base.get_array_at() * alat
+        pos = pwscfpy.ions_base.get_array_tau().T * alat
+        atm = pwscfpy.ions_base.get_array_atm()
+        ityp = pwscfpy.ions_base.get_array_ityp()
+        nat = pwscfpy.ions_base.get_nat()
+        symbols = [1]
+        labels = []
+        for i in range(atm.shape[-1]):
+            s = atm[:,i].view('S3')[0].strip().decode("utf-8")
+            symbols.append(s)
+
+        for i in range(nat):
+            labels.append(symbols[ityp[i]])
+
+        ions = Atoms(labels=labels, pos=pos, cell=lattice, basis="Cartesian")
+        return ions
+
+    @staticmethod
+    def get_density_from_pw(ions, comm = None):
+        nr = np.zeros(3, dtype = 'int32')
+        pwscfpy.pwpy_mod.pwpy_get_grid(nr)
+
+        if comm is None or comm.rank == 0 :
+            rho = np.zeros((np.prod(nr), 1), order = 'F')
+        else :
+            rho = np.zeros(3)
+
+        pwscfpy.pwpy_mod.pwpy_get_rho(rho)
+
+        if comm is None or comm.rank == 0 :
+            grid = Grid(ions.pos.cell.lattice, nr)
+            density = Field(grid=grid, direct=True, data = rho, order = 'F')
+        else :
+            density = np.zeros(1)
+
+        return density
