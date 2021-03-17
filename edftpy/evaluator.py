@@ -46,6 +46,8 @@ class Evaluator(AbsFunctional):
                 results = obj
             else :
                 results += obj
+            if 'E' in calcType and split and gather :
+                obj.energy = density.mp.vsum(obj.energy)
             eplist[key] = obj
         if results is None :
             results = Functional(name = 'ZERO')
@@ -53,13 +55,14 @@ class Evaluator(AbsFunctional):
                 results.energy = 0.0
             if 'V' in calcType :
                 results.potential = Field(grid=density.grid, rank=1, direct=True)
+
+        if 'E' in calcType and gather :
+            results.energy = density.mp.vsum(results.energy)
         #-----------------------------------------------------------------------
         if split :
             eplist['TOTAL'] = results
             return eplist
         #-----------------------------------------------------------------------
-        if 'E' in calcType and gather :
-            results.energy = density.mp.vsum(results.energy)
         return results
 
     def update_functional(self, remove = [], add = {}):
@@ -112,24 +115,43 @@ class EmbedEvaluator(Evaluator):
     def __call__(self, rho, calcType=["E","V"], with_ke = True, with_embed = False, **kwargs):
         return self.compute(rho, calcType, with_ke, with_embed, **kwargs)
 
-    def compute(self, rho, calcType=["E","V"], with_ke = True, with_embed = False, gather = False, **kwargs):
+    def compute(self, rho, calcType=["E","V"], with_ke = True, with_embed = False, gather = False, split = False, **kwargs):
+        eplist = {}
+        obj = None
         if with_embed :
             potential = self.embed_potential
             energy = np.sum(rho * self.embed_potential) * rho.grid.dV
             obj = Functional(name = 'Embed', energy=energy, potential=potential)
         elif self.nfunc > 0 :
-            obj = super().compute(rho, calcType = calcType, gather = False, **kwargs)
+            obj = super().compute(rho, calcType = calcType, gather = False, split = split, **kwargs)
+            if split :
+                eplist = obj
+                obj = eplist.pop('TOTAL')
             obj *= -1.0
-        else :
+
+        if self.ke_evaluator is not None and with_ke:
+            obj_ke = self.ke_evaluator(rho, calcType = calcType, **kwargs)
+            if obj is None :
+                obj = obj_ke
+            else :
+                obj += obj_ke
+
+            if split : eplist['KEE'] = obj_ke
+
+        if obj is None :
             obj = Functional(name = 'ZERO', energy=0.0)
             if 'V' in calcType :
                 obj.potential = Field(grid=rho.grid, rank=1, direct=True)
 
-        if self.ke_evaluator is not None and with_ke:
-            obj += self.ke_evaluator(rho, calcType = calcType, **kwargs)
-
         if 'E' in calcType and gather :
             obj.energy = rho.mp.vsum(obj.energy)
+
+        if split :
+            if gather :
+                for key, item in eplist.items() :
+                    eplist[key].energy = rho.mp.vsum(item.energy)
+            eplist['TOTAL'] = obj
+            return eplist
         return obj
 
 class EvaluatorOF(Evaluator):

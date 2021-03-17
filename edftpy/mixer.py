@@ -2,6 +2,7 @@ import numpy as np
 import scipy.special as sp
 from scipy import linalg
 from abc import ABC, abstractmethod
+from dftpy.constants import ZERO
 
 from .utils.common import Field
 from .utils.math import fermi_dirac
@@ -88,10 +89,13 @@ class SpecialPrecondition :
         b0 = self.predcoef[0] ** 2
         recip_grid = self.grid.get_reciprocal()
         gg = recip_grid.gg
-        gg[0, 0, 0] = 1.0
+        qflag = True if gg[0, 0, 0] < ZERO else False
+        if qflag :
+            gg[0, 0, 0] = 1.0
         preg = b0/gg + 1.0
-        gg[0, 0, 0] = 0.0
-        preg[0, 0, 0] = 0.0
+        if qflag :
+            gg[0, 0, 0] = 0.0
+            preg[0, 0, 0] = 0.0
         preg = Field(recip_grid, data=preg, direct=False)
         matrix = preg
         return matrix
@@ -103,10 +107,13 @@ class SpecialPrecondition :
         recip_grid = self.grid.get_reciprocal()
         gg = recip_grid.gg
         q = recip_grid.q
-        q[0, 0, 0] = 1.0
+        qflag = True if q[0, 0, 0] < ZERO else False
+        if qflag :
+            q[0, 0, 0] = 1.0
         preg = (q0 * np.sin(q*rs)/(epsi*q*rs)+gg) / (q0+gg)
-        q[0, 0, 0] = 0.0
-        preg[0, 0, 0] = 1.0
+        if qflag :
+            q[0, 0, 0] = 0.0
+            preg[0, 0, 0] = 1.0
         preg = Field(recip_grid, data=preg, direct=False)
         matrix = preg
         return matrix
@@ -126,9 +133,11 @@ class SpecialPrecondition :
         if residual is not None :
             res = Field(self.grid, data=residual, direct=True)
             results += res.fft()*self.matrix
-        if self.mask.size > 1 :
+        #-----------------------------------------------------------------------
+        if nin.mp.asum(self.mask) > 0 :
             # Linear mixing for high-frequency part
             results[self.mask] = nin_g[self.mask]*(1-coef) + coef * nout.fft()[self.mask]
+        #-----------------------------------------------------------------------
         return results.ifft(force_real=True)
 
     def add(self, density, residual = None, grid = None):
@@ -278,9 +287,12 @@ class PulayMixer(AbstractMixer):
             b = np.empty((ns))
             for i in range(ns):
                 for j in range(i + 1):
-                    amat[i, j] = np.sum(self.dr_mat[i] * self.dr_mat[j])
+                    amat[i, j] = (self.dr_mat[i] * self.dr_mat[j]).sum()
                     amat[j, i] = amat[i, j]
-                b[i] = -np.sum(self.dr_mat[i] * r)
+                b[i] = -(self.dr_mat[i] * r).sum()
+
+            amat = nin.mp.vsum(amat)
+            b = nin.mp.vsum(b)
 
             try:
                 x = linalg.solve(amat, b, assume_a = 'sym')
@@ -316,32 +328,6 @@ class PulayMixer(AbstractMixer):
         self.prev_residual = r.copy()
 
         return results
-
-    def get_direction(self, r):
-        ns = len(self.dr_mat)
-        amat = np.empty((ns, ns))
-        b = np.empty((ns))
-        for i in range(ns):
-            for j in range(i + 1):
-                amat[i, j] = np.sum(self.dr_mat[i] * self.dr_mat[j])
-                amat[j, i] = amat[i, j]
-            b[i] = -np.sum(self.dr_mat[i] * r)
-
-        try:
-            x = linalg.solve(amat, b, assume_a = 'sym')
-            # sprint('x', x, comm=self.comm)
-            for i in range(ns):
-                if i == 0 :
-                    drho = x[i] * self.dn_mat[i]
-                    res = r + x[i] * self.dr_mat[i]
-                else :
-                    drho += x[i] * self.dn_mat[i]
-                    res += x[i] * self.dr_mat[i]
-            return (res, drho)
-        except Exception :
-            sprint('!WARN : Change to linear mixer', comm=self.comm)
-            sprint('amat', amat, comm=self.comm)
-            return False
 
 
 class BroydenMixer(AbstractMixer):

@@ -26,7 +26,7 @@ def optimize_density_conf(config, **kwargs):
     opt.optimize()
     #-----------------------------------------------------------------------
     kefunc = opt.gsystem.total_evaluator.funcdicts.get('KE', None)
-    if kefunc.name.startswith('MIX_'):
+    if kefunc is not None and kefunc.name.startswith('MIX_'):
         opt.set_kedf_params(level = -1)
         for i, driver in enumerate(opt.drivers):
             if driver is None : continue

@@ -495,7 +495,8 @@ class PwscfKS(Driver):
 
             if olevel == 0 :
                 self.grid_sub.scatter(density, out = self.density_sub)
-                func = self.evaluator(self.density_sub, calcType = ['E'], with_global = False, with_embed = False, gather = True)
+                edict = self.evaluator(self.density_sub, calcType = ['E'], with_global = False, with_embed = False, gather = True, split = True)
+                func = edict.pop('TOTAL')
             else : # elif olevel == 1 :
                 if self.comm.rank == 0 :
                     func = self.evaluator(density, calcType = ['E'], with_global = False, with_embed = True)
@@ -506,7 +507,14 @@ class PwscfKS(Driver):
             if sdft == 'sdft' and self.exttype == 0 : func.energy = 0.0
             if self.comm.rank > 0 : func.energy = 0.0
 
-            fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
+            if olevel == 0 :
+                fstr = format("Energy information", "-^80") + '\n'
+                for key, item in edict.items():
+                    fstr += "{:>12s} energy: {:22.15E} (eV) = {:22.15E} (a.u.)\n".format(key, item.energy* ENERGY_CONV["Hartree"]["eV"], item.energy)
+                fstr += "-" * 80 + '\n'
+            else :
+                fstr = ''
+            fstr += f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
             sprint(fstr, comm=self.comm, level=1)
             pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
             self.energy = func.energy

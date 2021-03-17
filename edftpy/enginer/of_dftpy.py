@@ -50,13 +50,12 @@ class DFTpyOF(Driver):
         self.ncharge = ncharge
         #-----------------------------------------------------------------------
         self.mixer = mixer
-        if self.options['opt_method'] == 'full' :
-            if not isinstance(self.mixer, AbstractMixer):
-                self.mixer = LinearMixer(predtype = None, coef = 1.0, predecut = None, delay = 1)
-        elif self.mixer is None :
+        if self.mixer is None :
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = 0.2, predecut = 0, delay = 1)
-        elif isinstance(self.mixer, float):
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = self.mixer, predecut = 0, delay = 1)
+        # elif isinstance(self.mixer, float):
+        #     self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = self.mixer, predecut = 0, delay = 1)
+        if not isinstance(self.mixer, AbstractMixer):
+            self.mixer = LinearMixer(predtype = None, coef = 1.0, predecut = None, delay = 1)
         #-----------------------------------------------------------------------
         self.density = self.subcell.density
         self.init_density()
@@ -342,7 +341,8 @@ class DFTpyOF(Driver):
         rmax = r.amax()
         fstr = f'res_norm({self.prefix}): {self._iter}  {rmax}  {self.residual_norm}'
         sprint(fstr, comm=self.comm)
-        if self.options['opt_method'] == 'full' :
+        # if self.options['opt_method'] == 'full' :
+        if self.mixer is None :
             rho = self.charge
         else :
             rho = self.mixer(self.prev_charge, self.charge, **kwargs)

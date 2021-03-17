@@ -609,6 +609,7 @@ class Optimization(object):
         This is use to set the rhomax for NLKEDF embeddding
         """
         kefunc = self.gsystem.total_evaluator.funcdicts.get('KE', None)
+        if kefunc is None : return
         update = False
         if kefunc.name.startswith('STV+GGA+'):
             rhomax = self.gsystem.density.amax() + rhotol
