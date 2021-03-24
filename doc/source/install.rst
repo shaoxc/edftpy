@@ -12,6 +12,7 @@ Requirements
 * SciPy_ 0.18 or newer
 * DFTpy_ latest
 * ASE_  3.21.1 or newer
+* PWpy_ 0.0.1 to use Quantum ESPRESSO as KS-DFT engine (others available upon request)
 
 Optional:
 
@@ -27,6 +28,7 @@ Optional:
 .. _ASE: https://gitlab.com/ase/ase
 .. _DFTpy: https://gitlab.com/pavanello-research-group/dftpy
 .. _f90wrap: https://github.com/jameskermode/f90wrap
+.. _PWpy: 
 
 
 Installation from source
