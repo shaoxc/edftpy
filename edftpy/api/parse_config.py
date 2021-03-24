@@ -417,6 +417,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
             subcell.density[:] = dftpy_opt(subcell.ions, subcell.density, pplist)
     #-----------------------------------------------------------------------
+    if mix_kwargs['predecut'] : mix_kwargs['predecut'] *= ENERGY_CONV["eV"]["Hartree"]
     if mix_kwargs['scheme'] == 'Pulay' :
         mixer = PulayMixer(**mix_kwargs)
     elif mix_kwargs['scheme'] == 'Linear' :

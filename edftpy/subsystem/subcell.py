@@ -8,6 +8,7 @@ from edftpy.utils.common import Field, Grid, Atoms, Coord
 from ..utils.math import gaussian
 from ..density import get_3d_value_recipe
 from edftpy.mpi import sprint
+from dftpy.formats import io
 
 class SubCell(object):
     def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, full = False, gaussian_options = None, nr = None, **kwargs):
@@ -209,6 +210,9 @@ class SubCell(object):
 
         nc = self._gaussian_density.integral()
         sprint('fake : ', nc, ' error : ', nc - ncharge, comm=self.comm)
+
+        # if self.comm.rank == 0 :
+        #     io.write('a.xsf', self._gaussian_density, ions = self.ions)
 
         # if ncharge > 1E-3 :
             # factor = ncharge / (self._gaussian_density.integral())

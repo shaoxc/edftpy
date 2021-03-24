@@ -1,6 +1,7 @@
 import copy
 import numpy as np
 from functools import partial
+from dftpy.constants import LEN_CONV, ENERGY_CONV
 
 from ..mixer import LinearMixer, PulayMixer, AbstractMixer
 from ..utils.math import grid_map_data
@@ -322,16 +323,27 @@ class DFTpyOF(Driver):
 
     def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, sdft = 'sdft', **kwargs):
         if olevel == 0 :
-            func = self.evaluator.compute(density, calcType = calcType, with_global = False)
+            edict = self.evaluator.compute(density, calcType = calcType, with_global = False, split = True)
+            func = edict.pop('TOTAL')
         elif olevel == 1 :
             func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False)
         else : # elif olevel == 2 :
             func = self.evaluator.compute(density, calcType = calcType, with_global = False, with_ke = False, with_embed = True)
         func_driver = self.evaluator_of.compute(self.charge, calcType = ['E'], with_sub = True, with_global = False, with_embed = False, with_ke = True)
         if 'E' in calcType :
+            if olevel == 0 :
+                fstr = format("Energy information", "-^80") + '\n'
+                for key, item in edict.items():
+                    energy = self.grid.mp.asum(item.energy)
+                    fstr += "{:>12s} energy: {:22.15E} (eV) = {:22.15E} (a.u.)\n".format(key, energy* ENERGY_CONV["Hartree"]["eV"], item.energy)
+                fstr += "-" * 80 + '\n'
+            else :
+                fstr = ''
             func.energy += func_driver.energy
-            fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
-            sprint(fstr, comm=self.comm)
+            fstr += f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
+            sprint(fstr, comm=self.comm, level=1)
+            if self.fileobj :
+                self.fileobj.write(fstr + '\n')
         return func
 
     def update_density(self, **kwargs):
