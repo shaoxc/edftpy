@@ -342,6 +342,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     pp_path = config["PATH"]["pp"]
     max_prime_global = config['GSYSTEM']["grid"]["maxprime"]
     grid_scale_global = config['GSYSTEM']["grid"]["scale"]
+    optfft_global = config['GSYSTEM']["grid"]["optfft"]
 
     # print('keysys', keysys, config[keysys])
     # print_conf(config[keysys])
@@ -368,6 +369,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     kpoints = config[keysys]["kpoints"]
     exttype = config[keysys]["exttype"]
     atomicfiles = config[keysys]["density"]["atomic"].copy()
+    optfft = config[keysys]["grid"]["optfft"]
     if atomicfiles :
         for k, v in atomicfiles.copy().items():
             if not os.path.exists(v):
@@ -398,7 +400,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         grid_sub = driver.subcell.grid
     else :
         grid_sub = None
-    subcell = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = True, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale, nr = nr, mp = mp)
+    subcell = SubCell(ions, grid, index = index, cellcut = cellcut, cellsplit = cellsplit, optfft = optfft, gaussian_options = gaussian_options, grid_sub = grid_sub, max_prime = max_prime, scale = grid_scale, nr = nr, mp = mp)
 
     if cell_change == 'position' :
         if subcell.density.shape == driver.density.shape :
@@ -443,7 +445,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
                 gsystem_driver = optimizer.evaluator_of.gsystem
             else :
                 total_evaluator = None
-                gsystem_driver = GlobalCell(ions, grid = None, ecut = ecut, full = full, optfft = True, max_prime = max_prime_global, scale = grid_scale_global, mp = mp)
+                gsystem_driver = GlobalCell(ions, grid = None, ecut = ecut, full = full, optfft = optfft_global, max_prime = max_prime_global, scale = grid_scale_global, mp = mp)
             total_evaluator = config2total_evaluator(config, ions, gsystem_driver.grid, pplist = pplist, total_evaluator=total_evaluator, cell_change = cell_change)
             gsystem_driver.total_evaluator = total_evaluator
             grid_sub = gsystem_driver.grid

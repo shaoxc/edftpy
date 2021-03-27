@@ -1,5 +1,9 @@
 {
 	"JOB": {
+		"comment": {
+			"type": "str",
+			"default": "Control of the running job."
+		},
 		"task": {
 			"type": "cstr",
 			"default": "Optdensity",
@@ -14,50 +18,62 @@
 		}
 	},
 	"PATH": {
+		"comment": {
+			"type": "str",
+			"default": "Specify the path of needed files."
+		},
 		"pp": {
+			"comment": "The path of pseudopotential.",
+			"options": "",
 			"type": "str",
 			"default": "./"
 		},
 		"cell": {
+			"comment": "The path of input structure.",
+			"options": "",
 			"type": "str",
 			"default": "./"
 		}
 	},
 	"MATH": {
-		"linearii": {
-			"type": "bool",
-			"default": true
-		},
-		"linearie": {
-			"type": "bool",
-			"default": true
-		},
-		"reuse": {
-			"type": "bool",
-			"default": true
+		"dftpy": {
+			"type": "str",
+			"default": "math",
+			"comment": "twostep, multistep"
 		}
 	},
 	"PP": {
-		"type" : "cdict",
-		"default": {}
+		"dftpy": {
+			"type": "str",
+			"default": "pp"
+		}
 	},
 	"OUTPUT": {
+		"comment": {
+			"type": "str",
+			"default": "Control the output."
+		},
 		"dftpy": {
 			"type": "str",
 			"default": "output",
-			"comment": "Same config of `DFTpy`"
+			"comment": "stress"
 		},
 		"electrostatic_potential": {
 			"type": "str",
 			"default": null,
 			"comment": "Output of electrostatic_potential"
 		}
-
 	},
 	"OPT": {
+		"comment": {
+			"type": "str",
+			"default": "Control the charge density optimization of global system."
+		},
 		"method": {
 			"type": "str",
-			"default": "Normal"
+			"options": "Normal",
+			"default": "Normal",
+			"comment": "Charge density optimization method"
 		},
 		"econv": {
 			"type": "float",
@@ -78,41 +94,38 @@
 		},
 		"ncheck": {
 			"type": "int",
+			"comment": "How many step satisfy the convergence",
 			"default": 2
 		},
 		"olevel": {
 			"type": "int",
+			"comment": "The level of output energy, large will faster.",
+			"note": "Only set 0, the energy of each cycle is usefull",
 			"default": 2
 		},
 		"sdft": {
 			"type": "str",
+			"options": "sdft, pdft",
+			"comment": "Subsytem DFT or Partition DFT",
 			"default": "sdft"
 		}
 	},
 	"GSYSTEM": {
 		"cell": {
+			"dftpy": {
+				"type": "str",
+				"default": "cell",
+				"comment": "cellfile"
+			},
 			"file": {
 				"type": "str",
-				"default": null
-			},
-			"elename": {
-				"type": "cstrlist",
-				"default": "Al"
-			},
-			"zval": {
-				"type": "floatlist",
-				"default": null
-			},
-			"format": {
-				"type": "str",
-				"default": null
+				"default": "POSCAR"
 			}
 		},
 		"grid": {
 			"dftpy": {
 				"type": "str",
-				"default": "grid",
-				"comment": "Same config of `DFTpy`"
+				"default": "grid"
 			},
 			"optfft": {
 				"type": "bool",
@@ -121,28 +134,43 @@
 			}
 		},
 		"density": {
+			"comment": {
+				"type": "str",
+				"default": "Control the charge density."
+			},
 			"nspin": {
+				"comment": "non/spin-polarized calculation",
+				"options": "1, 2",
 				"type": "int",
 				"default": 1
 			},
+			"ncharge": {
+				"type": "float",
+				"comment": "Total charge of the system",
+				"default": null
+			},
 			"magmom": {
 				"type": "float",
+				"comment": "Total electronic magnetization.",
 				"default": 0
 			},
 			"file": {
 				"type": "str",
+				"options": "",
+				"comment": "The input density file for initial density",
 				"default": null
 			},
 			"output": {
 				"type": "str",
+				"options": "",
+				"comment": "The output file or format of density. The name starts with '.' represent the format.",
 				"default": null
 			}
 		},
 		"exc": {
 			"dftpy": {
 				"type": "str",
-				"default": "exc",
-				"comment": "Same config of `DFTpy`"
+				"default": "exc"
 			},
 			"xc": {
 				"type": "str",
@@ -152,8 +180,7 @@
 		"kedf": {
 			"dftpy": {
 				"type": "str",
-				"default": "kedf",
-				"comment": "Same config of `DFTpy`"
+				"default": "kedf"
 			},
 			"kedf": {
 				"type": "str",
@@ -165,13 +192,11 @@
 			},
 			"delta": {
 				"type": "float",
-				"default": 0.3,
-				"comment": "The gap of spline"
+				"default": 0.3
 			},
 			"kdd": {
 				"type": "int",
-				"default": 1,
-				"comment": "kernel density denpendent"
+				"default": 1
 			},
 			"k_str": {
 				"type": "str",
@@ -180,28 +205,286 @@
 		}
 	},
 	"SUB": {
+		"cell": {
+			"comment": {
+				"type": "str",
+				"default": "Structure information of system.",
+				"note": "Subsytem(`SUB`_) use :ref:`cell-index<cell-index>` to define the atoms in the subsytem"
+			},
+			"dftpy": {
+				"type": "str",
+				"default": "cell",
+				"comment": "cellfile"
+			},
+			"file": {
+				"type": "str",
+				"comment": "The file name of input structure. ",
+				"default": null
+			},
+			"split": {
+				"type": "floatlist",
+				"comment": "Cut small cell for each direction (scaled).",
+				"default": null
+			},
+			"cut": {
+				"type": "floatlist",
+				"comment": "Base on the subsystem atoms build the small cell, and add the vaccum on each direction. 0 means use whole cell.",
+				"default": 0
+			},
+			"index": {
+				"type": "intlist",
+				"default": null,
+				"comment": "The indices of the atoms, support integer and slice.",
+				"note": "If not only a slice, you should given the stop for the slice."
+			}
+		},
+		"grid": {
+			"comment": {
+				"type": "str",
+				"default": "Control the grid."
+			},
+			"dftpy": {
+				"type": "str",
+				"default": "grid"
+			},
+			"ecut": {
+				"type": "float",
+				"default": null
+			},
+			"optfft": {
+				"type": "bool",
+				"default": true,
+				"comment": "Optimize the number of grid points"
+			}
+		},
+		"density": {
+			"comment": {
+				"type": "str",
+				"default": "Control the charge density."
+			},
+			"nspin": {
+				"comment": "non/spin-polarized calculation",
+				"options": "1, 2",
+				"type": "int",
+				"default": 1
+			},
+			"ncharge": {
+				"type": "float",
+				"comment": "Total charge of the system",
+				"default": null
+			},
+			"magmom": {
+				"type": "float",
+				"comment": "Total electronic magnetization.",
+				"default": 0
+			},
+			"file": {
+				"type": "str",
+				"options": "",
+				"comment": "The input density file for initial density",
+				"default": null
+			},
+			"output": {
+				"type": "str",
+				"options": "",
+				"comment": "The output file or format of density. The name starts with '.' represent the format.",
+				"default": null
+			},
+			"initial": {
+				"type": "cstr",
+				"default": null,
+				"options": "None, Atomic, Read, Ofdft, Heg",
+				"comment": "For OFDFT subsystem must given one method except `None`."
+			},
+			"atomic": {
+				"comment": "If `initial` set the Atomic, here need give each elements atomic density",
+				"type": "cdict",
+				"default": {}
+			},
+			"use_gaussians": {
+				"type": "bool",
+				"default": false,
+				"options": "True, False",
+				"comment": " It will replaces the core densities of the surrounding fragments with a gaussian. This is to avoid problems of electrons leaking in the core region of surrounding fragments when hard pseudopotentials are employed."
+			},
+			"gaussians_rcut": {
+				"type": "float",
+				"default": 3,
+				"options": "",
+				"comment": "The cutoff of distance.",
+				"unit": "Angstrom"
+			},
+			"gaussians_sigma": {
+				"options": "",
+				"comment": "The sigma of gaussians.",
+				"type": "float",
+				"default": 0.3
+			},
+			"gaussians_scale": {
+				"options": "",
+				"comment": "The scale of each elements. If not set, will use the number of core electrons.",
+				"type": "cdict",
+				"default": {}
+			}
+		},
+		"exc": {
+			"comment": {
+				"type": "str",
+				"default": "Control the exchange-correlation functional."
+			},
+			"dftpy": {
+				"type": "str",
+				"default": "exc"
+			},
+			"xc": {
+				"type": "str",
+				"default": null
+			},
+			"x_str": {
+				"type": "str",
+				"default": null
+			},
+			"c_ctr": {
+				"type": "str",
+				"default": null
+			}
+		},
+		"kedf": {
+			"dftpy": {
+				"type": "str",
+				"default": "kedf"
+			}
+		},
 		"decompose": {
+			"comment": {
+				"type": "str",
+				"default": "The way to decompose the subsytem to more subsytems"
+			},
 			"method": {
 				"type": "str",
 				"default": "manual",
-				"comment": "The SCF driver of subsystem",
+				"comment": "'manual' means use the given subsystem; 'distance' means base on the distance of atoms to decompose the subsytem.",
 				"options": "manual, distance"
 			},
 			"adaptive": {
 				"type": "str",
 				"default": "manual",
-				"comment": "The decompose method after first step, 'manual' will remove all 'NSUB_'",
+				"comment": "The decompose method after first step, 'manual' will remove all 'NSUB'",
 				"options": "manual, distance"
 			},
-			"rcut":{
+			"rcut": {
 				"type": "float",
 				"default": 3,
+				"comment": "The cutoff for decompose the subsytems.",
 				"unit": "Angstrom"
 			},
-			"radius":{
-				"type" : "cfdict",
+			"radius": {
+				"type": "cfdict",
 				"default": {},
+				"comment": "The radius of each elements for decompose the subsytems.",
 				"unit": "Angstrom"
+			}
+		},
+		"mix": {
+			"comment": {
+				"type": "str",
+				"default": "Control the charge density mixing."
+			},
+			"scheme": {
+				"type": "str",
+				"default": null,
+				"comment": "Density mixing scheme, default is with driver's own scheme.",
+				"options": "Pulay, Linear"
+			},
+			"predtype": {
+				"type": "str",
+				"comment": "The preconditioning method",
+				"options": "kerker, inverse_kerker, resta",
+				"default": "kerker"
+			},
+			"predcoef": {
+				"type": "floatlist",
+				"comment": "The parameters for preconditioning",
+				"options": "",
+				"default": "1.0 1.0 1.0"
+			},
+			"predecut": {
+				"type": "float",
+				"comment": "The preconditioning energy cutoff.",
+				"options": "",
+				"default": null
+			},
+			"maxm": {
+				"type": "int",
+				"comment": "Maximum of iterations used for mixing.",
+				"options": "",
+				"default": 7
+			},
+			"coef": {
+				"type": "float",
+				"comment": "",
+				"options": "The mixing parameter.",
+				"default": "0.5"
+			},
+			"delay": {
+				"type": "int",
+				"comment": "Delay several step to mixing the density",
+				"options": "",
+				"default": "2"
+			},
+			"restarted": {
+				"type": "bool",
+				"comment": "Restart the mixer after several step.",
+				"options": "True, False",
+				"default": false
+			},
+			"kf": {
+				"type": "str",
+				"comment": "Similar as predcoef, not use now.",
+				"options": "",
+				"default": "auto"
+			}
+		},
+		"opt": {
+			"comment": {
+				"type": "str",
+				"default": "Control the charge density optimization for subsytem."
+			},
+			"dftpy": {
+				"type": "str",
+				"default": "opt"
+			},
+			"opt_method": {
+				"type": "str",
+				"default": "full"
+			},
+			"maxiter": {
+				"type": "int",
+				"default": 800
+			}
+		},
+		"kpoints": {
+			"comment": {
+				"type": "str",
+				"default": "Set the kpoints for subsytem."
+			},
+			"method": {
+				"type": "str",
+				"options": "",
+				"comment": "The method for generate the kpoints",
+				"default": "auto"
+			},
+			"grid": {
+				"type": "intlist",
+				"options": "",
+				"comment": "The grid of kpoints",
+				"default": null
+			},
+			"offset": {
+				"type": "floatlist",
+				"options": "",
+				"comment": "The offset of kpoints",
+				"default": null
 			}
 		},
 		"subs": {
@@ -230,208 +513,25 @@
 			"type": "strlist",
 			"default": "KE  XC",
 			"comment": "The embedding potential",
-			"options": "KE  XC"
-		},
-		"cell": {
-			"file": {
-				"type": "str",
-				"default": null
-			},
-			"elename": {
-				"type": "cstrlist",
-				"default": "Al"
-			},
-			"zval": {
-				"type": "floatlist",
-				"default": null
-			},
-			"format": {
-				"type": "str",
-				"default": null
-			},
-			"split": {
-				"type": "floatlist",
-				"default": null
-			},
-			"cut": {
-				"type": "floatlist",
-				"default": 0
-			},
-			"index": {
-				"type": "intlist",
-				"default": null,
-				"comment": "The indices of the atoms",
-				"note": "If not only a slice, you should given the stop for the slice"
-			}
-		},
-		"mix": {
-			"scheme": {
-				"type": "str",
-				"default": null,
-				"options": "Pulay, Linear"
-			},
-			"predtype": {
-				"type": "str",
-				"default": "kerker"
-			},
-			"predcoef": {
-				"type": "floatlist",
-				"default": "1.0 1.0 1.0"
-			},
-			"predecut": {
-				"type": "float",
-				"default": null
-			},
-			"maxm": {
-				"type": "int",
-				"default": 7
-			},
-			"coef": {
-				"type": "float",
-				"default": "0.5"
-			},
-			"delay": {
-				"type": "int",
-				"default": "2"
-			},
-			"restarted": {
-				"type": "bool",
-				"default": false
-			},
-			"kf": {
-				"type": "str",
-				"default": "auto"
-			}
-		},
-		"opt": {
-			"dftpy": {
-				"type": "str",
-				"default": "opt",
-				"comment": "Same config of `DFTpy`"
-			},
-			"opt_method": {
-				"type": "str",
-				"default": "full"
-			},
-			"maxiter": {
-				"type": "int",
-				"default": 800,
-				"comment": "The max steps for optimization"
-			}
-		},
-		"grid": {
-			"dftpy": {
-				"type": "str",
-				"default": "grid",
-				"comment": "Same config of `DFTpy`"
-			},
-			"ecut": {
-				"type": "float",
-				"default": null,
-				"comment": "If set will overwrite the ecut of input file"
-			}
-		},
-		"density": {
-			"atomic": {
-				"type" : "cdict",
-				"default": {}
-			},
-			"nspin": {
-				"type": "int",
-				"default": 1
-			},
-			"ncharge": {
-				"type": "float",
-				"default": null
-			},
-			"magmom": {
-				"type": "float",
-				"default": 0
-			},
-			"file": {
-				"type": "str",
-				"default": null
-			},
-			"output": {
-				"type": "str",
-				"default": null
-			},
-			"initial": {
-				"type": "cstr",
-				"default": null,
-				"options": "None, Atomic, Read, Ofdft, Heg",
-				"comment": "For OFDFT subsystem must given one method except `None`."
-			},
-			"use_gaussians": {
-				"type": "bool",
-				"default": false,
-				"comment": " It will replaces the core densities of the surrounding fragments with a gaussian. This is to avoid problems of electrons leaking in the core region of surrounding fragments when hard pseudopotentials are employed."
-			},
-			"gaussians_rcut": {
-				"type": "float",
-				"default": 3,
-				"unit": "Angstrom"
-			},
-			"gaussians_sigma": {
-				"type": "float",
-				"default": 0.3
-			},
-			"gaussians_scale": {
-				"type" : "cdict",
-				"default": {}
-			}
-		},
-		"exc": {
-			"dftpy": {
-				"type": "str",
-				"default": "exc",
-				"comment": "Same config of `DFTpy`"
-			},
-			"xc": {
-				"type": "str",
-				"default": null
-			},
-			"x_str": {
-				"type": "str",
-				"default": null
-			},
-			"c_ctr": {
-				"type": "str",
-				"default": null
-			}
-		},
-		"kedf": {
-			"dftpy": {
-				"type": "str",
-				"default": "kedf",
-				"comment": "Same config of `DFTpy`"
-			}
+			"options": "KE, XC"
 		},
 		"exttype": {
 			"type": "int",
+			"options": "0, 1,..., 7",
+			"comment": "The embeded potential type, which is same as `embed`.",
 			"default": null
 		},
 		"basefile": {
 			"type": "str",
+			"options": "",
+			"comment": "The base input file for subsytem",
 			"default": null
 		},
 		"prefix": {
 			"type": "str",
+			"options": "",
+			"comment": "The prefix of each subsystem. If not set, it's same as the name of subsytem.",
 			"default": null
-		},
-		"kpoints": {
-			"method": {
-				"type": "str",
-				"default": "auto"
-			},
-			"grid": {
-				"type": "intlist",
-				"default": null
-			},
-			"offset": {
-				"type": "floatlist",
-				"default": null
-			}
 		}
 	}
 }

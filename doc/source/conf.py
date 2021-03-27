@@ -17,6 +17,7 @@ extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.viewcode',
               'sphinx.ext.napoleon',
               'sphinx.ext.intersphinx',
+              'sphinx.ext.graphviz',
               'nbsphinx']
 
 templates_path = ['templates']
@@ -33,11 +34,15 @@ html_last_updated_fmt = '%A, %d %b %Y %H:%M:%S'
 
 html_theme_options = {
     'prev_next_buttons_location': 'both',
+    # 'style_nav_header_background' : '#E67E22'
+    'style_nav_header_background' : '#27AE60'
 }
 
-latex_show_urls = 'inline'
+# latex_show_urls = 'inline'
 latex_show_pagerefs = True
 latex_documents = [('index', not True)]
+
+graphviz_output_format = 'svg'
 
 
 #Add external links to source code

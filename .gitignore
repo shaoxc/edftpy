@@ -11,3 +11,4 @@ doc/build/
 .ipynb_checkpoints/
 bak/
 .buildconfig
+doc/source/tutorials/config.rst

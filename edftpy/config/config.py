@@ -22,14 +22,20 @@ def merge_dftpy_entries(entries):
                 entries[k] = recursive_merge(dftpy_entries, v)
             if k == 'dftpy' :
                 vn = dftpy_entries[v.default.upper()]
+                if v.comment :
+                    nouse = [s.strip() for s in v.comment.split(',')]
+                else :
+                    nouse = []
                 lsame = True
                 del entries[k]
                 break
         if lsame :
             vnm = vn.copy()
             for key in vn.keys():
-                if key in entries :
+                if key in nouse :
                     del vnm[key]
+                elif key in entries :
+                    vnm[key].default = entries[key].default
             entries.update(vnm)
         return entries
 
@@ -67,6 +73,14 @@ def conf_special_format(conf):
                 )
         if 'kedf' in conf[section] :
             conf[section]['kedf']['name'] = conf[section]['kedf']['kedf']
+
+    for key in conf :
+        conf[key].pop('Comment', None)
+        conf[key].pop('comment', None)
+        conf[key].pop('Note', None)
+        conf[key].pop('note', None)
+        conf[key].pop('Warning', None)
+        conf[key].pop('warning', None)
 
     return conf
 
