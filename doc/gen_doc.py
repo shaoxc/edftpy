@@ -138,8 +138,15 @@ def gen_config_rst():
             #-----------------------------------------------------------------------
             fstr = '\n{0}\n'.format(section)
             fstr += '-'*20 + '\n\n'.format(section)
-            if 'comment' in configentries[section] :
+            item = None
+
+            if not isinstance(configentries[section], dict):
+                item = configentries[section]
+                item.default = item.comment
+            elif 'comment' in configentries[section] :
                 item = configentries[section]['comment']
+
+            if item :
                 lines = str(item.default)
                 lines = lines.replace('\\\\n', '\n')
                 lines = lines.replace('\\\\t', '\t')
@@ -151,7 +158,9 @@ def gen_config_rst():
                     fstr += ".. note::\n {0}\n".format(item.note)
                 if item.warning:
                     fstr += ".. warning::\n {0}\n".format(item.warning)
-            fstr += gen_list_table(configentries[section], section, top = True)
+            f.write(fstr)
+            if not isinstance(configentries[section], dict): continue
+            fstr = gen_list_table(configentries[section], section, top = True)
             f.write(fstr)
             if section == 'GSYSTEM' : continue
             #-----------------------------------------------------------------------

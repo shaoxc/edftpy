@@ -74,13 +74,15 @@ def conf_special_format(conf):
         if 'kedf' in conf[section] :
             conf[section]['kedf']['name'] = conf[section]['kedf']['kedf']
 
-    for key in conf :
-        conf[key].pop('Comment', None)
-        conf[key].pop('comment', None)
-        conf[key].pop('Note', None)
-        conf[key].pop('note', None)
-        conf[key].pop('Warning', None)
-        conf[key].pop('warning', None)
+    for k, v in conf.items() :
+        v.pop('comment', None)
+        v.pop('note', None)
+        v.pop('warning', None)
+        for k2, v2 in v.items():
+            if isinstance(v2, dict):
+                v2.pop('comment', None)
+                v2.pop('note', None)
+                v2.pop('warning', None)
 
     return conf
 

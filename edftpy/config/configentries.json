@@ -39,14 +39,14 @@
 		"dftpy": {
 			"type": "str",
 			"default": "math",
-			"comment": "twostep, multistep"
+			"comment": "twostep, multistep, reuse"
 		}
 	},
 	"PP": {
-		"dftpy": {
-			"type": "str",
-			"default": "pp"
-		}
+		"comment": "Control of the running job.",
+		"example": "Al = Al_lda.oe01.recpot",
+		"type": "cdict",
+		"default": {}
 	},
 	"OUTPUT": {
 		"comment": {
