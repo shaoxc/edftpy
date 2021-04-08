@@ -13,4 +13,6 @@ Feel free to contact the developers:
 On-line
 =======
 
-To find out more about the `Pavanello Research Group <http://sites.rutgers.edu/prg>`_ and `MolSSI <https://molssi.org>`_. Or simply send us an email.
+To find out more about the `Pavanello Research Group <http://sites.rutgers.edu/prg>`_. Or simply send us an email.
+
+.. _MolSSI: https://molssi.org

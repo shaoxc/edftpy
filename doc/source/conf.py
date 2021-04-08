@@ -1,8 +1,8 @@
 import sys
 import sphinx_rtd_theme
 project = 'eDFTpy'
-copyright = '2021, Pavanello Research Group & MolSSI'
-author = 'Pavanello Research Group & MolSSI'
+copyright = '2021, Pavanello Research Group'
+author = 'Pavanello Research Group'
 
 release = '0.0.1'
 

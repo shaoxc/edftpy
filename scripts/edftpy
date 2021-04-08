@@ -4,7 +4,8 @@ import time
 
 from dftpy.time_data import TimeData
 
-from edftpy.interface import optimize_density_conf, conf2init, conf2output
+# from edftpy.interface import optimize_density_conf, conf2init, conf2output
+from edftpy.interface import *
 from edftpy.config import read_conf
 from edftpy.mpi import graphtopo, sprint
 
@@ -32,8 +33,6 @@ def run_job(args):
         TimeData.Begin("TOTAL")
 
         optimizer = optimize_density_conf(config, graphtopo = graphtopo)
-        # if "Force" in config["JOB"]["calctype"]:
-        #     forces = optimizer.get_forces()
 
         TimeData.End("TOTAL")
         if graphtopo.rank == 0 :
