@@ -1,4 +1,5 @@
 import numpy as np
+from numpy import linalg as LA
 import scipy.special as sp
 from scipy import ndimage, signal
 from functools import reduce
@@ -88,3 +89,40 @@ def dict_update(d, u):
         else:
             d[k] = v
     return d
+
+def get_core_points(ions, grid, rcut, index=0):
+    nr = grid.nrR
+    dnr = (1.0/nr).reshape((3, 1))
+    gaps = grid.spacings
+    border = (rcut / gaps).astype(np.int32) + 1
+    border = np.minimum(border, nr//2)
+    ixyzA = np.mgrid[-border[0]:border[0]+1, -border[1]:border[1]+1, -border[2]:border[2]+1].reshape((3, -1))
+    posi = ions.pos[index].reshape((1, 3))
+    atomp = np.array(posi.to_crys()) * nr
+    atomp = atomp.reshape((3, 1))
+    ipoint = np.floor(atomp + 1E-8)
+    px = atomp - ipoint
+    l123A = np.mod(ipoint.astype(np.int32) - ixyzA, nr[:, None])
+    positions = (ixyzA + px) * dnr
+    positions = np.einsum("j...,kj->k...", positions, grid.lattice)
+    nr_orth = (2 * border[0]+1, 2 * border[1]+1, 2 * border[2]+1)
+    dists = LA.norm(positions, axis = 0).reshape(nr_orth)
+    mask = get_grid_array_mask(grid, l123A)
+    index =(dists[mask] < rcut).ravel()
+    inds = (l123A[0][index], l123A[1][index], l123A[2][index])
+    return inds
+
+def get_grid_array_mask(grid, l123A):
+    if grid.mp.comm.size == 1 :
+        return slice(None)
+    offsets = grid.offsets.reshape((3, 1))
+    nr = grid.nr
+    #-----------------------------------------------------------------------
+    l123A -= offsets
+    mask = np.logical_and(l123A[0] > -1, l123A[0] < nr[0])
+    mask1 = np.logical_and(l123A[1] > -1, l123A[1] < nr[1])
+    np.logical_and(mask, mask1, out = mask)
+    np.logical_and(l123A[2] > -1, l123A[2] < nr[2], out = mask1)
+    np.logical_and(mask, mask1, out = mask)
+    #-----------------------------------------------------------------------
+    return mask

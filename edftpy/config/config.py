@@ -30,12 +30,14 @@ def merge_dftpy_entries(entries):
                 del entries[k]
                 break
         if lsame :
-            vnm = vn.copy()
+            # vnm = vn.copy()
+            vnm = copy.deepcopy(vn)
             for key in vn.keys():
                 if key in nouse :
                     del vnm[key]
                 elif key in entries :
                     vnm[key].default = entries[key].default
+                    # print('sssss',vnm[key].default, entries[key].default, key)
             entries.update(vnm)
         return entries
 

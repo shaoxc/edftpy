@@ -174,7 +174,7 @@
 			},
 			"xc": {
 				"type": "str",
-				"default": null
+				"default": "LDA"
 			}
 		},
 		"kedf": {
@@ -344,7 +344,7 @@
 				"type": "str",
 				"default": null
 			},
-			"c_ctr": {
+			"c_str": {
 				"type": "str",
 				"default": null
 			}

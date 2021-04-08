@@ -79,7 +79,7 @@ class CastepKS(Driver):
         self.energy = 0.0
         self.phi = None
         self.residual_norm = 1
-        if isinstance(self.mixer, AbstractMixer):
+        if hasattr(self.mixer, 'restart'):
             self.mixer.restart()
         if subcell is not None :
             self.subcell = subcell
@@ -199,8 +199,10 @@ class CastepKS(Driver):
         else :
             grid = self.grid
 
-        self.charge = np.empty((grid.nnr, 1), order = 'F')
-        self.prev_charge = np.empty((grid.nnr, 1), order = 'F')
+        # self.charge = np.empty((grid.nnr, 1), order = 'F')
+        # self.prev_charge = np.empty((grid.nnr, 1), order = 'F')
+        self.charge = np.empty(grid.nnr, order = 'F')
+        self.prev_charge = np.empty(grid.nnr, order = 'F')
         self.charge[:] = self.mdl.den.real_charge
 
         if self.comm.rank == 0 :
@@ -221,7 +223,7 @@ class CastepKS(Driver):
     def _format_density(self, volume = None, sym = True, **kwargs):
         #-----------------------------------------------------------------------
         if volume is None :
-            volume = density.grid.volume
+            volume = self.density.grid.volume
         # self.prev_density[:] = self.density
         self.prev_charge, self.charge = self.charge, self.prev_charge
         if self.grid_driver is not None :
