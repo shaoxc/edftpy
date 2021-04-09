@@ -53,7 +53,8 @@ class RadialGrid(object):
         else :
             results = out
         mask = dist < self._r[-1]
-        results[mask] = splev(dist[mask], self.v_interp, der=0, ext=1)
+        if np.count_nonzero(mask) > 0 :
+            results[mask] = splev(dist[mask], self.v_interp, der=0, ext=1)
         #-----------------------------------------------------------------------
         # mask = dist < self._r[1]
         # v = self._v
