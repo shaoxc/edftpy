@@ -565,6 +565,7 @@ def config2nsub(config, ions):
         else :
             raise AttributeError("{} is not supported".format(decompose['method']))
     nsubkeys = [key for key in config if key.startswith('NSUB')]
+    ions_inds = np.arange(ions.nat)
     for keysys in nsubkeys :
         decompose = config[keysys]["decompose"]
         if decompose['method'] != 'distance' :
@@ -586,6 +587,10 @@ def config2nsub(config, ions):
 
         if decompose['method'] == 'distance' :
             indices = from_distance_to_sub(ions_sub, cutoff = cutoff)
+
+        ions_inds_sub = ions_inds[index]
+        for i, ind in enumerate(indices) :
+            indices[i] = ions_inds_sub[ind]
 
         config = config_from_index(config, keysys, indices)
     return config
