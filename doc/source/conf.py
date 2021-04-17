@@ -33,9 +33,11 @@ html_static_path = ['static']
 html_last_updated_fmt = '%A, %d %b %Y %H:%M:%S'
 
 html_theme_options = {
+    'logo_only': True,
     'prev_next_buttons_location': 'both',
     # 'style_nav_header_background' : '#E67E22'
-    'style_nav_header_background' : '#27AE60'
+    # 'style_nav_header_background' : '#27AE60'
+    'style_nav_header_background' : '#bdc3c7'
 }
 
 # latex_show_urls = 'inline'

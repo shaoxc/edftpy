@@ -133,6 +133,9 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     grid = gsystem.grid
     total_evaluator = config2total_evaluator(config, ions, grid, pplist = pplist, total_evaluator=total_evaluator, cell_change = cell_change, pseudo = pseudo)
     gsystem.total_evaluator = total_evaluator
+    infile = config[keysys]["density"]["file"]
+    if infile :
+        gsystem.density[:] = io.read_density(infile)
     ############################## Subsytem ##############################
     subkeys = [key for key in config if key.startswith('SUB')]
     drivers = []
@@ -158,8 +161,9 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
             #-----------------------------------------------------------------------
         drivers.append(driver)
     #-----------------------------------------------------------------------
-    # sprint('build_region -> ', graphtopo.rank)
-    graphtopo.build_region(grid=gsystem.grid, drivers=drivers)
+    if len(drivers) > 0 :
+        # sprint('build_region -> ', graphtopo.rank)
+        graphtopo.build_region(grid=gsystem.grid, drivers=drivers)
     #-----------------------------------------------------------------------
     for i, driver in enumerate(drivers):
         if driver is None : continue

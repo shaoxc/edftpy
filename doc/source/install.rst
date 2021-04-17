@@ -12,13 +12,17 @@ Requirements
 * SciPy_ 0.18 or newer
 * DFTpy_ latest
 * ASE_  3.21.1 or newer
-* PWpy_ 0.0.1 to use Quantum ESPRESSO as KS-DFT engine (others available upon request)
 
 Optional:
 
 * pylibxc_ (Exchange-correlation functionals other than LDA)
 * pyFFTW_  (Fast Fourier Transform)
 * f90wrap_ (F90 to Python interface generator with derived type support)
+* mpi4py_ (MPI for python)
+* mpi4py-fft_ (Fast Fourier Transforms with MPI)
+* xmltodict_ (For UPF pseudopotential)
+* upf_to_json_ (For UPF pseudopotential)
+* PWpy_ (to use Quantum ESPRESSO as KS-DFT engine (others available upon request))
 
 .. _Python: https://www.python.org/
 .. _NumPy: https://docs.scipy.org/doc/numpy/reference/
@@ -28,7 +32,11 @@ Optional:
 .. _ASE: https://gitlab.com/ase/ase
 .. _DFTpy: https://gitlab.com/pavanello-research-group/dftpy
 .. _f90wrap: https://github.com/jameskermode/f90wrap
-.. _PWpy: 
+.. _mpi4py: https://bitbucket.org/mpi4py/mpi4py
+.. _mpi4py-fft: https://bitbucket.org/mpi4py/mpi4py-fft
+.. _xmltodict: https://github.com/martinblech/xmltodict
+.. _upf_to_json: https://github.com/simonpintarelli/upf_to_json
+.. _PWpy: https://gitlab.com/shaoxc/pwpy
 
 
 Installation from source
