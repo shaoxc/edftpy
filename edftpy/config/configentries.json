@@ -174,7 +174,15 @@
 			},
 			"xc": {
 				"type": "str",
-				"default": "LDA"
+				"default": null
+			},
+			"x_str": {
+				"type": "str",
+				"default": "lda_x"
+			},
+			"c_str": {
+				"type": "str",
+				"default": "lda_c_pz"
 			}
 		},
 		"kedf": {
