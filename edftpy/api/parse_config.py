@@ -592,7 +592,11 @@ def config2nsub(config, ions):
         if decompose['method'] == 'distance' :
             indices = from_distance_to_sub(ions_sub, cutoff = cutoff)
 
-        ions_inds_sub = ions_inds[index]
+        if index is None :
+            ions_inds_sub = ions_inds
+        else :
+            ions_inds_sub = ions_inds[index]
+
         for i, ind in enumerate(indices) :
             indices[i] = ions_inds_sub[ind]
 
