@@ -9,10 +9,7 @@ from dftpy.formats import io
 from dftpy.ewald import ewald
 from dftpy.optimization import Optimization
 
-from edftpy.pseudopotential import LocalPP
-from edftpy.kedf import KEDF
-from edftpy.hartree import Hartree
-from edftpy.xc import XC
+from edftpy.functional import LocalPP, KEDF, Hartree, XC
 from edftpy.evaluator import Evaluator
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import GlobalCell

@@ -7,10 +7,7 @@ from dftpy.constants import ENERGY_CONV
 from dftpy.formats import io
 
 from edftpy.utils.common import Field, Grid, Atoms
-from edftpy.pseudopotential import LocalPP
-from edftpy.kedf import KEDF
-from edftpy.hartree import Hartree
-from edftpy.xc import XC
+from edftpy.functional import LocalPP, KEDF, Hartree, XC
 from edftpy.optimizer import Optimization
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
 from edftpy.enginer.of_dftpy import DFTpyOF
