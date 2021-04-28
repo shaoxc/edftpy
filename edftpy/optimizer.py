@@ -341,7 +341,8 @@ class Optimization(object):
                 global_potential[:] = 0.0
 
             if approximate != 'density4' :
-                extpot = driver.get_extpot(mapping = False, with_global = False)
+                if driver is not None :
+                    extpot = driver.get_extpot(mapping = False, with_global = False)
 
             if approximate == 'density' :
                 if driver is not None :
