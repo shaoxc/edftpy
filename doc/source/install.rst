@@ -22,7 +22,7 @@ Optional:
 * mpi4py-fft_ (Fast Fourier Transforms with MPI)
 * xmltodict_ (For UPF pseudopotential)
 * upf_to_json_ (For UPF pseudopotential)
-* PWpy_ (to use Quantum ESPRESSO as KS-DFT engine (others available upon request))
+* QEpy_ (to use Quantum ESPRESSO as KS-DFT engine (others available upon request))
 
 .. _Python: https://www.python.org/
 .. _NumPy: https://docs.scipy.org/doc/numpy/reference/
@@ -36,7 +36,7 @@ Optional:
 .. _mpi4py-fft: https://bitbucket.org/mpi4py/mpi4py-fft
 .. _xmltodict: https://github.com/martinblech/xmltodict
 .. _upf_to_json: https://github.com/simonpintarelli/upf_to_json
-.. _PWpy: https://gitlab.com/shaoxc/pwpy
+.. _QEpy: https://gitlab.com/shaoxc/qepy
 
 
 Installation from source

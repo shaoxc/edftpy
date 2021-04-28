@@ -1,7 +1,7 @@
 .. _qe:
 
 ===============================================
-PWPY: PWSCF (quantum-espresso) Python interface
+QEpy: Quantum ESPRESSO Python interface
 ===============================================
 
-PWpy is a python API to Quantum ESPRESSO. We will release PWpy together with eDFTpy soon. Stay tuned!
+QEpy is a python API to Quantum ESPRESSO. We will release QEpy together with eDFTpy soon. Stay tuned!
