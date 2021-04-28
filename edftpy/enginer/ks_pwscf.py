@@ -1,4 +1,4 @@
-import pwscfpy
+import qepy
 
 import numpy as np
 import copy
@@ -19,8 +19,7 @@ from edftpy.enginer.driver import Driver
 from edftpy.hartree import hartree_energy
 from edftpy.mpi import sprint, SerialComm, MP
 
-from pwscfpy import constants as pwc
-unit_len = LEN_CONV["Bohr"]["Angstrom"] / pwc.BOHR_RADIUS_SI / 1E10
+unit_len = LEN_CONV["Bohr"]["Angstrom"] / qepy.constants.BOHR_RADIUS_SI / 1E10
 unit_vol = unit_len ** 3
 
 class PwscfKS(Driver):
@@ -29,7 +28,7 @@ class PwscfKS(Driver):
         The extpot separated into two parts : v.of_r and vltot will be a better and safe way
     """
     def __init__(self, evaluator = None, subcell = None, prefix = 'sub_ks', params = None, cell_params = None,
-            exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None, 
+            exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None,
             diag_conv = 1E-10, **kwargs):
         '''
         Here, prefix is the name of the input file
@@ -80,10 +79,10 @@ class PwscfKS(Driver):
         if self.grid_driver is not None :
             fstr += f'{self.__class__.__name__} has two grids :{self.grid.nrR} and {self.grid_driver.nrR}'
         sprint(fstr, comm=self.comm, level=1)
-        pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
+        qepy.qepy_mod.qepy_write_stdout(fstr)
         #-----------------------------------------------------------------------
         self.init_density()
-        self.embed = pwscfpy.pwpy_common.embed_base()
+        self.embed = qepy.qepy_common.embed_base()
         self.embed.diag_conv = diag_conv
         self.update_workspace(first = True)
 
@@ -112,9 +111,9 @@ class PwscfKS(Driver):
 
         if not first :
             pos = self.subcell.ions.pos.to_crys().T
-            pwscfpy.pwpy_mod.pwpy_update_ions(self.embed, pos)
+            qepy.qepy_mod.qepy_update_ions(self.embed, pos)
             # get new density
-            pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
+            qepy.qepy_mod.qepy_get_rho(self.charge)
             self.density[:] = self._format_density_invert()
 
         if self.grid_driver is not None :
@@ -126,14 +125,14 @@ class PwscfKS(Driver):
             core_charge = np.empty((grid.nnr, self.nspin), order = 'F')
         else :
             core_charge = self.atmp2
-        pwscfpy.pwpy_mod.pwpy_get_rho_core(core_charge)
+        qepy.qepy_mod.qepy_get_rho_core(core_charge)
         self.core_density= self._format_density_invert(core_charge)
 
         self.core_density_sub = Field(grid = self.grid_sub)
         self.grid_sub.scatter(self.core_density, out = self.core_density_sub)
         #-----------------------------------------------------------------------
         # if self.ncharge is not None :
-        #     nelec = pwscfpy.klist.get_nelec()
+        #     nelec = qepy.klist.get_nelec()
         #     # if self.comm.rank == 0 :
         #     #     self.density[:] *= (nelec + self.ncharge)/ nelec
         #     if self.exttype < 0 :
@@ -142,7 +141,7 @@ class PwscfKS(Driver):
         #         self.core_density[:] = 0.0
         #         self.core_density_sub[:] = 0.0
         #         core_charge[:] = 0.0
-        #         pwscfpy.pwpy_mod.pwpy_set_rho_core(core_charge)
+        #         qepy.qepy_mod.qepy_set_rho_core(core_charge)
         #         self._format_density()
         #         if self.gaussian_density is not None :
         #             self.gaussian_density_inter = self.gaussian_density.copy()
@@ -150,8 +149,8 @@ class PwscfKS(Driver):
         #         else :
         #             self.gaussian_density_inter = None
         #         self.embed.nlpp = True
-        #     # pwscfpy.klist.set_tot_charge(self.ncharge)
-        #     # pwscfpy.klist.set_nelec(nelec+self.ncharge)
+        #     # qepy.klist.set_tot_charge(self.ncharge)
+        #     # qepy.klist.set_nelec(nelec+self.ncharge)
         #     # self._format_density()
         # if self.comm.rank == 0 :
         #     print('ncharge_sub', self.density.integral())
@@ -178,7 +177,7 @@ class PwscfKS(Driver):
 
     def get_grid_driver(self, grid):
         nr = np.zeros(3, dtype = 'int32')
-        pwscfpy.pwpy_mod.pwpy_get_grid(nr)
+        qepy.qepy_mod.qepy_get_grid(nr)
         if not np.all(grid.nrR == nr) and self.comm.rank == 0 :
             grid_driver = Grid(grid.lattice, nr, direct = True)
         else :
@@ -275,8 +274,8 @@ class PwscfKS(Driver):
         else :
             comm = self.comm.py2f()
             # print('comm00', comm, self.comm.size)
-        pwscfpy.pwpy_mod.pwpy_set_stdout(self.outfile)
-        pwscfpy.pwpy_pwscf(self.prefix + self._input_ext, comm)
+        qepy.qepy_mod.qepy_set_stdout(self.outfile)
+        qepy.qepy_pwscf(self.prefix + self._input_ext, comm)
 
     def init_density(self, rho_ini = None):
 
@@ -303,7 +302,7 @@ class PwscfKS(Driver):
             self.density[:] = rho_ini
             self._format_density()
         else :
-            pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
+            qepy.qepy_mod.qepy_get_rho(self.charge)
             self.density[:] = self._format_density_invert()
 
         # if self.comm.rank == 0 :
@@ -373,10 +372,10 @@ class PwscfKS(Driver):
         #-----------------------------------------------------------------------
         charge = charge.reshape((-1, self.nspin), order='F') / unit_vol
         self.charge[:] = charge
-        pwscfpy.pwpy_mod.pwpy_set_rho(charge)
+        qepy.qepy_mod.qepy_set_rho(charge)
         # if sym :
-            # pwscfpy.pwpy_sum_band_sym()
-            # pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
+            # qepy.qepy_sum_band_sym()
+            # qepy.qepy_mod.qepy_get_rho(self.charge)
             # self.density[:] = self._format_density_invert(**kwargs)
         #-----------------------------------------------------------------------
         self.prev_density[:] = self.density
@@ -463,16 +462,16 @@ class PwscfKS(Driver):
 
         self.prev_charge[:] = self.charge
 
-        pwscfpy.pwpy_mod.pwpy_set_extpot(self.embed, extpot)
+        qepy.qepy_mod.qepy_set_extpot(self.embed, extpot)
         self.embed.exttype = self.exttype
         self.embed.initial = initial
         self.embed.mix_coef = -1.0
         self.embed.finish = False
-        pwscfpy.pwpy_electrons_scf(printout, exxen, self.embed)
+        qepy.qepy_electrons_scf(printout, exxen, self.embed)
         self.energy = self.embed.etotal
         self.dp_norm = self.embed.dnorm
 
-        pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
+        qepy.qepy_mod.qepy_get_rho(self.charge)
         self.density[:] = self._format_density_invert()
         return self.density
 
@@ -484,8 +483,8 @@ class PwscfKS(Driver):
                 extpot = self.get_extpot(extpot, mapping = True)
             else :
                 extpot = self.get_extpot()
-            pwscfpy.pwpy_mod.pwpy_set_extpot(self.embed, extpot)
-            pwscfpy.pwpy_calc_energies(self.embed)
+            qepy.qepy_mod.qepy_set_extpot(self.embed, extpot)
+            qepy.qepy_calc_energies(self.embed)
         energy = self.embed.etotal * 0.5
         return energy
 
@@ -516,7 +515,7 @@ class PwscfKS(Driver):
                 fstr = ''
             fstr += f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
             sprint(fstr, comm=self.comm, level=1)
-            pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
+            qepy.qepy_mod.qepy_write_stdout(fstr)
             self.energy = func.energy
         return func
 
@@ -537,7 +536,7 @@ class PwscfKS(Driver):
             rmax = r.amax()
             fstr = f'res_norm({self.prefix}): {self._iter}  {rmax}  {self.residual_norm}'
             sprint(fstr, comm=self.comm, level=1)
-            pwscfpy.pwpy_mod.pwpy_write_stdout(fstr)
+            qepy.qepy_mod.qepy_write_stdout(fstr)
             #-----------------------------------------------------------------------
             if self.mix_driver is None :
                 rho = self.mixer(prev_density, density, **kwargs)
@@ -548,9 +547,9 @@ class PwscfKS(Driver):
         if self.mix_driver is not None :
             if coef is None : coef = self.mix_driver
             self.embed.mix_coef = coef
-            pwscfpy.pwpy_electrons_scf(0, 0, self.embed)
+            qepy.qepy_electrons_scf(0, 0, self.embed)
             if self._iter > 1 : self.dp_norm = self.embed.dnorm
-            pwscfpy.pwpy_mod.pwpy_get_rho(self.charge)
+            qepy.qepy_mod.qepy_get_rho(self.charge)
             self.density[:] = self._format_density_invert()
 
         if self.comm.rank > 0 :
@@ -560,7 +559,7 @@ class PwscfKS(Driver):
         return self.density
 
     def get_fermi_level(self, **kwargs):
-        results = pwscfpy.ener.get_ef()
+        results = qepy.ener.get_ef()
         return results
 
     def get_forces(self, icalc = 2, **kwargs):
@@ -570,9 +569,9 @@ class PwscfKS(Driver):
                 1 : no ewald
                 2 : no ewald and local_potential
         """
-        pwscfpy.pwpy_forces(icalc)
-        # forces = pwscfpy.force_mod.force.T
-        forces = pwscfpy.force_mod.get_array_force().T / 2.0  # Ry to a.u.
+        qepy.qepy_forces(icalc)
+        # forces = qepy.force_mod.force.T
+        forces = qepy.force_mod.get_array_force().T / 2.0  # Ry to a.u.
         return forces
 
     def get_stress(self, **kwargs):
@@ -580,22 +579,22 @@ class PwscfKS(Driver):
 
     def end_scf(self, **kwargs):
         self.embed.finish = True
-        pwscfpy.pwpy_electrons_scf(0, 0, self.embed)
+        qepy.qepy_electrons_scf(0, 0, self.embed)
 
     @staticmethod
     def stop_run(status = 0, **kwargs):
         # what = 'all' will write wavefunctions and density
-        pwscfpy.pwpy_stop_run(status, **kwargs)
-        pwscfpy.pwpy_clean_saved()
+        qepy.qepy_stop_run(status, **kwargs)
+        qepy.qepy_clean_saved()
 
     @staticmethod
     def get_ions_from_pw():
-        alat = pwscfpy.cell_base.get_alat()
-        lattice = pwscfpy.cell_base.get_array_at() * alat
-        pos = pwscfpy.ions_base.get_array_tau().T * alat
-        atm = pwscfpy.ions_base.get_array_atm()
-        ityp = pwscfpy.ions_base.get_array_ityp()
-        nat = pwscfpy.ions_base.get_nat()
+        alat = qepy.cell_base.get_alat()
+        lattice = qepy.cell_base.get_array_at() * alat
+        pos = qepy.ions_base.get_array_tau().T * alat
+        atm = qepy.ions_base.get_array_atm()
+        ityp = qepy.ions_base.get_array_ityp()
+        nat = qepy.ions_base.get_nat()
         symbols = [1]
         labels = []
         for i in range(atm.shape[-1]):
@@ -611,14 +610,14 @@ class PwscfKS(Driver):
     @staticmethod
     def get_density_from_pw(ions, comm = None):
         nr = np.zeros(3, dtype = 'int32')
-        pwscfpy.pwpy_mod.pwpy_get_grid(nr)
+        qepy.qepy_mod.qepy_get_grid(nr)
 
         if comm is None or comm.rank == 0 :
             rho = np.zeros((np.prod(nr), 1), order = 'F')
         else :
             rho = np.zeros(3)
 
-        pwscfpy.pwpy_mod.pwpy_get_rho(rho)
+        qepy.qepy_mod.qepy_get_rho(rho)
 
         if comm is None or comm.rank == 0 :
             grid = Grid(ions.pos.cell.lattice, nr)
@@ -627,3 +626,7 @@ class PwscfKS(Driver):
             density = np.zeros(1)
 
         return density
+
+class QEKS(PwscfKS):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)

@@ -35,7 +35,7 @@ def import_drivers(config):
         if key.startswith('SUB'):
             calc = config[key]['calculator']
             calcs.append(calc)
-    if 'pwscf' in calcs :
+    if 'pwscf' in calcs or 'qe' in calcs :
         from edftpy.enginer.ks_pwscf import PwscfKS
     if 'castep' in calcs :
         from edftpy.enginer.ks_castep import CastepKS
@@ -491,7 +491,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     else :
         if calculator == 'dftpy' :
             driver = get_dftpy_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
-        elif calculator == 'pwscf' :
+        elif calculator == 'pwscf' or calculator == 'qe' :
             driver = get_pwscf_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
         elif calculator == 'castep' :
             driver = get_castep_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)

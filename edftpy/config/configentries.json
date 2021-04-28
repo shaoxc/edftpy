@@ -504,7 +504,7 @@
 			"type": "str",
 			"default": "dftpy",
 			"comment": "The SCF driver of subsystem",
-			"options": "dftpy, castep, pwscf"
+			"options": "dftpy, castep, qe"
 		},
 		"technique": {
 			"type": "str",
