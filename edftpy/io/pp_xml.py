@@ -1,16 +1,14 @@
 import numpy as np
 import gzip
 import xml.etree.ElementTree as ET
-try:
-    from gpaw.setup_data import SetupData, PAWXMLParser
-except Exception :
-    pass
+
 
 class PPXmlGPAW(object):
     '''
     First, use the `gpaw` module to read xml-format pseudopotential
     '''
     def __init__(self, infile, symbol = 'Al', xctype = 'LDA', name='paw'):
+        from gpaw.setup_data import SetupData
         gpaw_pp = SetupData(symbol, xctype, name=name, readxml=False)
         self.pp = gpaw_pp
         if infile.endswith('.gz'):
@@ -21,6 +19,7 @@ class PPXmlGPAW(object):
         self.read_xml(source=source)
 
     def read_xml(self, source=None, world=None):
+        from gpaw.setup_data import PAWXMLParser
         PAWXMLParser(self.pp).parse(source=source, world=world)
         nj = len(self.pp.l_j)
         self.pp.e_kin_jj.shape = (nj, nj)

@@ -1,7 +1,7 @@
 import numpy as np
 from dftpy.constants import LEN_CONV, ENERGY_CONV, FORCE_CONV, STRESS_CONV
-from dftpy.formats.ase_io import ase2ions
 
+from edftpy.io import ase2ions
 from edftpy.utils.common import Field, Grid, Atoms, Coord
 from edftpy.interface import config2optimizer
 from edftpy.mpi import sprint

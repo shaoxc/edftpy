@@ -1,8 +1,8 @@
 import numpy as np
 from ..mixer import LinearMixer
 from .driver import Driver
+from .hamiltonian import Hamiltonian
 
-from dftpy.td.hamiltonian import Hamiltonian
 
 class DFTpyKS(Driver):
     """

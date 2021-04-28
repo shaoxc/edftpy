@@ -1,7 +1,6 @@
-import numpy as np
 from dftpy.kedf import KEDF, KEDFunctional, KEDFStress
 
-from ..utils.common import AbsFunctional
+from edftpy.utils.common import AbsFunctional
 
 
 class KEDFbak(AbsFunctional):

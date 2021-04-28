@@ -7,7 +7,7 @@ import ase.io.espresso as ase_io_driver
 from ase.calculators.espresso import Espresso as ase_calc_driver
 from collections import OrderedDict
 
-from dftpy.formats.ase_io import ions2ase
+from edftpy.io import ions2ase
 from dftpy.constants import LEN_CONV, ENERGY_CONV
 
 from edftpy.mixer import LinearMixer, PulayMixer, AbstractMixer
@@ -16,7 +16,7 @@ from edftpy.utils.math import grid_map_data
 from edftpy.utils import clean_variables
 from edftpy.density import normalization_density
 from edftpy.enginer.driver import Driver
-from edftpy.hartree import hartree_energy
+from edftpy.functional import hartree_energy
 from edftpy.mpi import sprint, SerialComm, MP
 
 unit_len = LEN_CONV["Bohr"]["Angstrom"] / qepy.constants.BOHR_RADIUS_SI / 1E10

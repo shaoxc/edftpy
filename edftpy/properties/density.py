@@ -1,6 +1,5 @@
 import numpy as np
 from dftpy.constants import LEN_CONV, ENERGY_CONV, FORCE_CONV, STRESS_CONV
-from dftpy.kedf import KEDF
 
 from edftpy.utils.common import Grid
 from edftpy.subsystem.subcell import GlobalCell
@@ -37,19 +36,20 @@ def _get_total_density(gsystem, drivers = None, scale = 1):
         results.insert(0, gsystem.density)
     return results
 
-def elf(density, ked = None, kedf = 'TF', kind = 1):
-    """
-    not finished!
-    """
-    ke_tf = KEDF('TF')
-    tf = ke_tf(density, calcType = ['D']).energydensity
+# def elf(density, ked = None, kedf = 'TF', kind = 1):
+#     """
+#     not finished!
+#     """
+#     from edftpy.functional import KEDF
+#     ke_tf = KEDF('TF')
+#     tf = ke_tf(density, calcType = ['D']).energydensity
 
-    ke_vw = KEDF('vW')
-    vw = ke_vw(density, calcType = ['D']).energydensity
-    if ked is None :
-        ke_t = KEDF(kedf)
-        ked = ke_t(density, calcType = ['D']).energydensity
+#     ke_vw = KEDF('vW')
+#     vw = ke_vw(density, calcType = ['D']).energydensity
+#     if ked is None :
+#         ke_t = KEDF(kedf)
+#         ked = ke_t(density, calcType = ['D']).energydensity
 
-    ratio = (ked - vw*2)/tf
-    values = 1 / (1 + ratio**2)
-    return values
+#     ratio = (ked - vw*2)/tf
+#     values = 1 / (1 + ratio**2)
+#     return values

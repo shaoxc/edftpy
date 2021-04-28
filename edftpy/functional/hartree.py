@@ -1,5 +1,5 @@
 import numpy as np
-from .utils.common import AbsFunctional
+from edftpy.utils.common import AbsFunctional
 from dftpy.hartree import HartreeFunctional, HartreeFunctionalStress
 
 

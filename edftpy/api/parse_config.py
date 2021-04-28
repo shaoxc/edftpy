@@ -4,14 +4,11 @@ from collections import OrderedDict
 import copy
 
 from dftpy.constants import LEN_CONV, ENERGY_CONV
-from dftpy.formats import ase_io, io
+from edftpy import io
 
 from edftpy.config import read_conf, print_conf, write_conf
 
-from edftpy.pseudopotential import LocalPP
-from edftpy.kedf import KEDF
-from edftpy.hartree import Hartree
-from edftpy.xc import XC
+from edftpy.functional import LocalPP, KEDF, Hartree, XC
 from edftpy.optimizer import Optimization
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
 from edftpy.density.init_density import AtomicDensity
@@ -85,7 +82,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
                 format=config[keysys]["cell"]["format"],
                 names=config[keysys]["cell"]["elename"])
         except Exception:
-            ions = ase_io.ase_read(config["PATH"]["cell"] +os.sep+ config[keysys]["cell"]["file"])
+            ions = io.ase_read(config["PATH"]["cell"] +os.sep+ config[keysys]["cell"]["file"])
 
     if optimizer is not None :
         if not np.allclose(optimizer.gsystem.ions.pos.cell.lattice, ions.pos.cell.lattice):
@@ -169,10 +166,10 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         if driver is None : continue
         if (driver.technique == 'OF' and graphtopo.is_root) or (graphtopo.isub == i and graphtopo.comm_sub.rank == 0) or graphtopo.isub is None:
             outfile = driver.prefix + '.vasp'
-            ase_io.ase_write(outfile, driver.subcell.ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
+            io.ase_write(outfile, driver.subcell.ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
             # io.write(driver.prefix +'.xsf', driver.density, driver.subcell.ions)
     if graphtopo.is_root :
-        ase_io.ase_write('edftpy_cell.vasp', ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
+        io.ase_write('edftpy_cell.vasp', ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
     #-----------------------------------------------------------------------
     # io.write('total.xsf', gsystem.density, gsystem.ions)
     # graphtopo.comm.Barrier()

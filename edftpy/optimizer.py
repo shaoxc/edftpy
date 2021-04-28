@@ -3,13 +3,13 @@ import time
 from collections import OrderedDict
 import pprint
 
-from dftpy.formats import io
 from dftpy.constants import ENERGY_CONV
 
 from edftpy.mpi import sprint
 from edftpy.properties import get_total_forces, get_total_stress
-from edftpy.hartree import hartree_energy
+from edftpy.functional import hartree_energy
 from edftpy.utils.common import Grid, Field, Functional
+# from edftpy.io import write
 
 
 class Optimization(object):
@@ -131,7 +131,7 @@ class Optimization(object):
                     driver.gaussian_density = driver.core_density
                 gaussian_density = driver.gaussian_density
                 core_density = driver.core_density
-                # io.write(str(i) + '_gauss.xsf', gaussian_density, ions = driver.subcell.ions)
+                # write(str(i) + '_gauss.xsf', gaussian_density, ions = driver.subcell.ions)
             self.gsystem.update_density(density, isub = i)
             self.gsystem.update_density(gaussian_density, isub = i, fake = True)
             self.gsystem.update_density(core_density, isub = i, core = True)
@@ -140,7 +140,7 @@ class Optimization(object):
         totalrho = self.gsystem.density.copy()
         #-----------------------------------------------------------------------
         self.add_xc_correction()
-        # io.write('a.xsf', totalrho, ions = self.gsystem.ions)
+        # write('a.xsf', totalrho, ions = self.gsystem.ions)
         energy_history = [0.0]
         #-----------------------------------------------------------------------
         fmt = "{:10s}{:8s}{:24s}{:16s}{:10s}{:10s}{:16s}".format(" ", "Step", "Energy(a.u.)", "dE", "dP", "dC", "Time(s)")
@@ -162,7 +162,7 @@ class Optimization(object):
             # update the rhomax for NLKEDF
             self.set_kedf_params(level = it + 2) # first step without NL
             self.set_global_potential()
-            # io.write('pot.xsf', self.gsystem.total_evaluator.embed_potential, ions = self.gsystem.ions)
+            # write('pot.xsf', self.gsystem.total_evaluator.embed_potential, ions = self.gsystem.ions)
             for isub in range(self.nsub + len(self.of_drivers)):
                 if isub < self.nsub :
                     driver = self.drivers[isub]
@@ -393,8 +393,8 @@ class Optimization(object):
 
                 self.gsystem.add_to_global(extpot, self.gsystem.total_evaluator.embed_potential, isub = isub)
 
-        # io.write(str(self.iter) + '.xsf', self.gsystem.total_evaluator.embed_potential, self.gsystem.ions)
-        # io.write(str(self.iter) + '_den.xsf', self.gsystem.density, self.gsystem.ions)
+        # write(str(self.iter) + '.xsf', self.gsystem.total_evaluator.embed_potential, self.gsystem.ions)
+        # write(str(self.iter) + '_den.xsf', self.gsystem.density, self.gsystem.ions)
 
         for isub in range(self.nsub):
             driver = self.drivers[isub]

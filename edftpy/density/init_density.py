@@ -3,8 +3,8 @@ import numpy as np
 from scipy.interpolate import splrep, splev
 from numpy import linalg as LA
 from edftpy.utils.common import Field, RadialGrid
-from .density import get_3d_value_recipe
 from edftpy.mpi import sprint
+from .density import get_3d_value_recipe
 
 class AtomicDensity(object):
     """

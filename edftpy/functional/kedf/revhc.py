@@ -3,7 +3,6 @@ import scipy.special as sp
 from scipy import stats
 
 from dftpy.constants import LEN_CONV, ENERGY_CONV, FORCE_CONV, STRESS_CONV, ZERO
-from dftpy.formats.io import write
 
 from edftpy.mpi import graphtopo, sprint, pmi
 

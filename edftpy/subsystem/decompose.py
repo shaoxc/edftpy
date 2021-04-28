@@ -1,8 +1,7 @@
 import numpy as np
 from ase.neighborlist import neighbor_list
 
-from dftpy.formats.ase_io import ions2ase
-
+from edftpy.io import ions2ase
 from edftpy.utils.math import union_mlist
 
 def from_distance_to_sub(ions, cutoff = 3, max_nbins=1e6, **kwargs):

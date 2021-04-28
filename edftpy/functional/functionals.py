@@ -1,7 +1,4 @@
-import numpy as np
-from dftpy.constants import ENERGY_CONV, LEN_CONV
-
-from .utils.common import AbsFunctional
+from edftpy.utils.common import AbsFunctional
 from .kedf import KEDF
 
 
@@ -32,17 +29,3 @@ class NonAdditiveKE(AbsFunctional):
         # if 'E' in calcType :
             # print('NonAdditiveKE :', obj.energy, fac, self.nbnd, density.integral())
         return obj
-
-
-def electric_potential(evaluator, density, length = 1.0):
-    keys_wf = ['PSEUDO', 'HARTREE']
-    keys_global = evaluator.funcdicts.keys()
-    remove_global = {key : evaluator.funcdicts[key] for key in keys_global if key not in keys_wf}
-    evaluator.update_functional(remove = remove_global)
-
-    wf_pot = evaluator(density, calcType = ['V']).potential
-    wf_pot_z = np.sum(wf_pot, axis = (0, 1)) * ENERGY_CONV['Hartree']['eV']/np.prod(wf_pot.shape[:2])
-    zpos = np.linspace(0, length, wf_pot_z.size)
-
-    evaluator.update_functional(add = remove_global)
-    return (zpos, wf_pot_z)

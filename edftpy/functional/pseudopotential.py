@@ -1,8 +1,4 @@
-import os
-import numpy as np
-from scipy.interpolate import interp1d, splrep, splev
-import scipy.special as sp
-from dftpy.pseudo import LocalPseudo
+from dftpy.pseudo import LocalPseudo, ReadPseudo
 
 
 class LocalPP(LocalPseudo):

@@ -1,10 +1,5 @@
 import numpy as np
 from .utils.common import Field, Functional, AbsFunctional
-from .utils.math import grid_map_index, grid_map_data
-from .kedf import KEDF
-from dftpy.formats.io import write
-import scipy.special as sp
-
 from edftpy.mpi import sprint
 
 

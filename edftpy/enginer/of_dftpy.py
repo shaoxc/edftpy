@@ -2,19 +2,15 @@ import copy
 import numpy as np
 from functools import partial
 from dftpy.constants import LEN_CONV, ENERGY_CONV
-
-from ..mixer import LinearMixer, PulayMixer, AbstractMixer
-from ..utils.math import grid_map_data
-from .hamiltonian import Hamiltonian
-from .driver import Driver
-from edftpy.hartree import hartree_energy
-from edftpy.mpi import sprint
-
 from dftpy.optimization import Optimization
-from dftpy.formats.io import write
 from dftpy.constants import environ
 
-from edftpy.kedf import KEDFunctional
+from edftpy.mixer import LinearMixer, PulayMixer, AbstractMixer
+from edftpy.utils.math import grid_map_data
+from edftpy.functional import hartree_energy, KEDFunctional
+from edftpy.mpi import sprint
+from .hamiltonian import Hamiltonian
+from .driver import Driver
 
 
 class DFTpyOF(Driver):
@@ -381,10 +377,7 @@ class DFTpyOF(Driver):
             self.fileobj.close()
 
 def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = None, options = {}):
-    from edftpy.pseudopotential import LocalPP
-    from edftpy.kedf import KEDF
-    from edftpy.hartree import Hartree
-    from edftpy.xc import XC
+    from edftpy.functional import LocalPP, KEDF, Hartree, XC
     from edftpy.evaluator import Evaluator
     from edftpy.density.init_density import AtomicDensity
     #-----------------------------------------------------------------------

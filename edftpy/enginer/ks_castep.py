@@ -4,7 +4,7 @@ import numpy as np
 from scipy import signal
 import copy
 import os
-from dftpy.formats.ase_io import ions2ase
+from edftpy.io import ions2ase
 import ase.io.castep as ase_io_driver
 from ase.calculators.castep import Castep as ase_calc_driver
 
