@@ -1,5 +1,5 @@
 import numpy as np
-from dftpy.functional_output import Functional as dftpy_func
+from dftpy.functional.functional_output import FunctionalOutput as dftpy_func
 from dftpy.field import DirectField, ReciprocalField
 from dftpy.grid import DirectGrid, ReciprocalGrid
 from dftpy.atom import Atom as dftpy_atom
@@ -7,7 +7,7 @@ from dftpy.base import DirectCell
 from dftpy.base import Coord as dftpy_coord
 from abc import ABC, abstractmethod
 from scipy.interpolate import splrep, splev
-from dftpy.math_utils import quartic_interpolation
+# from dftpy.math_utils import quartic_interpolation
 
 
 def Grid(lattice, nr, direct = True, origin=np.array([0.0, 0.0, 0.0]), units=None, full=False, uppergrid = None, decomposition='Pencil', **kwargs):

@@ -1,4 +1,4 @@
-from dftpy.kedf import KEDF, KEDFunctional, KEDFStress
+from dftpy.functional.kedf import KEDF, KEDFunctional, KEDFStress
 
 from edftpy.utils.common import AbsFunctional
 

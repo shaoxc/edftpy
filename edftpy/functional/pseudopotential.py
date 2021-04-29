@@ -1,4 +1,4 @@
-from dftpy.pseudo import LocalPseudo, ReadPseudo
+from dftpy.functional.pseudo import LocalPseudo, ReadPseudo
 
 
 class LocalPP(LocalPseudo):

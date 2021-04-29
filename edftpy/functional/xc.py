@@ -1,1 +1,1 @@
-from dftpy.semilocal_xc import XC
+from dftpy.functional.semilocal_xc import XC
