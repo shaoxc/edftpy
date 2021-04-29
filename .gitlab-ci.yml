@@ -2,12 +2,12 @@ image: registry.gitlab.com/pavanello-research-group/dftpy:latest
 
 Test:
   before_script:
-    #- git clone -b mpi2 https://gitlab.com/pavanello-research-group/dftpy.git
-    - git clone -b new_functional_class https://gitlab.com/pavanello-research-group/dftpy.git
     - home=$( pwd )
-    - cd dftpy
-    - python setup.py install --user
-    - cd ..
+    #- git clone -b mpi2 https://gitlab.com/pavanello-research-group/dftpy.git
+    #- git clone https://gitlab.com/pavanello-research-group/dftpy.git
+    #- cd dftpy
+    #- python setup.py install --user
+    #- cd ..
   script:
    - python setup.py install --user
    - cd examples
