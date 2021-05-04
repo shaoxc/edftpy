@@ -102,7 +102,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     graphtopo = config2graphtopo(config, graphtopo = graphtopo)
     if graphtopo.rank == 0 :
         config_json = config_to_json(config, ions)
-        write_conf('eDFTpy_running.json', config_json)
+        write_conf('edftpy_running.json', config_json)
     #-----------------------------------------------------------------------
     nr = config[keysys]["grid"]["nr"]
     spacing = config[keysys]["grid"]["spacing"] * LEN_CONV["Angstrom"]["Bohr"]
