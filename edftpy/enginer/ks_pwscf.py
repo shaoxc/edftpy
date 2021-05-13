@@ -326,6 +326,7 @@ class PwscfKS(Driver):
             self._update_kpoints(cell_params, cards)
         ase_io_driver.write_espresso_in(fileobj, self.ase_atoms, params, **cell_params)
         self._write_params_cards(fileobj, params, cards)
+        self._write_params_others(fileobj, params)
         fileobj.close()
         return
 
@@ -361,6 +362,33 @@ class PwscfKS(Driver):
                         break
                     else :
                         fd.write(line + '\n')
+        return
+
+    def _write_params_others(self, fd, params = None, **kwargs):
+        if params is None or len(params) == 0 :
+            return
+        fstrl = []
+        prefix = self.prefix
+        # pw_keys = ['control', 'system', 'electrons', 'ions', 'cell']
+        keys = ['inputtddft']
+        for section in params:
+            if section not in keys : continue
+            fstrl.append('&{0}\n'.format(section.upper()))
+            for key, value in params[section].items():
+                #-----------------------------------------------------------------------
+                if key == 'prefix' :
+                    value = prefix
+                elif key == 'tmp_dir' :
+                    value = prefix + '.tmp'
+                #-----------------------------------------------------------------------
+                if value is True:
+                    fstrl.append('   {0:40} = .true.\n'.format(key))
+                elif value is False:
+                    fstrl.append('   {0:40} = .false.\n'.format(key))
+                else:
+                    fstrl.append('   {0:40} = {1!r:}\n'.format(key, value))
+            fstrl.append('/\n\n')
+        fd.write(''.join(fstrl))
         return
 
     def _format_density(self, volume = None, sym = False, **kwargs):
