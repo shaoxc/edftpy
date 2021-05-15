@@ -31,15 +31,7 @@ def optimize_density_conf(config, **kwargs):
         opt.set_kedf_params(level = -1)
         for i, driver in enumerate(opt.drivers):
             if driver is None : continue
-            driver.stop_run()
-        opt2 = opt
-        opt = config2optimizer(config, opt.gsystem.ions, graphtopo = opt.gsystem.graphtopo)
-        #----------------------------------------------------------------------- 
-        for i, driver in enumerate(opt.drivers):
-            if driver is None : continue
-            if 'KE' in driver.evaluator.funcdicts :
-                driver.evaluator.funcdicts['KE'].rhomax = opt2.drivers[i].evaluator.funcdicts['KE'].rhomax
-            opt.gsystem.total_evaluator.funcdicts['KE'].rhomax = opt2.gsystem.total_evaluator.funcdicts['KE'].rhomax
+            driver.update_workspace(first = True)
         opt.optimize()
     #-----------------------------------------------------------------------
     energy = opt.energy
@@ -84,3 +76,29 @@ def conf2output(config, optimizer):
             sprint("-" * 80)
         optimizer.gsystem.grid.mp.comm.Barrier()
     return
+
+def __optimize_density_conf_test(config, **kwargs):
+    opt = config2optimizer(config, **kwargs)
+    opt.optimize()
+    #-----------------------------------------------------------------------
+    kefunc = opt.gsystem.total_evaluator.funcdicts.get('KE', None)
+    if kefunc is not None and kefunc.name.startswith('MIX_'):
+        opt.set_kedf_params(level = -1)
+        for i, driver in enumerate(opt.drivers):
+            if driver is None : continue
+            driver.stop_run()
+        opt2 = opt
+        opt = config2optimizer(config, opt.gsystem.ions, graphtopo = opt.gsystem.graphtopo)
+        #-----------------------------------------------------------------------
+        for i, driver in enumerate(opt.drivers):
+            if driver is None : continue
+            if 'KE' in driver.evaluator.funcdicts :
+                driver.evaluator.funcdicts['KE'].rhomax = opt2.drivers[i].evaluator.funcdicts['KE'].rhomax
+            opt.gsystem.total_evaluator.funcdicts['KE'].rhomax = opt2.gsystem.total_evaluator.funcdicts['KE'].rhomax
+        opt.optimize()
+    #-----------------------------------------------------------------------
+    energy = opt.energy
+    sprint('Final energy (a.u.)', energy)
+    sprint('Final energy (eV)', energy * ENERGY_CONV['Hartree']['eV'])
+    sprint('Final energy (eV/atom)', energy * ENERGY_CONV['Hartree']['eV']/opt.gsystem.ions.nat)
+    return opt

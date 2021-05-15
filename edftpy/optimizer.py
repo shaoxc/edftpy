@@ -32,7 +32,8 @@ class Optimization(object):
         }
 
         self.options = default_options
-        self.options.update(options)
+        if isinstance(options, dict):
+            self.options.update(options)
         self.nsub = len(self.drivers)
         self.of_drivers = []
         self.of_ids = []
@@ -120,6 +121,7 @@ class Optimization(object):
 
         self.gsystem.gaussian_density[:] = 0.0
         self.gsystem.density[:] = 0.0
+        self.gsystem.core_density[:] = 0.0
         for i, driver in enumerate(self.drivers):
             if driver is None :
                 density = None
