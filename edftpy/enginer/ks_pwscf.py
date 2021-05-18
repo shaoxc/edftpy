@@ -110,7 +110,7 @@ class PwscfKS(Driver):
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
 
         if not first :
-            pos = self.subcell.ions.pos.to_crys().T
+            pos = self.subcell.ions.pos.to_cart().T / self.subcell.grid.latparas[0]
             qepy.qepy_mod.qepy_update_ions(self.embed, pos)
             # get new density
             qepy.qepy_mod.qepy_get_rho(self.charge)
