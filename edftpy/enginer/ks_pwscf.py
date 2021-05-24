@@ -29,7 +29,7 @@ class PwscfKS(Driver):
     """
     def __init__(self, evaluator = None, subcell = None, prefix = 'sub_ks', params = None, cell_params = None,
             exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None,
-            diag_conv = 1E-10, **kwargs):
+            diag_conv = 1E-10, task = 'scf', **kwargs):
         '''
         Here, prefix is the name of the input file
         exttype :
@@ -50,6 +50,7 @@ class PwscfKS(Driver):
         self.prefix = prefix
         self.ncharge = ncharge
         self.comm = self.subcell.grid.mp.comm
+        self.task = task
         self.outfile = None
         if self.prefix :
             if self.comm.rank == 0 :
@@ -86,7 +87,7 @@ class PwscfKS(Driver):
         self.embed.diag_conv = diag_conv
         self.update_workspace(first = True)
 
-    def update_workspace(self, subcell = None, first = False, **kwargs):
+    def update_workspace(self, subcell = None, first = False, update = 0, **kwargs):
         """
         Notes:
             clean workspace
@@ -111,10 +112,18 @@ class PwscfKS(Driver):
 
         if not first :
             pos = self.subcell.ions.pos.to_cart().T / self.subcell.grid.latparas[0]
-            qepy.qepy_mod.qepy_update_ions(self.embed, pos)
-            # get new density
-            qepy.qepy_mod.qepy_get_rho(self.charge)
-            self.density[:] = self._format_density_invert()
+            qepy.qepy_mod.qepy_update_ions(self.embed, pos, update)
+            if update == 0 :
+                # get new density
+                qepy.qepy_mod.qepy_get_rho(self.charge)
+                self.density[:] = self._format_density_invert()
+        if self.task == 'optical' :
+            if first :
+                self.embed.tddft.initial = True
+                self.embed.tddft.finish = False
+                self.embed.tddft.nstep = 900000 # Any large enough number
+                qepy.qepy_tddft_readin(self.prefix + self._input_ext)
+                qepy.qepy_tddft_main_setup(self.embed)
 
         if self.grid_driver is not None :
             grid = self.grid_driver
@@ -275,7 +284,11 @@ class PwscfKS(Driver):
             comm = self.comm.py2f()
             # print('comm00', comm, self.comm.size)
         qepy.qepy_mod.qepy_set_stdout(self.outfile)
-        qepy.qepy_pwscf(self.prefix + self._input_ext, comm)
+        if self.task == 'optical' :
+            qepy.qepy_tddft_main_initial(self.prefix + self._input_ext, comm)
+            qepy.read_file()
+        else :
+            qepy.qepy_pwscf(self.prefix + self._input_ext, comm)
 
     def init_density(self, rho_ini = None):
 
@@ -324,7 +337,17 @@ class PwscfKS(Driver):
         fileobj = open(outfile, 'w')
         if 'kpts' not in cell_params :
             self._update_kpoints(cell_params, cards)
-        ase_io_driver.write_espresso_in(fileobj, self.ase_atoms, params, **cell_params)
+        pw_items = ['control', 'system', 'electrons', 'ions', 'cell']
+        pw_params = params.copy()
+        for k in params :
+            if k not in pw_items : del pw_params[k]
+        #-----------------------------------------------------------------------
+        rm_items = ['ibrav', 'celldm(1)', 'celldm(2)', 'celldm(3)', 'celldm(4)', 'celldm(5)', 'celldm(6)']
+        for item in rm_items :
+            if item in pw_params['system'] :
+                del pw_params['system'][item]
+        #-----------------------------------------------------------------------
+        ase_io_driver.write_espresso_in(fileobj, self.ase_atoms, pw_params, **cell_params)
         self._write_params_cards(fileobj, params, cards)
         self._write_params_others(fileobj, params)
         fileobj.close()
@@ -379,7 +402,7 @@ class PwscfKS(Driver):
                 if key == 'prefix' :
                     value = prefix
                 elif key == 'tmp_dir' :
-                    value = prefix + '.tmp'
+                    value = prefix + '.tmp/'
                 #-----------------------------------------------------------------------
                 if value is True:
                     fstrl.append('   {0:40} = .true.\n'.format(key))
@@ -461,13 +484,22 @@ class PwscfKS(Driver):
             extene = self.comm.bcast(extene, root = 0)
         return extene
 
-    def get_density(self, vext = None, sdft = 'sdft', **kwargs):
-        '''
-        '''
+    def _get_charge(self):
         #-----------------------------------------------------------------------
         printout = 2
         exxen = 0.0
         #-----------------------------------------------------------------------
+        if self.task == 'optical' :
+            qepy.qepy_molecule_optical_absorption(self.embed)
+        else :
+            qepy.qepy_electrons_scf(printout, exxen, self.embed)
+
+        qepy.qepy_mod.qepy_get_rho(self.charge)
+        return self.charge
+
+    def get_density(self, vext = None, sdft = 'sdft', **kwargs):
+        '''
+        '''
         self._iter += 1
         if self._iter == 1 :
             # The first step density mixing also need keep initial = True
@@ -495,11 +527,11 @@ class PwscfKS(Driver):
         self.embed.initial = initial
         self.embed.mix_coef = -1.0
         self.embed.finish = False
-        qepy.qepy_electrons_scf(printout, exxen, self.embed)
+        #
+        self._get_charge()
+        #
         self.energy = self.embed.etotal
         self.dp_norm = self.embed.dnorm
-
-        qepy.qepy_mod.qepy_get_rho(self.charge)
         self.density[:] = self._format_density_invert()
         return self.density
 
@@ -606,13 +638,23 @@ class PwscfKS(Driver):
         pass
 
     def end_scf(self, **kwargs):
-        self.embed.finish = True
-        qepy.qepy_electrons_scf(0, 0, self.embed)
+        if self.task == 'optical' :
+            self.embed.tddft.finish = True
+            qepy.qepy_molecule_optical_absorption(self.embed)
+        else :
+            self.embed.finish = True
+            qepy.qepy_electrons_scf(0, 0, self.embed)
 
-    @staticmethod
-    def stop_run(status = 0, **kwargs):
+    def save(self, kind = 'all', **kwargs):
+        qepy.punch(kind)
+        qepy.close_files(False)
+
+    def stop_run(self, status = 0, **kwargs):
         # what = 'all' will write wavefunctions and density
-        qepy.qepy_stop_run(status, **kwargs)
+        if self.task == 'optical' :
+            qepy.qepy_stop_tddft(status)
+        else :
+            qepy.qepy_stop_run(status, **kwargs)
         qepy.qepy_clean_saved()
 
     @staticmethod
