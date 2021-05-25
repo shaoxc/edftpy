@@ -30,8 +30,8 @@ class MoleculeOpticalAbsorption(Optimization):
             for driver in self.drivers:
                 if driver is not None :
                     driver.save()
-                    driver.update_workspace(first = True)
                     driver.task = 'optical'
+                    driver.update_workspace(first = True)
 
     def update_density(self, initial = False, **kwargs):
         self.gsystem.density[:] = 0.0
