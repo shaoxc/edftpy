@@ -197,9 +197,17 @@ class GraphTopo:
                 self.comm.Allgather(self.MPI.IN_PLACE, ranks)
                 grp_region= self.group.Incl(ranks[ranks > -1])
                 self.comm_region[i] = self.comm.Create(grp_region)
+                grp_region.Free()
                 if ranks[self.rank] < 0 :
                     self.comm_region[i] = None
                 else :
+                    #reorder the rank of comm_region
+                    cmid = i%self.comm_region[i].size
+                    ckey = abs(cmid - self.comm_region[i].rank)
+                    comm_temp = self.comm_region[i].Split(0, ckey)
+                    self.comm_region[i].Free()
+                    self.comm_region[i] = comm_temp
+                    #
                     self.comm_region[i].Allreduce(offsets, self.graph.region_shift[i], op=self.MPI.MIN)
                     self.graph.region_offsets[i] = offsets - self.graph.region_shift[i]
 
@@ -210,6 +218,7 @@ class GraphTopo:
             # print(self.rank, ' region -> ', self.graph.region_shape,  self.graph.region_shift)
 
     def distribute_procs(self, nprocs = None):
+        zero = 1E-8 # nonzero
         if not self.is_mpi :
             self.comm_sub = SerialComm()
             self.nprocs = np.ones(1, dtype = 'int')
@@ -217,31 +226,36 @@ class GraphTopo:
         elif nprocs is None :
             raise AttributeError("Must give the 'nprocs' in parallel version")
         nprocs = np.asarray(nprocs, dtype = 'float')
-        if nprocs.sum() != self.comm.size :
-            ns = np.count_nonzero(nprocs > 0)
+        self.nprocs = np.rint(nprocs).astype(dtype = 'int')
+        nmin = 2.0
+        if self.nprocs.sum() != self.size :
+            ns = np.count_nonzero(nprocs > zero)
             if ns == 0 :
                 self.comm_sub = SerialComm()
-                self.nprocs = np.ones(1, dtype = 'int') * int(nprocs.sum())
+                self.nprocs = np.ones(1, dtype = 'int') * self.size
                 return
-            nmin = np.min(nprocs[nprocs > 0.1])
+            nmin = np.min(nprocs[nprocs > zero])
             if nmin < 1.1 : # ratio of processors
                 if nprocs.sum() == ns :
                     av = self.size // ns
                     nprocs[:] = nprocs * av
                 else :
                     nprocs[:] = nprocs * self.size / nprocs.sum()
-                res = self.size - nprocs.sum()
-                if res < 0 :
-                    nprocs[nprocs > 0] -= 1
-                    res = self.size - nprocs.sum()
-                for i, n in enumerate(nprocs):
-                    if res == 0 : break
-                    if n > 0 :
-                        nprocs[i] += 1
-                        res -= 1
+                self.nprocs = np.rint(nprocs).astype(dtype = 'int')
             else : # set as maximum of processors
                 pass
-        self.nprocs = nprocs.astype(dtype = 'int')
+        if self.nprocs.sum() != self.size :
+            res = self.size - nprocs.sum()
+            if res < 0 :
+                self.nprocs[self.nprocs > 0] -= 1
+                res = self.size - self.nprocs.sum()
+                nmin = 1.0
+            if nmin < 1.1 : # ratio of processors
+                for i, n in enumerate(self.nprocs):
+                    if res == 0 : break
+                    if n > 0 :
+                        self.nprocs[i] += 1
+                        res -= 1
         ub = 0
         self.isub = len(self.nprocs) + 100
         for i, n in enumerate(self.nprocs):
@@ -303,6 +317,7 @@ class GraphTopo:
             if comm is not None :
                 comm.Free()
                 self.comm_region[i] = None
+            # self.comm.Barrier()
         return
 
     @property

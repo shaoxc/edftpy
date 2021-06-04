@@ -651,6 +651,7 @@ class PwscfKS(Driver):
 
     def stop_run(self, status = 0, **kwargs):
         # what = 'all' will write wavefunctions and density
+        # self.save()
         if self.task == 'optical' :
             qepy.qepy_stop_tddft(status)
         else :

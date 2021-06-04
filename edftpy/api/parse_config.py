@@ -221,6 +221,7 @@ def config2graphtopo(config, graphtopo = None):
         sprint('Communicators already created : ', graphtopo.comm.size, comm = graphtopo.comm)
     sprint('Number of subsystems : ', len(graphtopo.nprocs), comm = graphtopo.comm)
     f_str = np.array2string(graphtopo.nprocs, separator=' ', max_line_width=80)
+    f_str += '\nUsed of processors and remainder : {} {}'.format(np.sum(graphtopo.nprocs), graphtopo.size-np.sum(graphtopo.nprocs))
     sprint('Number of processors for each subsystem : \n ', f_str, comm = graphtopo.comm)
     return graphtopo
 

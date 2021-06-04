@@ -142,6 +142,7 @@
 			"type": "float",
 			"options": "",
 			"comment": "The time step for TDDFT (fs)",
+			"unit": "femtosecond",
 			"default": "1"
 		}
 	},
