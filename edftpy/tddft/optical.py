@@ -93,7 +93,8 @@ class MoleculeOpticalAbsorption(Optimization):
             self.energy = self.get_energy(self.density, totalfunc.energy, olevel = olevel)[0]
             self.dip = get_dipole(self.density, self.gsystem.ions)
             #-----------------------------------------------------------------------
-            fmt = "{:>10s}{:<8d}{:<24.12E}{:<14.6E}{:<14.6E}{:<14.6E}{:<16.6E}".format(
+            # fmt = "{:>10s}{:<8d}{:<24.12E}{:<14.6E}{:<14.6E}{:<14.6E}{:<16.6E}".format(
+            fmt = "{:>10s}{:<8d}{:<24.12E}{:<24.16E}{:<24.16E}{:<24.16E}{:<16.6E}".format(
                     "Embed: ", self.iter, self.energy, *self.dip, time.time()- self.time_begin)
             sprint(seq +'\n' + fmt +'\n' + seq)
         return

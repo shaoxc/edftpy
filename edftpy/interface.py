@@ -75,6 +75,12 @@ def conf2output(config, optimizer):
             sprint(fstr_f.format("MSD force (a.u.)", *fmsd))
             sprint("-" * 80)
         optimizer.gsystem.grid.mp.comm.Barrier()
+
+    if config["OUTPUT"]["sub_temp"] :
+        save = ['D', 'W']
+    else :
+        save = ['D']
+    optimizer.stop_run(save = save)
     return
 
 def __optimize_density_conf_test(config, **kwargs):

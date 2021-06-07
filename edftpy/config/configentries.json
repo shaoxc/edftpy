@@ -61,7 +61,13 @@
 		"electrostatic_potential": {
 			"type": "str",
 			"default": null,
-			"comment": "Output of electrostatic_potential"
+			"comment": "Output of electrostatic_potential."
+		},
+		"sub_temp": {
+			"type": "bool",
+			"default": false,
+			"options": "True, False",
+			"comment": "Output all the temporary files of subsystems."
 		}
 	},
 	"OPT": {

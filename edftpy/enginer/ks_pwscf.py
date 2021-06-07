@@ -645,17 +645,23 @@ class PwscfKS(Driver):
             self.embed.finish = True
             qepy.qepy_electrons_scf(0, 0, self.embed)
 
-    def save(self, kind = 'all', **kwargs):
-        qepy.punch(kind)
+    def save(self, save = ['D'], **kwargs):
+        if 'W' in save :
+            what = 'all'
+        else :
+            what = 'config-nowf'
+        qepy.punch(what)
         qepy.close_files(False)
 
-    def stop_run(self, status = 0, **kwargs):
-        # what = 'all' will write wavefunctions and density
-        # self.save()
+    def stop_run(self, status = 0, save = ['D'], **kwargs):
         if self.task == 'optical' :
             qepy.qepy_stop_tddft(status)
         else :
-            qepy.qepy_stop_run(status, **kwargs)
+            if 'W' in save :
+                what = 'all'
+            else :
+                what = 'config-nowf'
+            qepy.qepy_stop_run(status, what = what)
         qepy.qepy_clean_saved()
 
     @staticmethod

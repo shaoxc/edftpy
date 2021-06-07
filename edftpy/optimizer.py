@@ -584,10 +584,10 @@ class Optimization(object):
                 driver.end_scf()
         return
 
-    def stop_run(self):
+    def stop_run(self, save = ['D']):
         for i, driver in enumerate(self.drivers):
             if driver is not None :
-                driver.stop_run()
+                driver.stop_run(save = save)
         return
 
     def add_xc_correction(self):
