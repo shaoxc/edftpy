@@ -131,9 +131,9 @@ class PwscfKS(Driver):
             grid = self.grid
 
         if self.comm.rank == 0 :
-            core_charge = np.empty((grid.nnr, self.nspin), order = 'F')
+            core_charge = np.empty(grid.nnr, order = 'F')
         else :
-            core_charge = self.atmp2
+            core_charge = self.atmp
         qepy.qepy_mod.qepy_get_rho_core(core_charge)
         self.core_density= self._format_density_invert(core_charge)
 
@@ -165,7 +165,8 @@ class PwscfKS(Driver):
         #     print('ncharge_sub', self.density.integral())
         #-----------------------------------------------------------------------
 
-        clean_variables(core_charge)
+        if self.comm.rank == 0 :
+            clean_variables(core_charge)
         return
 
     @property
