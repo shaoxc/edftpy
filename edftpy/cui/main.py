@@ -44,7 +44,6 @@ def run_job(args):
     sprint("#" * 80)
     sprint("Finished on :", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
 
-
-if __name__ == "__main__":
+def main():
     args = get_conf()
     run_job(args)

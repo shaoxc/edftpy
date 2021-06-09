@@ -361,9 +361,9 @@ class PwscfKS(Driver):
         for line in lines :
             if line.split()[0].upper() == 'K_POINTS' :
                 ktype = line.split()[1].lower()
-                if ktype == 'gamma' :
+                if 'gamma' in ktype :
                     break
-                elif ktype == 'automatic' :
+                elif 'automatic' in ktype :
                     line = next(lines)
                     item = list(map(int, line.split()))
                     d = {'kpts' : item[:3], 'koffset' : item[3:6]}
