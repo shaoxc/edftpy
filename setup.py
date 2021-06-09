@@ -2,7 +2,7 @@
 from setuptools import setup, find_packages
 import sys
 import os
-from edftpy import __version__, __author__, __contact__, __license__
+import re
 
 def parse_requirements():
     requires = []
@@ -19,17 +19,33 @@ def pip_install_git(link):
     os.system('pip install --upgrade {}'.format(link))
     return
 
+# from edftpy import __version__, __author__, __contact__, __license__
+with open('edftpy/__init__.py') as fd :
+    lines = fd.read()
+    __version__ = re.search('__version__ = "(.*)"', lines).group(1)
+    __author__ = re.search('__author__ = "(.*)"', lines).group(1)
+    __contact__ = re.search('__contact__ = "(.*)"', lines).group(1)
+    __license__ = re.search('__license__ = "(.*)"', lines).group(1)
 
 assert sys.version_info >= (3, 6)
-
 description = "eDFTpy"
 long_description = """eDFTpy"""
 
 scripts=['scripts/edftpy']
 
 extras_require = {
-        'libxc' : ['libxc @ git+https://gitlab.com/libxc/libxc.git'],
+        'pylibxc' : ['pylibxc @ git+https://gitlab.com/libxc/libxc.git'],
         'f90wrap' : ['f90wrap @ git+https://github.com/jameskermode/f90wrap.git'],
+        'all' : [
+            'pylibxc @ git+https://gitlab.com/libxc/libxc.git',
+            'f90wrap @ git+https://github.com/jameskermode/f90wrap.git',
+            'ase>=3.21.1',
+            'xmltodict',
+            'upf_to_json',
+            'mpi4py',
+            'mpi4py-fft',
+            'pyfftw',
+            ],
         }
 
 setup(name='edftpy',

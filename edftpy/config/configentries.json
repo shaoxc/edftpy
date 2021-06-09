@@ -8,13 +8,13 @@
 			"type": "cstr",
 			"default": "Optdensity",
 			"comment": "The task to be performed.",
-			"options": "Optdensity, Calculation"
+			"options": "Optdensity, Calculation, Tddft"
 		},
 		"calctype": {
 			"type": "cstrlist",
 			"default": "Energy",
 			"comment": "The property to be calculated.",
-			"options": "Energy, Potential, Both, Force, Stress"
+			"options": "Energy, Potential, Force, Stress"
 		}
 	},
 	"PATH": {
@@ -61,7 +61,13 @@
 		"electrostatic_potential": {
 			"type": "str",
 			"default": null,
-			"comment": "Output of electrostatic_potential"
+			"comment": "Output of electrostatic_potential."
+		},
+		"sub_temp": {
+			"type": "bool",
+			"default": false,
+			"options": "True, False",
+			"comment": "Output all the temporary files of subsystems."
 		}
 	},
 	"OPT": {
@@ -100,7 +106,7 @@
 		"olevel": {
 			"type": "int",
 			"comment": "The level of output energy, large will faster.",
-			"note": "Only set 0, the energy of each cycle is usefull",
+			"note": "Only set 0, the energy of each cycle is useful",
 			"default": 2
 		},
 		"sdft": {
@@ -108,6 +114,42 @@
 			"options": "sdft, pdft",
 			"comment": "Subsytem DFT or Partition DFT",
 			"default": "sdft"
+		}
+	},
+	"TD": {
+		"comment": {
+			"type": "str",
+			"default": "Control the TDDFT."
+		},
+		"maxiter": {
+			"type": "int",
+			"default": 1000,
+			"comment": "The max steps for TDDFT"
+		},
+		"olevel": {
+			"type": "int",
+			"comment": "The level of output energy, large will faster.",
+			"note": "Only set 0, the energy of each cycle is useful",
+			"default": 2
+		},
+		"sdft": {
+			"type": "str",
+			"options": "sdft, pdft",
+			"comment": "Subsytem DFT or Partition DFT",
+			"default": "sdft"
+		},
+		"restart": {
+			"type": "str",
+			"options": "initial, scf, restart",
+			"comment": "Start the job from new one, scf results or restart from previous run",
+			"default": "initial"
+		},
+		"timestep": {
+			"type": "float",
+			"options": "",
+			"comment": "The time step for TDDFT (fs)",
+			"unit": "femtosecond",
+			"default": "1"
 		}
 	},
 	"GSYSTEM": {

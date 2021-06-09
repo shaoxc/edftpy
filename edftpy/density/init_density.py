@@ -8,10 +8,8 @@ from .density import get_3d_value_recipe
 
 class AtomicDensity(object):
     """
-    LocalPseudo class handles local pseudo potentials.
-    This is a template class and should never be touched.
+    The densities for atomic atoms.
     """
-
     def __init__(self, files =None, ftypes = None, direct = True, **kwargs):
 
         self.files = files

@@ -41,6 +41,7 @@ class Optimization(object):
             if driver is not None and driver.technique== 'OF' :
                     self.of_drivers.append(driver)
                     self.of_ids.append(i)
+        self.iter = 0
 
     def guess_pconv(self):
         if self.options['pconv'] is None:
@@ -160,7 +161,7 @@ class Optimization(object):
         totalrho_prev = None
         sdft = self.options['sdft']
         for it in range(self.options['maxiter']):
-            self.iter = it
+            self.iter += 1
             # update the rhomax for NLKEDF
             self.set_kedf_params(level = it + 2) # first step without NL
             self.set_global_potential()
@@ -204,7 +205,7 @@ class Optimization(object):
             # d_res = np.max(res_norm)
             d_res= hartree_energy(totalrho-totalrho_prev)
             #-----------------------------------------------------------------------
-            fmt = "{:>10s}{:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format("Embed: ", it, energy, dE, d_ehart, d_res, timecost - time_begin)
+            fmt = "{:>10s}{:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format("Embed: ", self.iter, energy, dE, d_ehart, d_res, timecost - time_begin)
             # fmt += "\n{:>10s}{:<8d}{:<24.12E}".format("Total: ", it, totalfunc.energy)
             sprint(seq +'\n' + fmt +'\n' + seq)
             # Only check when accurately calculate the energy
@@ -584,10 +585,10 @@ class Optimization(object):
                 driver.end_scf()
         return
 
-    def stop_run(self):
+    def stop_run(self, save = ['D']):
         for i, driver in enumerate(self.drivers):
             if driver is not None :
-                driver.stop_run()
+                driver.stop_run(save = save)
         return
 
     def add_xc_correction(self):

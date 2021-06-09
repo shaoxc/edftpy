@@ -10,6 +10,7 @@ from edftpy.config import read_conf, print_conf, write_conf
 
 from edftpy.functional import LocalPP, KEDF, Hartree, XC
 from edftpy.optimizer import Optimization
+from edftpy.tddft import TDDFT
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
@@ -67,13 +68,13 @@ def config_correct(config):
 
     return config
 
-def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, pseudo = None, **kwargs):
+def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, pseudo = None, cell_change = None, **kwargs):
     if isinstance(config, dict):
         pass
     elif isinstance(config, str):
         config = read_conf(config)
     ############################## Gsystem ##############################
-    cell_change = None
+    # cell_change = None
     keysys = "GSYSTEM"
     if ions is None :
         try :
@@ -84,16 +85,16 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         except Exception:
             ions = io.ase_read(config["PATH"]["cell"] +os.sep+ config[keysys]["cell"]["file"])
 
-    if optimizer is not None :
+    if optimizer is not None and cell_change is None:
         if not np.allclose(optimizer.gsystem.ions.pos.cell.lattice, ions.pos.cell.lattice):
             cell_change = None # cell_change = 'cell'
-            # except PSEUDO, clean everything
-            for i, driver in enumerate(optimizer.drivers):
-                if driver is None : continue
-                driver.stop_run()
-            pseudo = optimizer.gsystem.total_evaluator.funcdicts['PSEUDO']
         else :
             cell_change = 'position'
+
+    if optimizer is not None and cell_change != 'position' :
+        # except PSEUDO, clean everything
+        optimizer.stop_run()
+        pseudo = optimizer.gsystem.total_evaluator.funcdicts['PSEUDO']
 
     config = config2nsub(config, ions)
     #-----------------------------------------------------------------------
@@ -175,7 +176,18 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     # graphtopo.comm.Barrier()
     optimization_options = config["OPT"].copy()
     optimization_options["econv"] *= ions.nat
+    task = config["JOB"]['task']
+    tddft_options = config["TD"]
     opt = Optimization(drivers = drivers, options = optimization_options, gsystem = gsystem)
+    if task == 'Tddft' :
+        if optimizer is not None and cell_change == 'position' :
+            optimizer.gsystem = gsystem
+            optimizer.drivers = drivers
+            optimizer.optimizer = opt
+            optimizer.options['restart'] = 'restart'
+            opt = optimizer
+        else :
+            opt = TDDFT(drivers = drivers, options = tddft_options, gsystem = gsystem, optimizer = opt)
     return opt
 
 def config2graphtopo(config, graphtopo = None):
@@ -209,6 +221,7 @@ def config2graphtopo(config, graphtopo = None):
         sprint('Communicators already created : ', graphtopo.comm.size, comm = graphtopo.comm)
     sprint('Number of subsystems : ', len(graphtopo.nprocs), comm = graphtopo.comm)
     f_str = np.array2string(graphtopo.nprocs, separator=' ', max_line_width=80)
+    f_str += '\nUsed of processors and remainder : {} {}'.format(np.sum(graphtopo.nprocs), graphtopo.size-np.sum(graphtopo.nprocs))
     sprint('Number of processors for each subsystem : \n ', f_str, comm = graphtopo.comm)
     return graphtopo
 
@@ -371,6 +384,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     exttype = config[keysys]["exttype"]
     atomicfiles = config[keysys]["density"]["atomic"].copy()
     optfft = config[keysys]["grid"]["optfft"]
+    tddft = config['TD']
     if atomicfiles :
         for k, v in atomicfiles.copy().items():
             if not os.path.exists(v):
@@ -466,6 +480,14 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         driver = DFTpyOF(**margs)
         return driver
 
+    if driver is not None :
+        task = driver.task
+    else :
+        task = 'scf'
+        if config["JOB"]['task'] == 'Tddft' :
+            if tddft['restart'] != 'initial' :
+                task = 'optical'
+
     margs = {
             'evaluator' : embed_evaluator,
             'prefix' : prefix,
@@ -477,14 +499,18 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             'mixer' : mixer,
             'comm' : mp.comm,
             'key' : keysys,
-            'ncharge' : ncharge
+            'ncharge' : ncharge,
+            'task' : task
             }
 
     if cell_change == 'cell' :
         raise AttributeError("Not support change the cell")
 
     if cell_change == 'position' :
-        driver.update_workspace(subcell)
+        if task == 'optical' :
+            driver.update_workspace(subcell, update = 1)
+        else :
+            driver.update_workspace(subcell)
     else :
         if calculator == 'dftpy' :
             driver = get_dftpy_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)

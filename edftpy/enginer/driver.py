@@ -44,6 +44,9 @@ class Driver(ABC):
     def stop_run(self, *arg, **kwargs):
         pass
 
+    def save(self, *arg, **kwargs):
+        pass
+
     def __call__(self, density = None, gsystem = None, calcType = ['O', 'E'], **kwargs):
         return self.compute(density, gsystem, calcType, **kwargs)
 

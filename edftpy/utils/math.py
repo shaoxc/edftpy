@@ -4,7 +4,9 @@ import scipy.special as sp
 from scipy import ndimage, signal
 from functools import reduce
 import itertools
+
 from dftpy.utils import grid_map_index, grid_map_data
+from dftpy.base import r2s, s2r
 
 from .common import Field, Grid
 
