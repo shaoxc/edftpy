@@ -29,7 +29,7 @@ class MoleculeOpticalAbsorption(Optimization):
             self.optimizer.optimize()
             for driver in self.drivers:
                 if driver is not None :
-                    driver.save()
+                    driver.save(save = ['W', 'D'])
                     driver.task = 'optical'
                     driver.update_workspace(first = True)
 
@@ -90,12 +90,11 @@ class MoleculeOpticalAbsorption(Optimization):
             self.update_density()
             self.density = self.gsystem.density.copy()
             totalfunc = self.gsystem.total_evaluator(self.density, calcType = ['E'], olevel = olevel)
-            self.energy = self.get_energy(self.density, totalfunc.energy, olevel = olevel)[0]
-            self.dip = get_dipole(self.density, self.gsystem.ions)
+            self.energy = self.get_energy(self.density_prev, totalfunc.energy, olevel = olevel)[0]
+            self.dip = get_dipole(self.density_prev, self.gsystem.ions)
             #-----------------------------------------------------------------------
-            # fmt = "{:>10s}{:<8d}{:<24.12E}{:<14.6E}{:<14.6E}{:<14.6E}{:<16.6E}".format(
-            fmt = "{:>10s}{:<8d}{:<24.12E}{:<24.16E}{:<24.16E}{:<24.16E}{:<16.6E}".format(
-                    "Embed: ", self.iter, self.energy, *self.dip, time.time()- self.time_begin)
+            fmt = "{:>10s}{:<8d}{:<24.12E}{:<14.6E}{:<14.6E}{:<14.6E}{:<16.6E}".format(
+                    "Tddft: ", self.iter, self.energy, *self.dip, time.time()- self.time_begin)
             sprint(seq +'\n' + fmt +'\n' + seq)
         return
 
