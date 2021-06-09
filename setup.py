@@ -28,8 +28,18 @@ long_description = """eDFTpy"""
 scripts=['scripts/edftpy']
 
 extras_require = {
-        'libxc' : ['libxc @ git+https://gitlab.com/libxc/libxc.git'],
+        'pylibxc' : ['pylibxc @ git+https://gitlab.com/libxc/libxc.git'],
         'f90wrap' : ['f90wrap @ git+https://github.com/jameskermode/f90wrap.git'],
+        'all' : [
+            'pylibxc @ git+https://gitlab.com/libxc/libxc.git',
+            'f90wrap @ git+https://github.com/jameskermode/f90wrap.git',
+            'ase>=3.21.1',
+            'xmltodict',
+            'upf_to_json',
+            'mpi4py',
+            'mpi4py-fft',
+            'pyfftw',
+            ],
         }
 
 setup(name='edftpy',
