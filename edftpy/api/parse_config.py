@@ -166,11 +166,11 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     for i, driver in enumerate(drivers):
         if driver is None : continue
         if (driver.technique == 'OF' and graphtopo.is_root) or (graphtopo.isub == i and graphtopo.comm_sub.rank == 0) or graphtopo.isub is None:
-            outfile = driver.prefix + '.vasp'
-            io.ase_write(outfile, driver.subcell.ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
+            outfile = driver.prefix + '.xyz'
+            io.ase_write(outfile, driver.subcell.ions, format = 'extxyz', parallel = False)
             # io.write(driver.prefix +'.xsf', driver.density, driver.subcell.ions)
     if graphtopo.is_root :
-        io.ase_write('edftpy_cell.vasp', ions, format = 'vasp', direct = 'True', vasp5 = True, parallel = False)
+        io.ase_write('edftpy_cell.xyz', ions, format = 'extxyz', parallel = False)
     #-----------------------------------------------------------------------
     # io.write('total.xsf', gsystem.density, gsystem.ions)
     # graphtopo.comm.Barrier()
