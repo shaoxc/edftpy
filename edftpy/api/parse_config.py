@@ -298,6 +298,7 @@ def config2embed_evaluator(config, keysys, ions, grid, pplist = None, cell_chang
     if calculator == 'dftpy' and opt_options['opt_method'] == 'full' :
         # Remove the vW part from the KE
         ke_kwargs['y'] = 0.0
+        ke_kwargs['gga_remove_vw'] = True
         ke_evaluator = KEDF(**ke_kwargs)
     else :
         ke_evaluator = None
@@ -344,6 +345,7 @@ def config2evaluator_of(config, keysys, ions=None, grid=None, pplist = None, gsy
     else :
         # Remove the vW part from the KE
         ke_kwargs['y'] = 0.0
+        ke_kwargs['gga_remove_vw'] = True
         ke_evaluator = KEDF(**ke_kwargs)
         sub_funcdicts['KE'] = ke_evaluator
         evaluator_of = EvaluatorOF(gsystem = gsystem, ke_evaluator = ke_sub, **sub_funcdicts)
