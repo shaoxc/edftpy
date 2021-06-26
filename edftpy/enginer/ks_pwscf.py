@@ -29,7 +29,7 @@ class PwscfKS(Driver):
     """
     def __init__(self, evaluator = None, subcell = None, prefix = 'sub_ks', params = None, cell_params = None,
             exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None,
-            diag_conv = 1E-10, task = 'scf', **kwargs):
+            diag_conv = 1E-10, task = 'scf', restart = False, **kwargs):
         '''
         Here, prefix is the name of the input file
         exttype :
@@ -85,9 +85,9 @@ class PwscfKS(Driver):
         self.init_density()
         self.embed = qepy.qepy_common.embed_base()
         self.embed.diag_conv = diag_conv
-        self.update_workspace(first = True)
+        self.update_workspace(first = True, restart = restart)
 
-    def update_workspace(self, subcell = None, first = False, update = 0, **kwargs):
+    def update_workspace(self, subcell = None, first = False, update = 0, restart = False, **kwargs):
         """
         Notes:
             clean workspace
@@ -124,6 +124,11 @@ class PwscfKS(Driver):
                 self.embed.tddft.nstep = 900000 # Any large enough number
                 qepy.qepy_tddft_readin(self.prefix + self._input_ext)
                 qepy.qepy_tddft_main_setup(self.embed)
+                if restart :
+                    qepy.qepy_tddft_mod.qepy_cetddft_wfc2rho()
+                    # get new density
+                    qepy.qepy_mod.qepy_get_rho(self.charge)
+                    self.density[:] = self._format_density_invert()
 
         if self.grid_driver is not None :
             grid = self.grid_driver

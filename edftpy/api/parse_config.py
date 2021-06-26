@@ -482,6 +482,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         driver = DFTpyOF(**margs)
         return driver
 
+    restart = False
     if driver is not None :
         task = driver.task
     else :
@@ -489,6 +490,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         if config["JOB"]['task'] == 'Tddft' :
             if tddft['restart'] != 'initial' :
                 task = 'optical'
+                restart = tddft['restart'] == 'restart'
 
     margs = {
             'evaluator' : embed_evaluator,
@@ -502,7 +504,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             'comm' : mp.comm,
             'key' : keysys,
             'ncharge' : ncharge,
-            'task' : task
+            'task' : task,
+            'restart' : restart
             }
 
     if cell_change == 'cell' :

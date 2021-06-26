@@ -344,7 +344,7 @@
 				"type": "cstr",
 				"default": null,
 				"options": "None, Atomic, Read, Ofdft, Heg",
-				"comment": "For OFDFT subsystem must given one method except `None`."
+				"comment": "For OFDFT subsystem the default is `Ofdft`."
 			},
 			"atomic": {
 				"comment": "If `initial` set the Atomic, here need give each elements atomic density",

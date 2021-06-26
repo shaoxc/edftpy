@@ -90,7 +90,8 @@ class MoleculeOpticalAbsorption(Optimization):
             self.update_density()
             self.density = self.gsystem.density.copy()
             totalfunc = self.gsystem.total_evaluator(self.density, calcType = ['E'], olevel = olevel)
-            self.energy = self.get_energy(self.density_prev, totalfunc.energy, olevel = olevel)[0]
+            # use new density to calculate the energy is very important, otherwise the restart will not correct.
+            self.energy = self.get_energy(self.density, totalfunc.energy, olevel = olevel)[0]
             self.dip = get_dipole(self.density_prev, self.gsystem.ions)
             #-----------------------------------------------------------------------
             fmt = "{:>10s}{:<8d}{:<24.12E}{:<14.6E}{:<14.6E}{:<14.6E}{:<16.6E}".format(
