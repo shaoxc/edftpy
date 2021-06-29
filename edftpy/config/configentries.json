@@ -252,6 +252,36 @@
 				"type": "str",
 				"default": "revAPBEK"
 			}
+		},
+		"decompose": {
+			"comment": {
+				"type": "str",
+				"default": "The way to decompose the subsytem to more subsytems"
+			},
+			"method": {
+				"type": "str",
+				"default": "manual",
+				"comment": "'manual' means use the given subsystem; 'distance' means base on the distance of atoms to decompose the subsytem.",
+				"options": "manual, distance"
+			},
+			"adaptive": {
+				"type": "str",
+				"default": "manual",
+				"comment": "The decompose method after first step, 'manual' will remove all 'NSUB'",
+				"options": "manual, distance"
+			},
+			"rcut": {
+				"type": "float",
+				"default": 3,
+				"comment": "The cutoff for decompose the subsytems.",
+				"unit": "Angstrom"
+			},
+			"radius": {
+				"type": "cfdict",
+				"default": {},
+				"comment": "The radius of each elements for decompose the subsytems.",
+				"unit": "Angstrom"
+			}
 		}
 	},
 	"SUB": {

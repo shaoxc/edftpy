@@ -19,3 +19,25 @@ def from_distance_to_sub(ions, cutoff = 3, max_nbins=1e6, **kwargs):
     keys = np.arange(nat)
     subcells = union_mlist(subcells, keys = keys, array = True)
     return subcells
+
+def decompose_sub(ions, decompose = {'method' : 'distance', 'rcut' : 3}):
+
+    if decompose['method'] != 'distance' :
+        raise AttributeError("{} is not supported".format(decompose['method']))
+
+    radius = decompose.get('radius', {})
+    if len(radius) == 0 :
+        cutoff = decompose['rcut']
+    else :
+        keys = list(radius.keys())
+        if not set(keys) >= set(list(ions.nsymbols)) :
+            raise AttributeError("The radius should contains all the elements")
+        cutoff = {}
+        for i, k in enumerate(keys):
+            for k1 in keys[i:] :
+                cutoff[(k, k1)] = radius[k] + radius[k1]
+
+    if decompose['method'] == 'distance' :
+        indices = from_distance_to_sub(ions, cutoff = cutoff)
+
+    return indices

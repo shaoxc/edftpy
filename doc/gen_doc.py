@@ -27,9 +27,9 @@ eDFTpy is a set of python modules. However, it can be executed by using the `edf
            b603 [shape=rectangle, label="density", href="../tutorials/config.html#density", target="_top"];
            b604 [shape=rectangle, label="exc", href="../tutorials/config.html#exc", target="_top"];
            b605 [shape=rectangle, label="kedf", href="../tutorials/config.html#kedf", target="_top"];
-           b706 [shape=rectangle, label="mix", href="../tutorials/config.html#mix", target="_top"];
-           b707 [shape=rectangle, label="opt", href="../tutorials/config.html#id2", target="_top"];
-           b708 [shape=rectangle, label="decompose", href="../tutorials/config.html#decompose", target="_top"];
+           b606 [shape=rectangle, label="decompose", href="../tutorials/config.html#decompose", target="_top"];
+           b707 [shape=rectangle, label="mix", href="../tutorials/config.html#mix", target="_top"];
+           b708 [shape=rectangle, label="opt", href="../tutorials/config.html#id2", target="_top"];
            b709 [shape=rectangle, label="kpoints", href="../tutorials/config.html#kpoints", target="_top"];
 
            a6->b601[color=blue];
@@ -37,12 +37,13 @@ eDFTpy is a set of python modules. However, it can be executed by using the `edf
            a6->b603[color=blue];
            a6->b604[color=blue];
            a6->b605[color=blue];
+           a6->b606[color=blue];
            a7->b601;
            a7->b602;
            a7->b603;
            a7->b604;
            a7->b605;
-           a7->b706;
+           a7->b606;
            a7->b707;
            a7->b708;
            a7->b709;

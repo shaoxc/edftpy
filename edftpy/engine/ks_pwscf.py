@@ -15,9 +15,9 @@ from edftpy.utils.common import Grid, Field, Functional, Atoms
 from edftpy.utils.math import grid_map_data
 from edftpy.utils import clean_variables
 from edftpy.density import normalization_density
-from edftpy.enginer.driver import Driver
 from edftpy.functional import hartree_energy
 from edftpy.mpi import sprint, SerialComm, MP
+from edftpy.engine.driver import Driver
 
 unit_len = LEN_CONV["Bohr"]["Angstrom"] / qepy.constants.BOHR_RADIUS_SI / 1E10
 unit_vol = unit_len ** 3

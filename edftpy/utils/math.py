@@ -4,6 +4,7 @@ import scipy.special as sp
 from scipy import ndimage, signal
 from functools import reduce
 import itertools
+import hashlib
 
 from dftpy.utils import grid_map_index, grid_map_data
 from dftpy.base import r2s, s2r
@@ -128,3 +129,7 @@ def get_grid_array_mask(grid, l123A):
     np.logical_and(mask, mask1, out = mask)
     #-----------------------------------------------------------------------
     return mask
+
+def get_hash(x):
+    value = hashlib.md5(np.array(sorted(x))).hexdigest()
+    return value

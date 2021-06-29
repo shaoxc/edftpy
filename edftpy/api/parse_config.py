@@ -15,12 +15,14 @@ from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import LinearMixer, PulayMixer
-from edftpy.enginer.of_dftpy import DFTpyOF, dftpy_opt
+from edftpy.engine.of_dftpy import DFTpyOF, dftpy_opt
 from edftpy.mpi import GraphTopo, MP, sprint
+from edftpy.utils.math import get_hash
+from edftpy.subsystem.decompose import decompose_sub
 
 def import_drivers(config):
     """
-    Import the enginer of different drivers
+    Import the engine of different drivers
 
     Args:
         config: contains all variables of input
@@ -34,11 +36,11 @@ def import_drivers(config):
             calc = config[key]['calculator']
             calcs.append(calc)
     if 'pwscf' in calcs or 'qe' in calcs :
-        from edftpy.enginer.ks_pwscf import PwscfKS
+        from edftpy.engine.ks_pwscf import PwscfKS
     if 'castep' in calcs :
-        from edftpy.enginer.ks_castep import CastepKS
+        from edftpy.engine.ks_castep import CastepKS
     if 'dftpy' in calcs :
-        from edftpy.enginer.of_dftpy import DFTpyOF
+        from edftpy.engine.of_dftpy import DFTpyOF
     return
 
 def config_correct(config):
@@ -65,6 +67,7 @@ def config_correct(config):
         if config[key]['density']['output'] :
             if config[key]['density']['output'].startswith('.') :
                 config[key]['density']['output'] = config[key]["prefix"] + config[key]['density']['output']
+        config[key]['hash'] = get_hash(config[key]['cell']['index'])
 
     return config
 
@@ -102,8 +105,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     #-----------------------------------------------------------------------
     graphtopo = config2graphtopo(config, graphtopo = graphtopo)
     if graphtopo.rank == 0 :
-        config_json = config_to_json(config, ions)
-        write_conf('edftpy_running.json', config_json)
+        write_conf('edftpy_running.json', config)
     #-----------------------------------------------------------------------
     nr = config[keysys]["grid"]["nr"]
     spacing = config[keysys]["grid"]["spacing"] * LEN_CONV["Angstrom"]["Bohr"]
@@ -550,7 +552,7 @@ def get_castep_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, ma
     return driver
 
 def get_pwscf_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, margs = {}, **kwargs):
-    from edftpy.enginer.ks_pwscf import PwscfKS
+    from edftpy.engine.ks_pwscf import PwscfKS
 
     cell_params = {'pseudopotentials' : pplist}
     if kpoints['grid'] is not None :
@@ -586,7 +588,6 @@ def _get_gap(config, optimizer):
     optimizer.optimize()
 
 def config2nsub(config, ions):
-    from edftpy.subsystem.decompose import from_distance_to_sub
     subkeys = [key for key in config if key.startswith('SUB')]
     for key in subkeys :
         decompose = config[key]["decompose"]
@@ -599,26 +600,11 @@ def config2nsub(config, ions):
     nsubkeys = [key for key in config if key.startswith('NSUB')]
     ions_inds = np.arange(ions.nat)
     for keysys in nsubkeys :
-        decompose = config[keysys]["decompose"]
-        if decompose['method'] != 'distance' :
-            raise AttributeError("{} is not supported".format(decompose['method']))
         index = config[keysys]["cell"]["index"]
         ions_sub = ions[index]
 
-        radius = decompose['radius']
-        if len(radius) == 0 :
-            cutoff = decompose['rcut']
-        else :
-            keys = list(radius.keys())
-            if not set(keys) >= set(list(ions_sub.nsymbols)) :
-                raise AttributeError("The radius should contains all the elements")
-            cutoff = {}
-            for i, k in enumerate(keys):
-                for k1 in keys[i:] :
-                    cutoff[(k, k1)] = radius[k] + radius[k1]
-
-        if decompose['method'] == 'distance' :
-            indices = from_distance_to_sub(ions_sub, cutoff = cutoff)
+        decompose = config[keysys]["decompose"]
+        indices = decompose_sub(ions_sub, decompose)
 
         if index is None :
             ions_inds_sub = ions_inds
@@ -629,6 +615,12 @@ def config2nsub(config, ions):
             indices[i] = ions_inds_sub[ind]
 
         config = config_from_index(config, keysys, indices)
+        # remove 'NSUB'
+        del config[keysys]
+    config = config2json(config, ions)
+    # Only update once in the beginning.
+    asub = config.get('ASUB', None)
+    if not asub : config = config2asub(config)
     return config
 
 def config_from_index(config, keysys, indices):
@@ -645,17 +637,14 @@ def config_from_index(config, keysys, indices):
         config[key] = copy.deepcopy(config[keysys])
         config[key]["prefix"] = prefix + '_' + str(i)
         config[key]['decompose']['method'] = 'manual'
-        config[key]['decompose']['adaptive'] = 'manual'
         config[key]['cell']['index'] = ind
         config[key]["nprocs"] = max(1, config[keysys]["nprocs"] // len(indices))
         config[key]['subs'] = None
         subs.append(key)
     config[keysys]['subs'] = subs
-    if config[keysys]['decompose']['adaptive'] == 'manual' :
-        del config[keysys]
     return config
 
-def config_to_json(config, ions):
+def config2json(config, ions):
     """
     Note :
         fix some python types that not supported by json.dump
@@ -663,8 +652,6 @@ def config_to_json(config, ions):
     #-----------------------------------------------------------------------
     # slice and np.ndarray
     config_json = copy.deepcopy(config)
-    # subkeys = [key for key in config_json if key.startswith('NSUB')]
-    # for keysys in subkeys : del config_json[keysys]
     subkeys = [key for key in config_json if key.startswith(('SUB', 'NSUB'))]
     index_w = np.arange(0, ions.nat)
     for keysys in subkeys :
@@ -676,3 +663,42 @@ def config_to_json(config, ions):
             config_json[keysys]["cell"]["index"] = index.tolist()
     #-----------------------------------------------------------------------
     return config_json
+
+def config2asub(config):
+    if config["JOB"]["adaptive"] == 'manual' :
+        config['ASUB'] = {}
+        subkeys = [key for key in config if key.startswith('SUB')]
+        for keysys in subkeys :
+            hs = get_hash(config[keysys]['cell']['index'])
+            config['ASUB'][hs] = copy.deepcopy(config[keysys])
+    return config
+
+def config2hash(config, ions):
+    keysys = "GSYSTEM"
+    decompose = config[keysys]["decompose"]
+    if decompose['method'] == 'manual' :
+        return None
+    elif decompose['method'] == 'distance' :
+        indices = decompose_sub(ions, decompose)
+
+    hashs = [[] for _ in indices]
+    subkeys = [key for key in config['ASUB'] if key.startswith('SUB')]
+    for i, ind in enumerate(indices) :
+        for keysys in subkeys :
+            base = config[keysys]['cell']['index']
+            if base[0] in ind :
+                hashs[i].append(keysys)
+    return hashs
+
+def config_from_hash(config, hashs):
+    # removed last step saved subs
+    asub = config['ASUB']
+    for key in config :
+        if key.startswith('SUB') : del config[key]
+
+    for hs in hashs :
+        key = asub[hs[0]]["prefix"]
+        config[key] = copy.deepcopy(asub[hs[0]])
+        config[key]['cell']['index'] = asub[hs[0]]['cell']['index']
+        config[key]["nprocs"] =asub[hs[0]]["nprocs"]
+    return config

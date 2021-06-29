@@ -79,6 +79,8 @@ class SubCell(object):
         spacings = grid.spacings.copy()
         shift = np.zeros(3, dtype = 'int')
         origin = np.zeros(3)
+        if grid_sub is not None :
+            nr = grid_sub.nrR
         #-----------------------------------------------------------------------
         # pos = ions.pos.to_cart()[index].copy()
         # print('pos', pos)
