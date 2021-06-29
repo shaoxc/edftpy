@@ -10,7 +10,7 @@ from edftpy.utils.common import Field, Grid, Atoms
 from edftpy.functional import LocalPP, KEDF, Hartree, XC
 from edftpy.optimizer import Optimization
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
-from edftpy.enginer.of_dftpy import DFTpyOF
+from edftpy.engine.of_dftpy import DFTpyOF
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import PulayMixer, LinearMixer
