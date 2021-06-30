@@ -64,7 +64,28 @@ class SubCell(object):
     def shift(self):
         return self.grid.shift
 
-    def _gen_cell(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True,
+    def _gen_cell(self, ions, grid, index = None, grid_sub = None, **kwargs):
+
+        if index is None : index = slice(None)
+        lattice = ions.pos.cell.lattice
+        pos = ions.pos.to_cart()[index].copy()
+
+        grid_sub = self.gen_grid_sub(ions, grid, index = index, grid_sub = grid_sub, **kwargs)
+
+        origin = grid_sub.shift / grid.nrR
+        origin[:] = Coord(origin, lattice, basis = 'Crystal').to_cart()
+        pos -= origin
+
+        ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = grid_sub.lattice, basis = 'Cartesian', origin = origin)
+        self._grid = grid_sub
+        self._ions = ions_sub
+        self._ions_index = index
+        self.comm = self._grid.mp.comm
+        # sprint('subcell grid', self._grid.nrR, self._grid.nr, comm=self.comm)
+        # sprint('subcell shift', self._grid.shift, comm=self.comm)
+
+    @staticmethod
+    def gen_grid_sub(ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True,
             full = False, grid_sub = None, max_prime = 5, scale = 1.0, nr = None, mp = None):
         tol = 1E-8
         lattice = ions.pos.cell.lattice.copy()
@@ -81,9 +102,7 @@ class SubCell(object):
         origin = np.zeros(3)
         if grid_sub is not None :
             nr = grid_sub.nrR
-        #-----------------------------------------------------------------------
-        # pos = ions.pos.to_cart()[index].copy()
-        # print('pos', pos)
+
         pos_cry = ions.pos.to_crys()[index].copy()
         cs = np.mean(pos_cry, axis = 0)
         pos_cry -= cs
@@ -110,7 +129,7 @@ class SubCell(object):
                         continue
                     cell_size[i] = cellsplit[i] * latp0
                     origin[i] = 0.5
-                elif cellcut[i] > 1E-6 :
+                elif cellcut[i] > tol :
                     pbc[i] = False
                     cell_size[i] += cellcut[i] * 2.0
                     if cell_size[i] > (latp0 - (max_prime + 1) * spacings[i]):
@@ -136,33 +155,21 @@ class SubCell(object):
                     nr[i] = grid.nrR[i]
                     origin[i] = 0.0
 
-        cs_d = cs.to_cart()
-
         c1 = Coord(origin, lattice_sub, basis = 'Crystal').to_cart()
 
         c0 = np.mean(pos, axis = 0)
         center = Coord(c0, lattice, basis = 'Cartesian').to_crys()
         center += cs
-        center[origin < 1E-6] = 0.0
+        center[origin < tol] = 0.0
         c0 = Coord(center, lattice, basis = 'Crystal').to_cart()
 
-        pos += cs_d
         origin = np.array(c0) - np.array(c1)
         shift[:] = np.array(Coord(origin, lattice, basis = 'Cartesian').to_crys()) * grid.nrR
-        origin[:] = shift / grid.nrR
-        origin[:] = Coord(origin, lattice, basis = 'Crystal').to_cart()
-        pos -= origin
 
-        ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = lattice_sub, basis = 'Cartesian', origin = origin)
         if grid_sub is None :
             grid_sub = Grid(lattice=lattice_sub, nr=nr, full=full, direct = True, origin = origin, pbc = pbc, mp = mp)
         grid_sub.shift = shift
-        self._grid = grid_sub
-        self._ions = ions_sub
-        self._ions_index = index
-        self.comm = self._grid.mp.comm
-        # sprint('subcell grid', self._grid.nrR, self._grid.nr, comm=self.comm)
-        # sprint('subcell shift', self._grid.shift, comm=self.comm)
+        return grid_sub
 
     def _gen_gaussian_density(self, options={}):
         """
@@ -277,7 +284,8 @@ class GlobalCell(object):
         self._grid = grid
         self._ewald = None
         if self._grid is None :
-            self._gen_grid(**self.grid_kwargs)
+            self._grid = self.gen_grid(self.ions.pos.cell.lattice, **self.grid_kwargs)
+            sprint('GlobalCell grid', self._grid.nrR, comm=self.comm)
         self._density = Field(grid=self.grid, rank=1, direct=True)
         self._gaussian_density = Field(grid=self.grid, rank=1, direct=True)
         self._core_density = Field(grid=self.grid, rank=1, direct=True)
@@ -336,15 +344,14 @@ class GlobalCell(object):
     def graphtopo(self, value):
         self._graphtopo = value
 
-    def _gen_grid(self, ecut = 22, spacing = None, full = False, nr = None, optfft = True, max_prime = 5, scale = 1.0, mp = None, **kwargs):
-        lattice = self.ions.pos.cell.lattice
+    @staticmethod
+    def gen_grid(lattice, ecut = 22, spacing = None, full = False, nr = None, optfft = True, max_prime = 5, scale = 1.0, mp = None, **kwargs):
         if nr is None :
             nr = ecut2nr(ecut, lattice, optfft = optfft, spacing = spacing, scale = scale, max_prime = max_prime)
         else :
             nr = np.asarray(nr)
         grid = Grid(lattice=lattice, nr=nr, full=full, direct = True, mp = mp, **kwargs)
-        self._grid = grid
-        sprint('GlobalCell grid', nr, comm=self.comm)
+        return grid
 
     def update_density(self, subrho, isub = None, grid = None, fake = False, core = False, overwrite = False, **kwargs):
         if fake :
