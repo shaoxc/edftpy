@@ -317,8 +317,13 @@ class PwscfKS(Driver):
         self.density_sub = Field(grid = self.grid_sub)
         self.gaussian_density_sub = Field(grid = self.grid_sub)
 
+        if rho_ini is None :
+            nc = np.sum(self.subcell.density)
+            if nc > -1E-6 :
+                rho_ini = self.subcell.density.gather(grid = self.grid)
+
         if rho_ini is not None :
-            self.density[:] = rho_ini
+            if self.comm.rank == 0 : self.density[:] = rho_ini
             self._format_density()
         else :
             qepy.qepy_mod.qepy_get_rho(self.charge)

@@ -33,6 +33,7 @@ class eDFTpyCalculator(object):
 
     def update_optimizer(self, atoms = None):
         self.iter += 1
+        atoms = atoms or self.atoms
         ions = ase2ions(atoms)
         self.optimizer = config2optimizer(self.config, ions, self.optimizer, graphtopo = self.graphtopo)
         self.optimizer.optimize()
