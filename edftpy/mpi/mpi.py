@@ -217,7 +217,7 @@ class GraphTopo:
                 self.graph.region_shape[i] = nrR
             # print(self.rank, ' region -> ', self.graph.region_shape,  self.graph.region_shift)
 
-    def distribute_procs(self, nprocs = None):
+    def distribute_procs(self, nprocs = None, scale = False):
         zero = 1E-8 # nonzero
         if not self.is_mpi :
             self.comm_sub = SerialComm()
@@ -227,15 +227,15 @@ class GraphTopo:
             raise AttributeError("Must give the 'nprocs' in parallel version")
         nprocs = np.asarray(nprocs, dtype = 'float')
         self.nprocs = np.rint(nprocs).astype(dtype = 'int')
-        nmin = 2.0
+        nmin = np.min(nprocs[nprocs > zero])
+        scale = scale or 1.0-nmin > -zero
         if self.nprocs.sum() != self.size :
             ns = np.count_nonzero(nprocs > zero)
             if ns == 0 :
                 self.comm_sub = SerialComm()
                 self.nprocs = np.ones(1, dtype = 'int') * self.size
                 return
-            nmin = np.min(nprocs[nprocs > zero])
-            if nmin < 1.1 : # ratio of processors
+            if scale : # ratio of processors
                 if nprocs.sum() == ns :
                     av = self.size // ns
                     nprocs[:] = nprocs * av
@@ -246,11 +246,10 @@ class GraphTopo:
                 pass
         if self.nprocs.sum() != self.size :
             res = self.size - nprocs.sum()
-            if res < 0 :
+            while res < 0 :
                 self.nprocs[self.nprocs > 0] -= 1
                 res = self.size - self.nprocs.sum()
-                nmin = 1.0
-            if nmin < 1.1 : # ratio of processors
+            if scale : # ratio of processors
                 for i, n in enumerate(self.nprocs):
                     if res == 0 : break
                     if n > 0 :

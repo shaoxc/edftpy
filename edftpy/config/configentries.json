@@ -147,8 +147,8 @@
 		"timestep": {
 			"type": "float",
 			"options": "",
-			"comment": "The time step for TDDFT (fs)",
-			"unit": "femtosecond",
+			"comment": "The time step for TDDFT (as)",
+			"unit": "attosecond",
 			"default": "1"
 		}
 	},
