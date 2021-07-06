@@ -105,6 +105,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     gsystem = config2gsystem(config, ions = ions, optimizer = optimizer, graphtopo=graphtopo, cell_change=cell_change, **kwargs)
     grid = gsystem.grid
 
+    #-----------------------------------------------------------------------
     adaptive = False
     reuse_drivers = {}
     if optimizer is not None :
@@ -112,7 +113,11 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
             adaptive = True
     if adaptive :
         config, reuse_drivers = config2sub_global(config, ions, optimizer=optimizer, grid=grid)
-        cell_change = None
+        if len(reuse_drivers) == len(optimizer.drivers) :
+            # None of subsystems changed, so use normal way to update subsystems
+            adaptive = False
+        else :
+            cell_change = None
     else :
         config = config2nsub(config, ions)
     #-----------------------------------------------------------------------
