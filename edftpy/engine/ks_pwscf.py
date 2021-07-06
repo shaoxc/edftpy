@@ -29,7 +29,7 @@ class PwscfKS(Driver):
     """
     def __init__(self, evaluator = None, subcell = None, prefix = 'sub_ks', params = None, cell_params = None,
             exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None,
-            diag_conv = 1E-10, task = 'scf', restart = False, **kwargs):
+            diag_conv = 1E-6, task = 'scf', restart = False, **kwargs):
         '''
         Here, prefix is the name of the input file
         exttype :
