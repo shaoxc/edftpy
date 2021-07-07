@@ -51,7 +51,6 @@ class PwscfKS(Driver):
         self.ncharge = ncharge
         self.comm = self.subcell.grid.mp.comm
         self.task = task
-        self.outfile = None
         if self.prefix :
             if self.comm.rank == 0 :
                 self.build_input(params, cell_params, base_in_file)
@@ -62,6 +61,7 @@ class PwscfKS(Driver):
         self.mixer = mixer
         self._grid = None
         self._grid_sub = None
+        self.outfile = self.prefix + '.out'
         self._driver_initialise()
         self.grid_driver = self.get_grid_driver(self.grid)
         #-----------------------------------------------------------------------
@@ -206,7 +206,6 @@ class PwscfKS(Driver):
     def _fix_params(self, params = None):
         prefix = self.prefix
         #output of qe
-        self.outfile = prefix + '.out'
         default_params = OrderedDict({
                 'control' :
                 {
@@ -289,7 +288,8 @@ class PwscfKS(Driver):
         else :
             comm = self.comm.py2f()
             # print('comm00', comm, self.comm.size)
-        qepy.qepy_mod.qepy_set_stdout(self.outfile)
+        if self.comm.rank == 0 :
+            qepy.qepy_mod.qepy_set_stdout(self.outfile)
         if self.task == 'optical' :
             qepy.qepy_tddft_main_initial(self.prefix + self._input_ext, comm)
             qepy.read_file()
@@ -673,6 +673,7 @@ class PwscfKS(Driver):
             else :
                 what = 'config-nowf'
             qepy.qepy_stop_run(status, what = what)
+        qepy.qepy_mod.qepy_close_stdout(self.outfile)
         qepy.qepy_clean_saved()
 
     @staticmethod
