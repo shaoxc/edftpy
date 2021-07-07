@@ -140,6 +140,8 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     #-----------------------------------------------------------------------
     graphtopo = config2graphtopo(config, graphtopo = graphtopo)
     if graphtopo.rank == 0 :
+        # import pprint
+        # pprint.pprint(config)
         write_conf('edftpy_running.json', config)
     #-----------------------------------------------------------------------
     labels = set(ions.labels)
@@ -757,7 +759,7 @@ def config_from_index(config, keysys, indices):
         config[key]["prefix"] = prefix + '_' + str(i)
         config[key]['decompose']['method'] = 'manual'
         config[key]['cell']['index'] = ind
-        config[key]["nprocs"] = max(1, config[keysys]["nprocs"] // len(indices))
+        config[key]["nprocs"] = max(1, config[keysys]["nprocs"] / len(indices))
         config[key]['subs'] = None
         subs.append(key)
     config[keysys]['subs'] = subs
@@ -818,7 +820,7 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
     reuse_drivers = {}
 
     for i, index in enumerate(indices) :
-        hs = []
+        hs = OrderedDict()
         ind = set(index)
         nmax = 0
         na = 0
@@ -837,7 +839,7 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
                 ins = base & ind
                 ns = len(ins)
                 if ns >0 :
-                    hs.append(keysys)
+                    hs[keysys] = ns
                     if ns>nmax :
                         nmax = ns
                         this_key = keysys
@@ -854,8 +856,15 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
                         break
         if kind == 'saved' :
             #the subsystem is same as last step
-            key = this_key[1:]
+            #-----------------------------------------------------------------------
+            key0 = this_key[1:]
+            key = key0
+            ik = 0
+            while key in config :
+                ik += 1
+                key = key0 + '_' + str(ik)
             config[key] = config.pop(this_key)
+            #-----------------------------------------------------------------------
             subkeys_prev.remove(this_key)
             reuse_drivers[key] = None
             if optimizer is not None :
@@ -863,29 +872,41 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
                     if driver is None : continue
                     if driver.prefix == config[key]["prefix"] :
                         reuse_drivers[key] = driver
-        elif kind == 'one' :
-            #just one subsystem
-            config[this_key] = copy.deepcopy(asub[this_key])
-        elif kind == 'part' :
-            #only a part of one subsystem, still use same setting as whole one
-            config[this_key] = copy.deepcopy(asub[this_key])
-            config[this_key]["cell"]["index"] = index
-        elif kind == 'more' :
-            #more than one subsystem
-            key = asub[this_key]["prefix"].upper()
-            if key in config :
-                raise AttributeError("ERROR : The prefix of this subsystem already used!")
-            config[key] = copy.deepcopy(asub[this_key])
-            config[key]["cell"]["index"] = index
-            config[key]["nprocs"] = sum([asub[item]["nprocs"] for item in hs])
-            if regions is None :
-                regions = config2asub_region(config, ions, grid)
-            lb = reduce(np.minimum, [v[0] for k, v in regions.items()])
-            ub = reduce(np.maximum, [v[1] for k, v in regions.items()])
-            nr = (ub - lb).tolist()
-            config[key]["grid"]["nr"] = nr
+            config[key]["prefix"] = key.lower()
         else :
-            raise AttributeError("ERROR : Not support this kind : {}".format(kind))
+            key0 = asub[this_key]["prefix"].upper()
+            key = key0
+            ik = 0
+            while key in config :
+                ik += 1
+                key = key0 + '_' + str(ik)
+            config[key] = copy.deepcopy(asub[this_key])
+            config[key]["prefix"] = key.lower()
+            if kind == 'one' :
+                #just one subsystem
+                pass
+            elif kind == 'part' :
+                #only a part of one subsystem, still use same setting as whole one
+                config[key]["nprocs"] = max(1, config[key]["nprocs"]*len(index)/len(config[key]["cell"]["index"]))
+                config[key]["cell"]["index"] = index
+            elif kind == 'more' :
+                #more than one subsystem
+                nprocs = 0
+                for item, nc in hs.items() :
+                    nprocs += asub[item]["nprocs"]*nc/len(asub[item]["cell"]["index"])
+                config[key]["nprocs"] = max(1, nprocs)
+                config[key]["cell"]["index"] = index
+                if regions is None :
+                    regions = config2asub_region(config, ions, grid)
+                lb = reduce(np.minimum, [v[0] for k, v in regions.items()])
+                ub = reduce(np.maximum, [v[1] for k, v in regions.items()])
+                nr = (ub - lb).tolist()
+                config[key]["grid"]["nr"] = nr
+            else :
+                raise AttributeError("ERROR : Not support this kind : {}".format(kind))
+        # set the initial density as None
+        config[key]["density"]["file"] = None
+        if grid.mp.rank == 0 : print('New Subsytem : ', key, kind, index)
 
     # removed last step saved but unused subs
     for key in subkeys_prev :
