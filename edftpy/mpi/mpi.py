@@ -245,9 +245,9 @@ class GraphTopo:
             else : # set as maximum of processors
                 pass
         if self.nprocs.sum() != self.size :
-            res = self.size - nprocs.sum()
+            res = self.size - self.nprocs.sum()
             while res < 0 :
-                self.nprocs[self.nprocs > 0] -= 1
+                self.nprocs[self.nprocs > 1] -= 1
                 res = self.size - self.nprocs.sum()
             if scale : # ratio of processors
                 for i, n in enumerate(self.nprocs):
