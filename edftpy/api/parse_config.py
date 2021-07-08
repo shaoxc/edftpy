@@ -780,8 +780,9 @@ def config2json(config, ions):
         index = config_json[keysys]["cell"]["index"]
         if isinstance(index, slice):
             index = index_w[index]
-            config_json[keysys]["cell"]["index"] = index.tolist()
-        elif isinstance(index, np.ndarray):
+        elif index is None :
+            index = index_w
+        if isinstance(index, np.ndarray):
             config_json[keysys]["cell"]["index"] = index.tolist()
     #-----------------------------------------------------------------------
     return config_json
