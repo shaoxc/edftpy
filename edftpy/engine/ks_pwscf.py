@@ -590,10 +590,8 @@ class PwscfKS(Driver):
             self.energy = func.energy
         return func
 
-    def update_density(self, coef = None, **kwargs):
+    def update_density(self, coef = None, mix_grid = False, **kwargs):
         if self.comm.rank == 0 :
-            mix_grid = False
-            # mix_grid = True
             if self.grid_driver is not None and mix_grid:
                 prev_density = self._format_density_invert(self.prev_charge, self.grid_driver)
                 density = self._format_density_invert(self.charge, self.grid_driver)
@@ -603,13 +601,13 @@ class PwscfKS(Driver):
             #-----------------------------------------------------------------------
             r = density - prev_density
             self.residual_norm = np.sqrt(np.sum(r * r)/r.size)
-            self.dp_norm = hartree_energy(r)
             rmax = r.amax()
             fstr = f'res_norm({self.prefix}): {self._iter}  {rmax}  {self.residual_norm}'
             sprint(fstr, comm=self.comm, level=1)
             qepy.qepy_mod.qepy_write_stdout(fstr)
             #-----------------------------------------------------------------------
             if self.mix_driver is None :
+                self.dp_norm = hartree_energy(r)
                 rho = self.mixer(prev_density, density, **kwargs)
                 if self.grid_driver is not None and mix_grid:
                     rho = grid_map_data(rho, grid = self.grid)
@@ -618,8 +616,8 @@ class PwscfKS(Driver):
         if self.mix_driver is not None :
             if coef is None : coef = self.mix_driver
             self.embed.mix_coef = coef
-            qepy.qepy_electrons_scf(0, 0, self.embed)
-            if self._iter > 1 : self.dp_norm = self.embed.dnorm
+            qepy.qepy_electrons_scf(2, 0, self.embed)
+            self.dp_norm = self.embed.dnorm
             qepy.qepy_mod.qepy_get_rho(self.charge)
             self.density[:] = self._format_density_invert()
 
