@@ -788,13 +788,17 @@ def config2json(config, ions):
     return config_json
 
 def config2asub(config):
-    # if config["GSYSTEM"]["decompose"]["method"] != 'manual' :
     config['ASUB'] = {}
     subkeys = [key for key in config if key.startswith('SUB')]
     for keysys in subkeys :
+        #
+        if not config[keysys]["prefix"] :
+            config[keysys]["prefix"] = keysys.lower()
+        #
         hs = get_hash(config[keysys]['cell']['index'])
-        key = 'sub_' + hs
+        key = keysys.lower()
         config['ASUB'][key] = copy.deepcopy(config[keysys])
+        config['ASUB'][key]['hash'] = hs
     return config
 
 def config2sub_global(config, ions, optimizer = None, grid = None, regions = None):
