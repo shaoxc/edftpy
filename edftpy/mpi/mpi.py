@@ -76,7 +76,7 @@ class Graph :
 
 
 class GraphTopo:
-    def __init__(self, comm = None, parallel = False, **kwargs):
+    def __init__(self, comm = None, parallel = False, decomposition = 'Pencil', **kwargs):
         MPI = None
         if comm is None :
             if parallel :
@@ -84,6 +84,9 @@ class GraphTopo:
                 comm = MPI.COMM_WORLD
             else :
                 comm = SerialComm(**kwargs)
+        #
+        self.decomposition = decomposition
+        #
         self._is_mpi = parallel
         self._MPI = MPI
         self.isub = None

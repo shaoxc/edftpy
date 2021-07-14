@@ -175,7 +175,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
             if config[keysys]["technique"] == 'OF' :
                 mp = gsystem.grid.mp
             else :
-                mp = MP(comm = graphtopo.comm_sub)
+                mp = MP(comm = graphtopo.comm_sub, decomposition = graphtopo.decomposition)
             driver = config2driver(config, keysys, ions, grid, pplist, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp)
             #-----------------------------------------------------------------------
             #PSEUDO was evaluated on all processors, so directly remove from embedding
@@ -237,7 +237,7 @@ def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell
         gsystem.restart(grid=gsystem.grid, ions=ions)
         mp_global = gsystem.grid.mp
     else :
-        mp_global = MP(comm = graphtopo.comm, parallel = graphtopo.is_mpi)
+        mp_global = MP(comm = graphtopo.comm, parallel = graphtopo.is_mpi, decomposition = graphtopo.decomposition)
         gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo)
     return gsystem
 

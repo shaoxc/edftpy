@@ -186,7 +186,7 @@ class PwscfKS(Driver):
     @property
     def grid_sub(self):
         if self._grid_sub is None :
-            mp = MP(comm = self.comm)
+            mp = MP(comm = self.comm, decomposition = self.subcell.grid.mp.decomposition)
             self._grid_sub = Grid(self.subcell.grid.lattice, self.subcell.grid.nrR, direct = True, mp = mp)
         return self._grid_sub
 

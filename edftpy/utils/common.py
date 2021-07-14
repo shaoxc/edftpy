@@ -10,12 +10,11 @@ from scipy.interpolate import splrep, splev
 # from dftpy.math_utils import quartic_interpolation
 
 
-def Grid(lattice, nr, direct = True, origin=np.array([0.0, 0.0, 0.0]), units=None, full=False, uppergrid = None, decomposition='Pencil', **kwargs):
-    # decomposition = 'Slab'
+def Grid(lattice, nr, direct = True, origin=np.array([0.0, 0.0, 0.0]), units=None, full=False, uppergrid = None, **kwargs):
     if direct :
-        obj = DirectGrid(lattice, nr, origin = origin, units=units, full=full, uppergrid = uppergrid, decomposition=decomposition, **kwargs)
+        obj = DirectGrid(lattice, nr, origin = origin, units=units, full=full, uppergrid = uppergrid, **kwargs)
     else :
-        obj = ReciprocalGrid(lattice, nr, origin = origin, units=units, full=full, uppergrid = uppergrid, decomposition=decomposition, **kwargs)
+        obj = ReciprocalGrid(lattice, nr, origin = origin, units=units, full=full, uppergrid = uppergrid, **kwargs)
     return obj
 
 class RadialGrid(object):
