@@ -134,6 +134,7 @@ def dict_format(config):
 
 def read_conf(infile):
     config = configparser.ConfigParser(dict_type = OrderedDict)
+    config.optionxform = str
 
     if isinstance(infile, dict):
         conf_read = infile
