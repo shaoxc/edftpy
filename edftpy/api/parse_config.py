@@ -18,7 +18,7 @@ from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import LinearMixer, PulayMixer
 from edftpy.engine.of_dftpy import DFTpyOF, dftpy_opt
 from edftpy.mpi import GraphTopo, MP, sprint
-from edftpy.utils.math import get_hash
+from edftpy.utils.math import get_hash, get_formal_charge
 from edftpy.subsystem.decompose import decompose_sub
 
 def import_drivers(config):
@@ -442,7 +442,13 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     ncharge = config[keysys]["density"]["ncharge"]
     if config[keysys]["exttype"] and config[keysys]["exttype"] < 0 :
         exttype = config[keysys]["exttype"]
-
+    #-----------------------------------------------------------------------
+    if ncharge is None :
+        mol_charges = config['MOL'].get('charge', {})
+        numbers = subcell.ions.Z
+        ncharge = get_formal_charge(numbers, data = mol_charges)
+        if abs(ncharge) < 1E-6 : ncharge = None
+    #-----------------------------------------------------------------------
     restart = False
     if driver is not None :
         task = driver.task

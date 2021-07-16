@@ -613,5 +613,16 @@
 			"comment": "The prefix of each subsystem. If not set, it's same as the name of subsytem.",
 			"default": null
 		}
+	},
+	"MOL": {
+		"comment": {
+			"type": "str",
+			"default": "The information of molecules."
+		},
+		"charge": {
+			"type": "ofdict",
+			"default": {},
+			"comment": "The charge of molecules or atoms."
+		}
 	}
 }

@@ -5,6 +5,7 @@ from scipy import ndimage, signal
 from functools import reduce
 import itertools
 import hashlib
+from ase.symbols import Symbols, symbols2numbers
 
 from dftpy.utils import grid_map_index, grid_map_data
 from dftpy.base import r2s, s2r
@@ -133,3 +134,46 @@ def get_grid_array_mask(grid, l123A):
 def get_hash(x):
     value = hashlib.md5(np.array(sorted(x))).hexdigest()
     return value
+
+def get_formal_charge(numbers = None, symbols = None, data = {}, method = 'simple'):
+    if len(data) == 0 :
+        return 0
+    if method == 'simple' :
+        if numbers is None :
+            numbers = Symbols.fromsymbols(symbols).numbers
+        else :
+            numbers = list(numbers)
+        charge = get_formal_charge_simple(numbers, data)
+    else :
+        raise AttributeError("Sorry, not support '{}' method yet.".format(method))
+    return charge
+
+def get_formal_charge_simple(numbers, data):
+    charge = 0
+    ref = sorted(list(data.items()),key=lambda x: len(x[0]), reverse=True)
+    for i, item in enumerate(ref):
+        numb = symbols2numbers(item[0])
+        ref[i] = [numb, item[1]]
+    rest = len(numbers)
+    rest_prev = rest
+    for item in ref :
+        while rest > 0 :
+            flag = True
+            for i in item[0] :
+                if i not in numbers :
+                    flag = False
+                    break
+            if flag :
+                charge += item[1]
+                for i in item[0] :
+                    numbers.remove(i)
+                rest = len(numbers)
+            if rest < rest_prev :
+                rest_prev = rest
+            else :
+                break
+        if rest == 0 :
+            break
+    else :
+        raise AttributeError("Can not find all the molecules : {}".format(numbers))
+    return charge
