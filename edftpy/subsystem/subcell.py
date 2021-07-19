@@ -67,14 +67,14 @@ class SubCell(object):
     def _gen_cell(self, ions, grid, index = None, grid_sub = None, **kwargs):
 
         if index is None : index = slice(None)
-        lattice = ions.pos.cell.lattice
-        pos = ions.pos.to_cart()[index].copy()
+        pos_cry = ions.pos.to_crys()[index].copy()
 
         grid_sub = self.gen_grid_sub(ions, grid, index = index, grid_sub = grid_sub, **kwargs)
 
         origin = grid_sub.shift / grid.nrR
-        origin[:] = Coord(origin, lattice, basis = 'Crystal').to_cart()
-        pos -= origin
+        pos_cry -= origin
+        pos_cry %= 1.0
+        pos = pos_cry.to_cart()
 
         ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = grid_sub.lattice, basis = 'Cartesian', origin = origin)
         self._grid = grid_sub

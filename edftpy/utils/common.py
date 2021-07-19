@@ -86,10 +86,10 @@ def Field(grid, memo="", rank=1, data = None, direct = True, order = 'C', cplx =
             obj = ReciprocalField(grid, **kwargs)
         return obj
 
-def Atoms(labels, zvals=None, pos=None, cell=None, basis="Cartesian", origin = [0.0, 0.0, 0.0], **kwargs):
+def Atoms(labels, zvals=None, pos=None, cell=None, origin = [0.0, 0.0, 0.0], **kwargs):
     if not isinstance(cell, DirectCell):
         cell = DirectCell(cell, origin=origin)
-    obj = dftpy_atom(Zval = zvals, label = labels, pos = pos, cell = cell)
+    obj = dftpy_atom(Zval = zvals, label = labels, pos = pos, cell = cell, **kwargs)
     return obj
 
 def Functional(name=None, energy=None, potential=None, **kwargs):
