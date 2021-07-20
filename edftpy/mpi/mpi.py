@@ -94,6 +94,7 @@ class GraphTopo:
         self._comm = comm # for global, also used for OF subsystem
         self._comm_sub = None # for subsystem, each processor only belong to one
         self.comm_region = [None] # for the data region of each subsystem
+        self._scale_procs = False
 
     def _set_default_vars(self, grid = None, drivers = None):
         self.grid = grid
@@ -231,7 +232,8 @@ class GraphTopo:
         nprocs = np.asarray(nprocs, dtype = 'float')
         self.nprocs = np.rint(nprocs).astype(dtype = 'int')
         nmin = np.min(nprocs[nprocs > zero])
-        scale = scale or 1.0-nmin > -zero
+        scale = scale or 1.0-nmin > -zero or self._scale_procs
+        self._scale_procs = scale
         if self.nprocs.sum() != self.size :
             ns = np.count_nonzero(nprocs > zero)
             if ns == 0 :
