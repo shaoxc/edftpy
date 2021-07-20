@@ -242,7 +242,7 @@ def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell
     return gsystem
 
 
-def config2graphtopo(config, graphtopo = None):
+def config2graphtopo(config, graphtopo = None, scale = None):
     """
     Base on config generate new graphtopo
 
@@ -267,7 +267,7 @@ def config2graphtopo(config, graphtopo = None):
             else :
                 n = config[key]["nprocs"]
             nprocs.append(n)
-        graphtopo.distribute_procs(nprocs)
+        graphtopo.distribute_procs(nprocs, scale = scale)
         sprint('Communicators recreated : ', graphtopo.comm.size, comm = graphtopo.comm)
     else :
         sprint('Communicators already created : ', graphtopo.comm.size, comm = graphtopo.comm)
@@ -911,8 +911,8 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
                     regions = config2asub_region(config, ions, grid)
                 lb = reduce(np.minimum, [v[0] for k, v in regions.items()])
                 ub = reduce(np.maximum, [v[1] for k, v in regions.items()])
-                nr = (ub - lb).tolist()
-                config[key]["grid"]["nr"] = nr
+                cellsplit = np.minimum((ub - lb)/grid.nrR, 1.0)
+                config[key]["cell"]["split"] = cellsplit.tolist()
             else :
                 raise AttributeError("ERROR : Not support this kind : {}".format(kind))
         # set the initial density as None
@@ -932,6 +932,7 @@ def config2asub_region(config, ions, grid):
     for keysys in subkeys :
         grid_sub = config2grid_sub(asub, keysys, ions, grid)
         lb = grid_sub.shift.copy()
-        ub = lb + grid_sub.nr
+        lb %= grid.nrR
+        ub = lb + grid_sub.nrR
         regions[keysys] = [lb, ub]
     return regions
