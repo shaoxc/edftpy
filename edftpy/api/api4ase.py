@@ -47,8 +47,7 @@ class eDFTpyCalculator(object):
             self.update_optimizer(atoms)
         if olevel is not None :
             if olevel == 0 :
-                self.optimizer.print_energy()
-                self.optimizer.energy = self.optimizer.energy_all['TOTAL']
+                self.optimizer.energy = self.optimizer.print_energy()['TOTAL']
             else :
                 self.optimizer.energy = self.optimizer.get_energy(self.optimizer.gsystem.density, olevel = olevel)[0]
         self._energy = self.optimizer.energy
