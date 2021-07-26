@@ -29,7 +29,7 @@ class PwscfKS(Driver):
     """
     def __init__(self, evaluator = None, subcell = None, prefix = 'sub_ks', params = None, cell_params = None,
             exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None,
-            diag_conv = 1E-6, task = 'scf', restart = False, **kwargs):
+            diag_conv = 1E-6, task = 'scf', restart = False, append = False, **kwargs):
         '''
         Here, prefix is the name of the input file
         exttype :
@@ -62,7 +62,7 @@ class PwscfKS(Driver):
         self._grid = None
         self._grid_sub = None
         self.outfile = self.prefix + '.out'
-        self._driver_initialise()
+        self._driver_initialise(append = append)
         self.grid_driver = self.get_grid_driver(self.grid)
         #-----------------------------------------------------------------------
         self.nspin = 1
@@ -282,14 +282,14 @@ class PwscfKS(Driver):
 
         return in_params, card_lines
 
-    def _driver_initialise(self, **kwargs):
+    def _driver_initialise(self, append = False, **kwargs):
         if self.comm is None or isinstance(self.comm, SerialComm):
             comm = None
         else :
             comm = self.comm.py2f()
             # print('comm00', comm, self.comm.size)
         if self.comm.rank == 0 :
-            qepy.qepy_mod.qepy_set_stdout(self.outfile)
+            qepy.qepy_mod.qepy_set_stdout(self.outfile, append = append)
         if self.task == 'optical' :
             qepy.qepy_tddft_main_initial(self.prefix + self._input_ext, comm)
             qepy.read_file()

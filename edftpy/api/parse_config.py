@@ -72,7 +72,7 @@ def config_correct(config):
 
     return config
 
-def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, pseudo = None, cell_change = None, **kwargs):
+def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, pseudo = None, cell_change = None, append = False, **kwargs):
     if isinstance(config, dict):
         pass
     elif isinstance(config, str):
@@ -176,7 +176,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
                 mp = gsystem.grid.mp
             else :
                 mp = MP(comm = graphtopo.comm_sub, decomposition = graphtopo.decomposition)
-            driver = config2driver(config, keysys, ions, grid, pplist, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp)
+            driver = config2driver(config, keysys, ions, grid, pplist, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp, append = append)
             #-----------------------------------------------------------------------
             #PSEUDO was evaluated on all processors, so directly remove from embedding
             # if 'PSEUDO' in driver.evaluator.funcdicts :
@@ -404,7 +404,7 @@ def config2evaluator_of(config, keysys, ions=None, grid=None, pplist = None, gsy
 
     return evaluator_of
 
-def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None, driver = None, subcell = None, mp = None, comm = None):
+def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None, driver = None, subcell = None, mp = None, comm = None, append = False):
     gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
     pp_path = config["PATH"]["pp"]
 
@@ -472,7 +472,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             'key' : keysys,
             'ncharge' : ncharge,
             'task' : task,
-            'restart' : restart
+            'restart' : restart,
+            'append' : append
             }
 
     if cell_change == 'cell' :

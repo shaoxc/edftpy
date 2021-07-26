@@ -35,7 +35,11 @@ class eDFTpyCalculator(object):
         self.iter += 1
         atoms = atoms or self.atoms
         ions = ase2ions(atoms)
-        self.optimizer = config2optimizer(self.config, ions, self.optimizer, graphtopo = self.graphtopo)
+        if self.iter > 1 :
+            append = True
+        else :
+            append = False
+        self.optimizer = config2optimizer(self.config, ions, self.optimizer, graphtopo = self.graphtopo, append = append)
         self.optimizer.optimize()
 
     def get_potential_energy(self, atoms=None, **kwargs):

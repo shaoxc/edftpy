@@ -62,7 +62,7 @@ class Optimization(object):
         if total_energy is None :
             if totalrho is None :
                 totalrho = self.gsystem.density.copy()
-            total_energy = self.gsystem.total_evaluator(totalrho, calcType = ['E']).energy
+            total_energy = self.gsystem.total_evaluator(totalrho, calcType = ['E'], olevel = olevel).energy
         elist.append(total_energy)
         for i, driver in enumerate(self.drivers):
             if driver is None :
