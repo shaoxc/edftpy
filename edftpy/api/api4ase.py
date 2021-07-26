@@ -32,7 +32,6 @@ class eDFTpyCalculator(object):
             return True
 
     def update_optimizer(self, atoms = None):
-        self.iter += 1
         atoms = atoms or self.atoms
         ions = ase2ions(atoms)
         if self.iter > 1 :
@@ -41,12 +40,19 @@ class eDFTpyCalculator(object):
             append = False
         self.optimizer = config2optimizer(self.config, ions, self.optimizer, graphtopo = self.graphtopo, append = append)
         self.optimizer.optimize()
+        self.iter += 1
 
-    def get_potential_energy(self, atoms=None, **kwargs):
+    def get_potential_energy(self, atoms, olevel = None, **kwargs):
         if self.check_restart(atoms):
             self.update_optimizer(atoms)
+        if olevel is not None :
+            if olevel == 0 :
+                self.optimizer.print_energy()
+                self.optimizer.energy = self.optimizer.energy_all['TOTAL']
+            else :
+                self.optimizer.energy = self.optimizer.get_energy(self.optimizer.gsystem.density, olevel = olevel)[0]
         self._energy = self.optimizer.energy
-        sprint('Total energy :', self._energy * ENERGY_CONV["Hartree"]["eV"], self.graphtopo.size)
+        sprint('Total energy :', self._energy * ENERGY_CONV["Hartree"]["eV"], self.graphtopo.size, self.iter)
         return self._energy * ENERGY_CONV["Hartree"]["eV"]
 
     def get_forces(self, atoms):
@@ -61,3 +67,6 @@ class eDFTpyCalculator(object):
             self.update_optimizer(atoms)
         stress_voigt = np.zeros(6)
         return stress_voigt
+
+    def output_density(self, **kwargs):
+        return self.optimizer.output_density(**kwargs)

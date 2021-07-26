@@ -194,7 +194,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
             outfile = driver.prefix + '.xyz'
             io.ase_write(outfile, driver.subcell.ions, format = 'extxyz', parallel = False)
     if graphtopo.is_root :
-        io.ase_write('edftpy_cell.xyz', ions, format = 'extxyz', parallel = False)
+        io.ase_write('edftpy_gsystem.xyz', ions, format = 'extxyz', parallel = False)
     #-----------------------------------------------------------------------
     optimization_options = config["OPT"].copy()
     optimization_options["econv"] *= ions.nat

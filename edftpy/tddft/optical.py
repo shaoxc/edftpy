@@ -8,6 +8,12 @@ from edftpy.properties import get_dipole
 from edftpy.optimizer import Optimization
 
 class MoleculeOpticalAbsorption(Optimization):
+    """
+    The TDDFT class
+
+    Notes:
+        Not support NLKEDF.
+    """
 
     def __init__(self, drivers=None, gsystem = None, options=None, optimizer = None, **kwargs):
         super().__init__(drivers=drivers, gsystem = gsystem, options=options)

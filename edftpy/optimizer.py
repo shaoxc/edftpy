@@ -9,7 +9,7 @@ from edftpy.mpi import sprint
 from edftpy.properties import get_total_forces, get_total_stress
 from edftpy.functional import hartree_energy
 from edftpy.utils.common import Grid, Field, Functional
-# from edftpy.io import write
+from edftpy.io import write
 
 
 class Optimization(object):
@@ -681,3 +681,18 @@ class Optimization(object):
             sprint('Update the rhomax :', rhomax_all, rhomax)
             kefunc.rhomax = rhomax
         return
+
+    def output_density(self, suffix = '.snpy', outtype = ['G'], filename = None, **kwargs):
+        if 'G' in outtype :
+            if filename is None :
+                outfile = 'edftpy_gsystem' + suffix
+            else :
+                outfile = filename
+            write(outfile, self.gsystem.density, ions = self.gsystem.ions)
+
+        if 'S' in outtype :
+            for i, driver in enumerate(self.drivers):
+                if driver is None : continue
+                outfile = driver.prefix + suffix
+                if driver.technique == 'OF' or driver.comm.rank == 0 or self.gsystem.graphtopo.isub is None:
+                    write(outfile, driver.density, ions = driver.subcell.ions)
