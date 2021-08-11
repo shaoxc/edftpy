@@ -15,8 +15,7 @@ from .driver import Driver
 
 class DFTpyOF(Driver):
     """description"""
-    def __init__(self, evaluator = None, subcell = None, prefix = 'sub_of', options = None, mixer = None,
-            grid = None, evaluator_of = None, exttype = 3, ncharge = None, **kwargs):
+    def __init__(self, grid = None, evaluator_of = None, **kwargs):
         default_options = {
             "opt_method" : 'full',
             "method" :'CG-HS',
@@ -33,20 +32,16 @@ class DFTpyOF(Driver):
             "vector": "Orthogonalization",
             "interspace": False,
         }
-        self.options = default_options
+        options = kwargs.get("options", None)
         if options is not None :
-            self.options.update(options)
-        super().__init__(options = self.options, technique = 'OF', **kwargs)
-
-        self.evaluator = evaluator
-        self.subcell = subcell
+            default_options.update(kwargs["options"])
+        kwargs["options"] = default_options
+        kwargs["technique"] = 'OF'
+        super().__init__(**kwargs)
+        #-----------------------------------------------------------------------
         self.grid_driver = grid
         self.evaluator_of = evaluator_of
-        self.prefix = prefix
-        self.exttype = exttype
-        self.ncharge = ncharge
         #-----------------------------------------------------------------------
-        self.mixer = mixer
         if self.mixer is None :
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = 0.2, predecut = 0, delay = 1)
         # elif isinstance(self.mixer, float):
@@ -56,10 +51,12 @@ class DFTpyOF(Driver):
         #-----------------------------------------------------------------------
         self.density = self.subcell.density
         self.init_density()
-        self.comm = self.subcell.grid.mp.comm
         self.outfile = self.prefix + '.out'
         if self.comm.rank == 0 :
-            self.fileobj = open(self.outfile, 'w')
+            if self.append :
+                self.fileobj = open(self.outfile, 'a')
+            else :
+                self.fileobj = open(self.outfile, 'w')
         else :
             self.fileobj = None
 

@@ -4,7 +4,34 @@ from abc import ABC, abstractmethod
 from edftpy.utils.common import Field
 
 class Driver(ABC):
-    def __init__(self, options=None, technique = 'KS', key = None, **kwargs):
+    def __init__(self, technique = 'OF', key = None,
+            evaluator = None, subcell = None, prefix = 'sub_of', options = None, exttype = 3,
+            mixer = None, ncharge = None, task = 'scf', append = False, nspin = 1,
+            restart = False, base_in_file = None, **kwargs):
+        '''
+        Here, prefix is the name of the input file of the driver
+        exttype :
+                    1 : only pseudo                  : 001
+                    2 : only hartree                 : 010
+                    3 : hartree + pseudo             : 011
+                    4 : only xc                      : 100
+                    5 : pseudo + xc                  : 101
+                    6 : hartree + xc                 : 110
+                    7 : pseudo + hartree + xc        : 111
+        '''
+        self.technique = technique
+        self.key = key # the key of config
+        self.evaluator = evaluator
+        self.subcell = subcell
+        self.prefix = prefix
+        self.exttype = exttype
+        self.mixer = mixer
+        self.ncharge = ncharge
+        self.task = task
+        self.append = append
+        self.nspin = nspin
+        self.restart = restart
+        self.base_in_file = base_in_file
         default_options = {
                 'update_delay' : 1,
                 'update_freq' : 1
@@ -12,8 +39,7 @@ class Driver(ABC):
         self.options = default_options
         if options is not None :
             self.options.update(options)
-        self.technique = technique
-        self.key = key # the key of config
+        self.comm = self.subcell.grid.mp.comm
 
     @abstractmethod
     def get_density(self, **kwargs):

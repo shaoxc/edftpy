@@ -27,9 +27,7 @@ class PwscfKS(Driver):
     Note :
         The extpot separated into two parts : v.of_r and vltot will be a better and safe way
     """
-    def __init__(self, evaluator = None, subcell = None, prefix = 'sub_ks', params = None, cell_params = None,
-            exttype = 3, base_in_file = None, mixer = None, ncharge = None, options = None, comm = None,
-            diag_conv = 1E-6, task = 'scf', restart = False, append = False, **kwargs):
+    def __init__(self, params = None, cell_params = None, diag_conv = 1E-6, **kwargs):
         '''
         Here, prefix is the name of the input file
         exttype :
@@ -41,31 +39,23 @@ class PwscfKS(Driver):
                     6 : hartree + xc                 : 110
                     7 : pseudo + hartree + xc        : 111
         '''
-        super().__init__(options = options, technique = 'KS', **kwargs)
-        self._input_ext = '.in'
+        kwargs["technique"] = 'KS'
+        super().__init__(**kwargs)
 
-        self.evaluator = evaluator
-        self.exttype = exttype
-        self.subcell = subcell
-        self.prefix = prefix
-        self.ncharge = ncharge
-        self.comm = self.subcell.grid.mp.comm
-        self.task = task
+        self._input_ext = '.in'
         if self.prefix :
             if self.comm.rank == 0 :
-                self.build_input(params, cell_params, base_in_file)
+                self.build_input(params, cell_params, self.base_in_file)
         else :
-            self.prefix, self._input_ext= os.path.splitext(base_in_file)
+            self.prefix, self._input_ext= os.path.splitext(self.base_in_file)
 
         if self.comm.size > 1 : self.comm.Barrier()
-        self.mixer = mixer
         self._grid = None
         self._grid_sub = None
         self.outfile = self.prefix + '.out'
-        self._driver_initialise(append = append)
+        self._driver_initialise(append = self.append)
         self.grid_driver = self.get_grid_driver(self.grid)
         #-----------------------------------------------------------------------
-        self.nspin = 1
         self.atmp = np.zeros(1)
         self.atmp2 = np.zeros((1, self.nspin), order='F')
         #-----------------------------------------------------------------------
@@ -85,7 +75,7 @@ class PwscfKS(Driver):
         self.init_density()
         self.embed = qepy.qepy_common.embed_base()
         self.embed.diag_conv = diag_conv
-        self.update_workspace(first = True, restart = restart)
+        self.update_workspace(first = True, restart = self.restart)
 
     def update_workspace(self, subcell = None, first = False, update = 0, restart = False, **kwargs):
         """

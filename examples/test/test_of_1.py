@@ -115,7 +115,8 @@ class Test(unittest.TestCase):
         return of_enginer_a
 
     def tearDown(self):
-        os.remove('sub_of.out')
+        if os.path.isfile('sub_of.out'):
+            os.remove('sub_of.out')
 
 
 if __name__ == "__main__":
