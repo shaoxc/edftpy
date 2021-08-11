@@ -129,3 +129,39 @@ class Driver(ABC):
         if self._filter is None :
             self._filter = self._windows_function(self.grid)
         return self._filter
+
+class DriverConstraint(object):
+    """
+    Give some constraint for the driver.
+
+    Notes:
+        Most time still use driver to do the thing.
+    """
+    # funcdicts = ['get_density', 'update_density', 'end_scf',
+    #         'density', 'driver', 'residual_norm', 'dp_norm']
+
+    def __init__(self, driver = None, density = None, **kwargs):
+        self.driver = driver
+        self.density = density
+        if density is None :
+            self.density = self.driver.density.copy()
+        self.residual_norm = 0.0
+        self.dp_norm = 0.0
+
+    def get_density(self, **kwargs):
+        return self.density
+
+    def update_density(self, **kwargs):
+        return self.density
+
+    def end_scf(self, **kwargs):
+        pass
+
+    def __call__(self, **kwargs):
+        pass
+
+    def __getattr__(self, attr):
+        if attr in dir(self):
+            return object.__getattribute__(self, attr)
+        else :
+            return getattr(self.driver, attr)

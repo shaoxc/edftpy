@@ -10,7 +10,7 @@ from edftpy import io
 from edftpy.config import read_conf, write_conf
 
 from edftpy.functional import LocalPP, KEDF, Hartree, XC
-from edftpy.optimizer import Optimization
+from edftpy.optimizer import Optimization, MixOptimization
 from edftpy.tddft import TDDFT
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
 from edftpy.density.init_density import AtomicDensity
@@ -201,6 +201,15 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     task = config["JOB"]['task']
     tddft_options = config["TD"]
     opt = Optimization(drivers = drivers, options = optimization_options, gsystem = gsystem)
+    #-----------------------------------------------------------------------
+    if task == 'Optmix' :
+        optmix = True
+        task = 'Tddft'
+        if optimizer is not None :
+            optimizer = optimizer.optimizer_tddft
+    else :
+        optmix = False
+    #-----------------------------------------------------------------------
     if task == 'Tddft' :
         if optimizer is not None and cell_change == 'position' :
             optimizer.gsystem = gsystem
@@ -210,6 +219,9 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
             opt = optimizer
         else :
             opt = TDDFT(drivers = drivers, options = tddft_options, gsystem = gsystem, optimizer = opt)
+
+    if optmix :
+        opt = MixOptimization(optimizer = opt)
     return opt
 
 def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell_change = None, **kwargs):
@@ -458,6 +470,12 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             if tddft['restart'] != 'initial' :
                 task = 'optical'
                 restart = tddft['restart'] == 'restart'
+
+        if config["JOB"]['task'] == 'Optmix' :
+            if tddft['restart'] == 'initial' :
+                raise AttributeError("Sorry, 'Optmix' cannot start the TDDFT from 'initial'.")
+            restart = tddft['restart'] == 'restart'
+            task = config[keysys]["task"] or task
 
     margs = {
             'evaluator' : embed_evaluator,

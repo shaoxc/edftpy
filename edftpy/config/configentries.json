@@ -8,7 +8,7 @@
 			"type": "cstr",
 			"default": "Optdensity",
 			"comment": "The task to be performed.",
-			"options": "Optdensity, Calculation, Tddft"
+			"options": "Optdensity, Calculation, Tddft, Optmix"
 		},
 		"calctype": {
 			"type": "cstrlist",
@@ -612,6 +612,12 @@
 			"options": "",
 			"comment": "The prefix of each subsystem. If not set, it's same as the name of subsytem.",
 			"default": null
+		},
+		"task": {
+			"type": "str",
+			"default": null,
+			"comment": "The task to be performed for subsytem. Only works for JOB-task = Optmix.",
+			"options": "scf, optical"
 		}
 	},
 	"MOL": {

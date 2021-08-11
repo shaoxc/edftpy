@@ -110,17 +110,3 @@ class MoleculeOpticalAbsorption(Optimization):
         self.energy_all = self.print_energy()
         self.energy = self.energy_all['TOTAL']
         return
-
-class MixOptimization(object):
-    """
-    Mixing TDDFT and SCF
-
-    Notes:
-        Not support NLKEDF.
-    """
-
-    def __init__(self, optimizer= None, **kwargs):
-        self.optimizer_tddft = optimizer
-        self.optimizer_scf = optimizer.optimizer
-        self.drivers = self.optimizer_tddft.drivers
-        self.gsystem = self.optimizer_tddft.gsystem

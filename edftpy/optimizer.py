@@ -10,6 +10,7 @@ from edftpy.properties import get_total_forces, get_total_stress
 from edftpy.functional import hartree_energy
 from edftpy.utils.common import Grid, Field, Functional
 from edftpy.io import write
+from edftpy.engine.driver import DriverConstraint
 
 
 class Optimization(object):
@@ -696,3 +697,46 @@ class Optimization(object):
                 outfile = driver.prefix + suffix
                 if driver.technique == 'OF' or driver.comm.rank == 0 or self.gsystem.graphtopo.isub is None:
                     write(outfile, driver.density, ions = driver.subcell.ions)
+
+class MixOptimization(object):
+    """
+    Mixing TDDFT and SCF
+
+    Notes:
+        For the driver of TDDFT, task != 'scf' (restart != 'initial').
+    """
+    # funcdicts = ['optimize',
+    #         'optimizer_tddft', 'optimizer_scf', 'gsystem', 'drivers', 'drivers_fake']
+
+    def __init__(self, optimizer= None, **kwargs):
+        self.optimizer_tddft = optimizer
+        self.optimizer_scf = optimizer.optimizer
+        self.gsystem = self.optimizer_tddft.gsystem
+
+        self.drivers = self.optimizer_tddft.drivers.copy()
+        self.drivers_fake = [None for driver in self.drivers]
+        for i, driver in enumerate(self.drivers):
+            if driver is not None :
+                self.drivers_fake[i] = DriverConstraint(driver = driver)
+        self.optimizer_tddft.drivers = self.optimizer_tddft.drivers.copy()
+        self.optimizer_scf.drivers = self.optimizer_scf.drivers.copy()
+
+    def optimize(self, **kwargs):
+        for i, driver in enumerate(self.drivers):
+            if driver is not None :
+                if driver.task == 'scf' :
+                    self.optimizer_tddft.drivers[i] = self.drivers_fake[i]
+                else :
+                    self.optimizer_scf.drivers[i] = self.drivers_fake[i]
+
+        self.optimizer_tddft.optimize(**kwargs)
+        self.optimizer_scf.optimize(**kwargs)
+
+        self.optimizer_tddft.drivers = self.drivers.copy()
+        self.optimizer_scf.drivers = self.drivers.copy()
+
+    def __getattr__(self, attr):
+        if attr in dir(self):
+            return object.__getattribute__(self, attr)
+        else :
+            return getattr(self.optimizer_scf, attr)
