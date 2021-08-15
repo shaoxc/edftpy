@@ -143,6 +143,10 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         # import pprint
         # pprint.pprint(config)
         write_conf('edftpy_running.json', config)
+        if optimizer is None :
+            for key in config :
+                if key.startswith('SUB') :
+                    print('Subsytem : ', key, config[key]['technique'], config[key]['cell']['index'])
     #-----------------------------------------------------------------------
     labels = set(ions.labels)
     pplist = {}
@@ -936,7 +940,7 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
                 raise AttributeError("ERROR : Not support this kind : {}".format(kind))
         # set the initial density as None
         config[key]["density"]["file"] = None
-        if grid.mp.rank == 0 : print('New Subsytem : ', key, kind, index)
+        sprint('New Subsytem : ', key, kind, index)
 
     # removed last step saved but unused subs
     for key in subkeys_prev :
