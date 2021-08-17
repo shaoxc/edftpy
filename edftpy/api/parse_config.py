@@ -37,6 +37,7 @@ def import_drivers(config):
             calc = config[key]['calculator']
             calcs.append(calc)
     if 'pwscf' in calcs or 'qe' in calcs :
+        import qepy
         from edftpy.engine.ks_pwscf import PwscfKS
     if 'castep' in calcs :
         from edftpy.engine.ks_castep import CastepKS
@@ -713,13 +714,15 @@ def get_pwscf_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, mar
     params = {'system' : {}}
     if ecut :
         subcell = margs['subcell']
-        # params['system']['ecutwfc'] = ecut * 2.0
-        # if abs(4 * ecut - gsystem_ecut) < 1.0 :
         params['system']['ecutwfc'] = ecut / 4.0 * 2.0 # 4*ecutwfc to Ry
         if abs(ecut - gsystem_ecut) < 5.0 :
             params['system']['nr1'] = subcell.grid.nrR[0]
             params['system']['nr2'] = subcell.grid.nrR[1]
             params['system']['nr3'] = subcell.grid.nrR[2]
+
+    ncharge = margs.get('ncharge')
+    if ncharge :
+        params['system']['tot_charge'] = ncharge
 
     add = {
             'cell_params': cell_params,
@@ -727,6 +730,10 @@ def get_pwscf_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, mar
             }
     margs.update(add)
     driver = PwscfKS(**margs)
+    # from edftpy.engine.driver import DriverKS
+    # from edftpy.engine.engine_qe import EngineQE
+    # engine = EngineQE()
+    # driver = DriverKS(**margs, engine = engine)
     return driver
 
 def _get_gap(config, optimizer):
