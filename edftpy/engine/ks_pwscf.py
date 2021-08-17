@@ -68,7 +68,7 @@ class PwscfKS(Driver):
         fstr = f'Subcell grid({self.prefix}): {self.subcell.grid.nrR}  {self.subcell.grid.nr}\n'
         fstr += f'Subcell shift({self.prefix}): {self.subcell.grid.shift}\n'
         if self.grid_driver is not None :
-            fstr += f'{self.__class__.__name__} has two grids :{self.grid.nrR} and {self.grid_driver.nrR}'
+            fstr += f'{self.prefix} has two grids :{self.grid.nrR} and {self.grid_driver.nrR}'
         sprint(fstr, comm=self.comm, level=1)
         qepy.qepy_mod.qepy_write_stdout(fstr)
         #-----------------------------------------------------------------------
@@ -190,11 +190,10 @@ class PwscfKS(Driver):
         return grid_driver
 
     def build_input(self, params, cell_params, base_in_file):
-        in_params, cards = self._build_ase_atoms(params, cell_params, base_in_file)
+        in_params, cards = self._build_ase_atoms(params, cell_params, base_in_file, ions = self.subcell.ions, prefix = self.prefix)
         self._write_params(self.prefix + self._input_ext, params = in_params, cell_params = cell_params, cards = cards)
 
-    def _fix_params(self, params = None):
-        prefix = self.prefix
+    def _fix_params(self, params = None, prefix = 'sub_'):
         #output of qe
         default_params = OrderedDict({
                 'control' :
@@ -249,8 +248,8 @@ class PwscfKS(Driver):
                 params[k1][k2] = v2
         return params
 
-    def _build_ase_atoms(self, params = None, cell_params = None, base_in_file = None):
-        ase_atoms = ions2ase(self.subcell.ions)
+    def _build_ase_atoms(self, params = None, cell_params = None, base_in_file = None, ions = None, prefix = 'sub_'):
+        ase_atoms = ions2ase(ions)
         ase_atoms.set_calculator(ase_calc_driver())
         self.ase_atoms = ase_atoms
 
@@ -262,7 +261,7 @@ class PwscfKS(Driver):
             in_params = {}
             card_lines = []
 
-        in_params = self._fix_params(in_params)
+        in_params = self._fix_params(in_params, prefix = prefix)
 
         for k1, v1 in params.items() :
             if k1 not in in_params :
