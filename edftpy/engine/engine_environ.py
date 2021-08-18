@@ -35,7 +35,9 @@ class EngineEnviron(Engine):
     def get_force(self, **kwargs):
         """get Environ force contribution
         """
-        pass # TODO test and implement forces in Environ
+        force = np.zeros((3, self.nat), dtype=float, order='F')
+        environ.calc_force(force)
+        return force.T * 0.5 # Ry to a.u.
 
     def get_energy(self, **kwargs):
         """get Environ energy contribution
@@ -43,7 +45,7 @@ class EngineEnviron(Engine):
         # move these array options to pyec maybe
         energy = np.zeros((1,), dtype=float)
         environ.calc_energy(energy)
-        return energy[0]
+        return energy[0] * 0.5 # Ry to a.u.
 
     def initial(self, comm = None, **kwargs):
         """initialize the Environ module
@@ -72,8 +74,8 @@ class EngineEnviron(Engine):
         tau = kwargs.get('tau')
         self.nnr = kwargs.get('nnr')
         vltot = kwargs.get('vltot')
-        rho = np.zeros((nnr, 1,), dtype=float, order='F')
-        self.dvtot = np.zeros((nnr,), dtype=float)
+        rho = np.zeros((self.nnr, 1,), dtype=float, order='F')
+        self.dvtot = np.zeros((self.nnr,), dtype=float)
 
         # raise Exceptions here if the keywords are not supplied
         _check_kwargs('nat', nat, 'initial')
