@@ -27,6 +27,7 @@ class EngineEnviron(Engine):
         # initialize some persistent objects that Environ needs
         # TODO this should be rethought, maybe have a container
         self.nnr = None
+        self.nat = None
         self.nelec = None
         # this being persistent takes up memory, might want a better way of
         # temporariliy storing and then cleaning this up
@@ -36,7 +37,7 @@ class EngineEnviron(Engine):
         """get Environ force contribution
         """
         force = np.zeros((3, self.nat), dtype=float, order='F')
-        environ.calc_force(force)
+        environ.calc_force(self.nat, force)
         return force.T * 0.5 # Ry to a.u.
 
     def get_energy(self, **kwargs):
@@ -51,11 +52,11 @@ class EngineEnviron(Engine):
         """initialize the Environ module
 
         Args:
-            comm (int, optional): communicator for MPI. Defaults to None.
+            comm (uint, optional): communicator for MPI. Defaults to None.
         """
         # TODO verify units for values that get communicated to Environ from edftpy
         # TODO handle any input value missing things better?
-        nat = kwargs.get('nat')
+        self.nat = kwargs.get('nat')
         ntyp = kwargs.get('ntyp')
         self.nelec = kwargs.get('nelec')
         atom_label = kwargs.get('atom_label')
@@ -74,11 +75,11 @@ class EngineEnviron(Engine):
         tau = kwargs.get('tau')
         self.nnr = kwargs.get('nnr')
         vltot = kwargs.get('vltot')
-        rho = np.zeros((self.nnr, 1,), dtype=float, order='F')
+        rho = kwargs.get('rho') # maybe make this a named argument to parallel the scf function
         self.dvtot = np.zeros((self.nnr,), dtype=float)
 
         # raise Exceptions here if the keywords are not supplied
-        _check_kwargs('nat', nat, 'initial')
+        _check_kwargs('nat', self.nat, 'initial')
         _check_kwargs('ntyp', ntyp, 'initial')
         _check_kwargs('nelec', self.nelec, 'initial')
         _check_kwargs('atom_label', atom_label, 'initial')
@@ -92,14 +93,18 @@ class EngineEnviron(Engine):
 
         # TODO program unit needs to be set externally perhaps
         environ.init_io('PW', True, 0, comm, 6) 
-        environ.init_base_first(self.nelec, nat, ntyp, atom_label[:, :ntyp], False)
+        environ.init_base_first(self.nelec, self.nat, ntyp, atom_label[:, :ntyp], False)
         environ.init_base_second(alat, at, comm, 0, 0, gcutm, e2)
-        environ.init_ions(nat, ntyp, ityp, zv, tau, alat)
+        environ.init_ions(self.nat, ntyp, ityp, zv[:ntyp], tau, alat)
         environ.init_cell(at, alat)
         environ.init_potential(self.nnr, vltot)
         # TODO reconsider these steps
-        environ.init_electrons(self.nnr, rho, self.nelec)
-        environ.calc_potential(False, self.nnr, self.dvtot) # might not be necessary?
+        if rho is not None: 
+            environ.init_electrons(self.nnr, rho, self.nelec)
+            environ.calc_potential(False, self.nnr, self.dvtot) # might not be necessary?
+        else:
+            print("electrons not initialized until scf")
+            rho = np.zeros((self.nnr, 1,), dtype=float, order='F')
 
     def scf(self, rho, **kwargs):
         """A single electronic step for Environ
