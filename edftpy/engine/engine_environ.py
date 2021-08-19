@@ -34,7 +34,7 @@ class EngineEnviron(Engine):
         self.nat = None
         # this being persistent takes up memory, might want a better way of
         # temporariliy storing and then cleaning this up
-        self.dvtot = None
+        self.potential = None
         
     def get_force(self, **kwargs):
         """get Environ force contribution
@@ -95,12 +95,12 @@ class EngineEnviron(Engine):
         environ_control.update_ions(self.nat, ntyp, ityp, zv[:ntyp], tau, alat)
         environ_control.update_cell(at, alat)
 
-        self.dvtot = np.zeros((environ_calc.get_nnt(),), dtype=float)
+        self.potential = np.zeros((environ_calc.get_nnt(),), dtype=float)
 
         # TODO reconsider these steps
         if rho is not None: 
             environ_control.update_electrons(rho, lscatter=True)
-            environ_calc.calc_potential(False, self.dvtot, lgather=True) # might not be necessary?
+            environ_calc.calc_potential(False, self.potential, lgather=True) # might not be necessary?
         else:
             print("electrons not initialized until scf")
             rho = np.zeros((environ_calc.get_nnt(), 1,), dtype=float, order='F')
@@ -112,14 +112,20 @@ class EngineEnviron(Engine):
             rho (np.ndarray): the density object
         """
         environ_control.update_electrons(rho, lscatter=True)
-        if self.dvtot is None:
-            raise ValueError(f'`dvtot` not initialized, has `initial` been run?')
-        environ_calc.calc_potential(True, self.dvtot, lgather=True)
+        if self.potential is None:
+            raise ValueError(f'`potential` not initialized, has `initial` been run?')
+        environ_calc.calc_potential(True, self.potential, lgather=True)
 
     def get_potential(self):
         """Returns the potential from Environ
         """
-        return self.dvtot
+        return self.potential
+
+    def set_mbx_charges(self, rho):
+        """Supply Environ with MBX charges
+        """
+        environ_control.add_mbx_charges(rho, lscatter=True)
+
 
     def clean(self):
         """Clean up memory on the Fortran side
