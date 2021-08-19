@@ -43,7 +43,7 @@ class EngineEnviron(Engine):
         environ_calc.calc_force(force)
         return force.T * 0.5 # Ry to a.u.
 
-    def get_energy(self, **kwargs):
+    def calc_energy(self, **kwargs):
         """get Environ energy contribution
         """
         # move these array options to pyec maybe
