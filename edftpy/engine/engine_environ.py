@@ -1,4 +1,9 @@
-import pyec.pyec_interface as environ
+import sys
+
+import pyec.setup_interface as environ_setup
+import pyec.control_interface as environ_control
+import pyec.calc_interface as environ_calc
+import pyec.output_interface as environ_output
 
 import numpy as np
 
@@ -25,10 +30,8 @@ class EngineEnviron(Engine):
         super().__init__(**kwargs)
 
         # initialize some persistent objects that Environ needs
-        # TODO this should be rethought, maybe have a container
-        self.nnr = None
+        # TODO this should be inferred through edftpy
         self.nat = None
-        self.nelec = None
         # this being persistent takes up memory, might want a better way of
         # temporariliy storing and then cleaning this up
         self.dvtot = None
@@ -37,16 +40,15 @@ class EngineEnviron(Engine):
         """get Environ force contribution
         """
         force = np.zeros((3, self.nat), dtype=float, order='F')
-        environ.calc_force(self.nat, force)
+        environ_calc.calc_force(force)
         return force.T * 0.5 # Ry to a.u.
 
     def get_energy(self, **kwargs):
         """get Environ energy contribution
         """
         # move these array options to pyec maybe
-        energy = np.zeros((1,), dtype=float)
-        environ.calc_energy(energy)
-        return energy[0] * 0.5 # Ry to a.u.
+        energy = environ_calc.calc_energy()
+        return energy * 0.5 # Ry to a.u.
 
     def initial(self, comm = None, **kwargs):
         """initialize the Environ module
@@ -58,7 +60,7 @@ class EngineEnviron(Engine):
         # TODO handle any input value missing things better?
         self.nat = kwargs.get('nat')
         ntyp = kwargs.get('ntyp')
-        self.nelec = kwargs.get('nelec')
+        nelec = kwargs.get('nelec')
         atom_label = kwargs.get('atom_label')
         alat = kwargs.get('alat')
         at = kwargs.get('at')
@@ -73,38 +75,42 @@ class EngineEnviron(Engine):
         ityp = kwargs.get('ityp')
         zv = kwargs.get('zv')
         tau = kwargs.get('tau')
-        self.nnr = kwargs.get('nnr')
+        nnr = kwargs.get('nnr')
         vltot = kwargs.get('vltot')
         rho = kwargs.get('rho') # maybe make this a named argument to parallel the scf function
-        self.dvtot = np.zeros((self.nnr,), dtype=float)
 
         # raise Exceptions here if the keywords are not supplied
         _check_kwargs('nat', self.nat, 'initial')
         _check_kwargs('ntyp', ntyp, 'initial')
-        _check_kwargs('nelec', self.nelec, 'initial')
+        _check_kwargs('nelec', nelec, 'initial')
         _check_kwargs('atom_label', atom_label, 'initial')
         _check_kwargs('at', at, 'initial')
         _check_kwargs('e2', e2, 'initial')
         _check_kwargs('ityp', ityp, 'initial')
         _check_kwargs('zv', zv, 'initial')
         _check_kwargs('tau', tau, 'initial')
-        _check_kwargs('nnr', self.nnr, 'initial')
-        _check_kwargs('vltot', vltot, 'initial')
+        _check_kwargs('nnr', nnr, 'initial')
 
         # TODO program unit needs to be set externally perhaps
-        environ.init_io('PW', True, 0, comm, 6) 
-        environ.init_base_first(self.nelec, self.nat, ntyp, atom_label[:, :ntyp], False)
-        environ.init_base_second(alat, at, comm, 0, 0, gcutm, e2)
-        environ.init_ions(self.nat, ntyp, ityp, zv[:ntyp], tau, alat)
-        environ.init_cell(at, alat)
-        environ.init_potential(self.nnr, vltot)
+        environ_setup.init_io('PW', True, 0, comm, 6) 
+        environ_setup.init_base_first(nelec, self.nat, ntyp, atom_label[:, :ntyp], False)
+        environ_setup.init_base_second(alat, at, comm, 0, 0, gcutm, e2)
+        environ_control.update_ions(self.nat, ntyp, ityp, zv[:ntyp], tau, alat)
+        environ_control.update_cell(at, alat)
+
+        self.dvtot = np.zeros((environ_calc.get_nnt(),), dtype=float)
+
+        if vltot is not None:
+            environ_control.update_potential(vltot)
+        else:
+            print("potential not initialized until scf")
         # TODO reconsider these steps
         if rho is not None: 
-            environ.init_electrons(self.nnr, rho, self.nelec)
-            environ.calc_potential(False, self.nnr, self.dvtot) # might not be necessary?
-        else:
-            print("electrons not initialized until scf")
-            rho = np.zeros((self.nnr, 1,), dtype=float, order='F')
+            environ_control.update_electrons(rho, lscatter=True)
+            environ_calc.calc_potential(False, self.dvtot, lgather=True) # might not be necessary?
+        #else:
+        #    print("electrons not initialized until scf")
+        #    rho = np.zeros((environ_calc.get_nnt(), 1,), dtype=float, order='F')
 
     def scf(self, rho, **kwargs):
         """A single electronic step for Environ
@@ -112,10 +118,10 @@ class EngineEnviron(Engine):
         Args:
             rho (np.ndarray): the density object
         """
-        environ.init_electrons(self.nnr, rho, self.nelec)
+        environ_control.update_electrons(rho, lscatter=True)
         if self.dvtot is None:
             raise ValueError(f'`dvtot` not initialized, has `initial` been run?')
-        environ.calc_potential(True, self.nnr, self.dvtot)
+        environ_calc.calc_potential(True, self.dvtot, lgather=True)
 
     def get_potential(self):
         """Returns the potential from Environ
