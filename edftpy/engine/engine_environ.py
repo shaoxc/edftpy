@@ -75,7 +75,6 @@ class EngineEnviron(Engine):
         ityp = kwargs.get('ityp')
         zv = kwargs.get('zv')
         tau = kwargs.get('tau')
-        nnr = kwargs.get('nnr')
         vltot = kwargs.get('vltot')
         rho = kwargs.get('rho') # maybe make this a named argument to parallel the scf function
 
@@ -89,7 +88,6 @@ class EngineEnviron(Engine):
         _check_kwargs('ityp', ityp, 'initial')
         _check_kwargs('zv', zv, 'initial')
         _check_kwargs('tau', tau, 'initial')
-        _check_kwargs('nnr', nnr, 'initial')
 
         # TODO program unit needs to be set externally perhaps
         environ_setup.init_io('PW', True, 0, comm, 6) 
@@ -127,6 +125,11 @@ class EngineEnviron(Engine):
         """Returns the potential from Environ
         """
         return self.dvtot
+
+    def clean(self):
+        """Clean up memory on the Fortran side
+        """
+        environ_setup.environ_clean(True)
 
 def _check_kwargs(key, val, funlabel='\b'):
     """check that a kwargs value is set
