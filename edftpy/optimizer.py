@@ -100,11 +100,25 @@ class Optimization(object):
 
         self.gsystem.density[:] = 0.0
         for i, driver in enumerate(self.drivers):
+            root = 0
             if driver is None :
                 density = None
+                potential = None
             else :
                 density = driver.density
-            self.gsystem.update_density(density, isub = i)
+                potential = driver.potential
+                if driver.comm.rank == 0 : root = self.gsystem.comm.rank
+            root = self.gsystem.grid.mp.amax(root)
+            technique = self._get_driver_technique(driver)
+            if technique in ['EN', 'MM'] :
+                extpots = self.gsystem.total_evaluator.external_potential
+                pot = extpots.get(technique, None)
+                if pot is None :
+                    pot = Field(grid=self.gsystem.grid)
+                    extpots[technique] = pot
+                self.gsystem.grid.scatter(potential, out = pot, root = root)
+            else :
+                self.gsystem.update_density(density, isub = i)
         totalrho = self.gsystem.density.copy()
         return totalrho
 
@@ -136,9 +150,11 @@ class Optimization(object):
                 gaussian_density = driver.gaussian_density
                 core_density = driver.core_density
                 # write(str(i) + '_gauss.xsf', gaussian_density, ions = driver.subcell.ions)
-            self.gsystem.update_density(density, isub = i)
-            self.gsystem.update_density(gaussian_density, isub = i, fake = True)
-            self.gsystem.update_density(core_density, isub = i, core = True)
+            technique = self._get_driver_technique(driver)
+            if technique not in ['EN', 'MM'] :
+                self.gsystem.update_density(density, isub = i)
+                self.gsystem.update_density(gaussian_density, isub = i, fake = True)
+                self.gsystem.update_density(core_density, isub = i, core = True)
         sprint('update density')
         sprint('density', self.gsystem.density.integral())
         totalrho = self.gsystem.density.copy()
@@ -180,7 +196,11 @@ class Optimization(object):
 
                 if update[isub] :
                     self.gsystem.density[:] = totalrho
-                    driver(gsystem = self.gsystem, calcType = ['O'], olevel = olevel, sdft = sdft)
+                    if driver.technique in ['EN', 'MM'] :
+                        calcType = ['V']
+                    else :
+                        calcType = ['O']
+                    driver(gsystem = self.gsystem, calcType = calcType, olevel = olevel, sdft = sdft)
             #-----------------------------------------------------------------------
             totalrho, totalrho_prev = totalrho_prev, totalrho
             totalrho = self.update_density(update = update)
@@ -222,9 +242,10 @@ class Optimization(object):
     def set_global_potential(self, **kwargs):
         sdft = self.options['sdft']
         if sdft == 'sdft' :
-            return self.set_global_potential_sdft(**kwargs)
+            self.set_global_potential_sdft(**kwargs)
         elif sdft == 'pdft' :
-            return self.set_global_potential_pdft(**kwargs)
+            self.set_global_potential_pdft(**kwargs)
+        self.add_external_potential(**kwargs)
 
     def set_global_potential_sdft(self, approximate = 'same', **kwargs):
         # approximate = 'density4'
@@ -418,6 +439,73 @@ class Optimization(object):
                         driver.evaluator.global_potential = potential * factor
                 driver.evaluator.embed_potential = driver.evaluator.global_potential
         return
+
+    def add_external_potential(self, **kwargs):
+        for isub in range(self.nsub + len(self.of_drivers)):
+            if isub < self.nsub :
+                driver = self.drivers[isub]
+                if driver.technique == 'OF' :
+                    continue
+            else :
+                driver = self.of_drivers[isub - self.nsub]
+                isub = self.of_ids[isub - self.nsub]
+            root = 0
+            if driver is None :
+                global_potential = None
+                global_density = None
+            else :
+                if driver.evaluator.global_potential is None :
+                    if driver.comm.rank == 0 :
+                        driver.evaluator.global_potential = Field(grid=driver.grid)
+                    else :
+                        driver.evaluator.global_potential = driver.atmp
+                global_potential = driver.evaluator.global_potential
+                if driver.comm.rank == 0 : root = self.gsystem.comm.rank
+            root = self.gsystem.grid.mp.amax(root)
+
+            technique = self._get_driver_technique(driver)
+            if technique == 'EN' :
+                pot = self.gsystem.total_evaluator.external_potential.get('MM', None)
+                if pot is None : continue
+                # self.gsystem.sub_value(pot, global_potential, isub = isub)
+                pot.gather(out = global_potential, root = root)
+                if driver is not None :
+                    if driver.density is None :
+                        if driver.comm.rank == 0 :
+                            driver.density = Field(grid=driver.grid)
+                        else :
+                            driver.density = driver.atmp
+                    global_density = driver.density
+                self.gsystem.density.gather(out = global_density, root = root)
+            elif technique == 'MM' :
+                pot = self.gsystem.total_evaluator.external_potential['QM']
+                if pot is None : continue
+                pot_en = self.gsystem.total_evaluator.external_potential.get('EN', None)
+                if pot_en is not None : pot += pot_en
+                # self.gsystem.sub_value(pot, global_potential, isub = isub)
+                pot.gather(out = global_potential, root = root)
+            else : # if technique in ['OF', 'KS']:
+                pot = None
+                extpots = self.gsystem.total_evaluator.external_potential
+                for key in extpots :
+                    if key == 'QM' : continue
+                    if pot is None :
+                        pot = extpots[key].copy()
+                    else :
+                        pot += extpots[key]
+                if pot is not None :
+                    self.gsystem.add_to_sub(pot, global_potential, isub = isub)
+        return
+
+    def _get_driver_technique(self, driver):
+        techs = {'OF' :0, 'KS' :1, 'EN' :2, 'MM' :3}
+        itech = 0
+        if driver is not None :
+            itech = techs.get(driver.technique, 0)
+        itech = self.gsystem.grid.mp.amax(itech)
+        for key in techs :
+            if itech == techs[key] :
+                return key
 
     def get_update(self, driver, istep, residual):
         update_delay = driver.options['update_delay']

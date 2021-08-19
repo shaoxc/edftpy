@@ -239,6 +239,7 @@ class TotalEvaluator(Evaluator):
         self.embed_potential = None
         self.static_potential = None
         self.embed_energydensity= None
+        self.external_potential = {}
 
     def get_embed_potential(self, rho, gaussian_density = None, embed_keys = [], with_global = True, calcType = ['V'], **kwargs):
         self.embed_potential = None
@@ -262,7 +263,23 @@ class TotalEvaluator(Evaluator):
                 if key not in embed_keys :
                     remove_global[key] = self.funcdicts[key]
         self.update_functional(remove = remove_global)
+        #-----------------------------------------------------------------------
+        static_funcs = {'HARTREE' : None, 'PSEUDO' : None}
+        remove_global2 = {}
+        for key in self.funcdicts:
+            if key not in static_funcs:
+                remove_global2[key] = self.funcdicts[key]
+            else :
+                static_funcs[key] = self.funcdicts[key]
+        self.update_functional(remove = remove_global2)
         obj_global = self.compute(rho, calcType = calcType, **kwargs)
+        self.external_potential['QM'] = obj_global.potential.copy()
+        if len(remove_global2) > 0 :
+            self.update_functional(remove = static_funcs)
+            self.update_functional(add = remove_global2)
+            obj_global += self.compute(rho, calcType = calcType, **kwargs)
+            self.update_functional(add = static_funcs)
+        #-----------------------------------------------------------------------
         if self.embed_potential is None :
             self.embed_potential = obj_global.potential
         else :
@@ -274,7 +291,7 @@ class TotalEvaluator(Evaluator):
             else :
                 self.embed_energydensity += obj_global.energydensity
 
-        self.static_potential = obj_global.potential
+        # self.static_potential = obj_global.potential
 
     def __call__(self, rho, calcType=["E","V"], **kwargs):
         return self.compute(rho, calcType, **kwargs)

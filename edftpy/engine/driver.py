@@ -42,6 +42,7 @@ class Driver(ABC):
         self.nspin = nspin
         self.restart = restart
         self.base_in_file = base_in_file
+        self.filename = base_in_file
         default_options = {
                 'update_delay' : 1,
                 'update_freq' : 1
@@ -50,16 +51,16 @@ class Driver(ABC):
         if options is not None :
             self.options.update(options)
         self.comm = self.subcell.grid.mp.comm
+        #-----------------------------------------------------------------------
+        self.density = None
+        self.potential = None
 
-    @abstractmethod
     def get_density(self, **kwargs):
         pass
 
-    @abstractmethod
     def get_energy(self, **kwargs):
         pass
 
-    @abstractmethod
     def update_density(self, **kwargs):
         pass
 
@@ -67,9 +68,8 @@ class Driver(ABC):
     def get_energy_potential(self, **kwargs):
         pass
 
-    @abstractmethod
     def get_fermi_level(self, **kwargs):
-        pass
+        return 0.0
 
     def update_workspace(self, *arg, **kwargs):
         pass
@@ -176,8 +176,9 @@ class Engine(object):
         embed : The object contains the embedding information.
             Must contains 'initial'.
     """
-    def __init__(self, units = {'volume' : 1.0}, **kwargs):
-        self.units = units
+    def __init__(self, units = {}, **kwargs):
+        self.units = {'volume' : 1.0, 'order' : 'F'}
+        self.units.update(units)
 
     def get_force(self, icalc = 0, **kwargs):
         force = None
@@ -224,6 +225,9 @@ class Engine(object):
     def set_extpot(self, embed, extpot, **kwargs):
         pass
 
+    def set_extfield(self, embed, field, **kwargs):
+        pass
+
     def set_rho(self, rho, **kwargs):
         pass
 
@@ -264,6 +268,9 @@ class Engine(object):
 
     def write_input(self, filename = 'sub_driver.in', subcell = None, params = {}, cell_params = {}, base_in_file = None, **kwargs):
         pass
+
+    def get_potential(self, **kwargs):
+        return None
 
 class DriverKS(Driver):
     """
@@ -515,11 +522,11 @@ class DriverKS(Driver):
             extene = self.comm.bcast(extene, root = 0)
         return extene
 
-    def _get_charge(self):
+    def _get_charge(self, **kwargs):
         if self.task == 'optical' :
-            self.engine.tddft(self.embed)
+            self.engine.tddft(self.embed, **kwargs)
         else :
-            self.engine.scf(self.embed)
+            self.engine.scf(self.embed, **kwargs)
 
         self.engine.get_rho(self.charge)
         return self.charge
@@ -548,9 +555,8 @@ class DriverKS(Driver):
         self.prev_charge[:] = self.charge
 
         self.engine.set_extpot(self.embed, extpot)
-        self.embed.initial = initial
         #
-        self._get_charge()
+        self._get_charge(initial = initial)
         #
         self.energy = 0.0
         self.dp_norm = 1.0
@@ -571,7 +577,7 @@ class DriverKS(Driver):
             energy = 0.0
         return energy
 
-    def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, sdft = 'sdft', **kwargs):
+    def get_energy_potential(self, density = None, calcType = ['E', 'V'], olevel = 1, sdft = 'sdft', **kwargs):
         if 'E' in calcType :
             energy = self.get_energy(olevel = olevel, sdft = sdft)
 
@@ -669,3 +675,120 @@ class DriverKS(Driver):
             self.engine.stop_tddft(status, save = save)
         else :
             self.engine.stop_scf(status, save = save)
+
+class DriverEX(Driver):
+    """
+    Note :
+        The potential and density will gather in rank == 0 for engine.
+    """
+    def __init__(self, engine = None, **kwargs):
+        kwargs["technique"] = kwargs.get("technique", 'EN')
+        super().__init__(**kwargs)
+        self.engine = engine
+
+        self.prefix, self._input_ext= os.path.splitext(self.base_in_file)
+
+        if self.comm.size > 1 : self.comm.Barrier()
+        self._grid = None
+        self._driver_initialise(append = self.append)
+        self.grid_driver = self.get_grid_driver(self.grid)
+        #-----------------------------------------------------------------------
+        self.atmp = np.zeros(1)
+        self.atmp2 = np.zeros((1, self.nspin), order='F')
+        #-----------------------------------------------------------------------
+        self.mix_driver = None
+        if self.mixer is None :
+            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = 0.5, predecut = 0, delay = 1)
+        elif isinstance(self.mixer, float):
+            self.mix_driver = self.mixer
+
+        fstr = f'Subcell grid({self.prefix}): {self.subcell.grid.nrR}  {self.subcell.grid.nr}\n'
+        fstr += f'Subcell shift({self.prefix}): {self.subcell.grid.shift}\n'
+        if self.grid_driver is not None :
+            fstr += f'{self.__class__.__name__} has two grids :{self.grid.nrR} and {self.grid_driver.nrR}'
+        sprint(fstr, comm=self.comm, level=1)
+        self.engine.write_stdout(fstr)
+        #-----------------------------------------------------------------------
+        self.init_density()
+        self.embed = self.engine.embed_base(**kwargs)
+        self.update_workspace(first = True, restart = self.restart)
+
+    def update_workspace(self, subcell = None, first = False, update = 0, restart = False, **kwargs):
+        """
+        Notes:
+            clean workspace
+        """
+        return
+
+    @property
+    def grid(self):
+        if self._grid is None :
+            if np.all(self.subcell.grid.nrR == self.subcell.grid.nr):
+                self._grid = self.subcell.grid
+            else :
+                self._grid = Grid(self.subcell.grid.lattice, self.subcell.grid.nrR, direct = True)
+        return self._grid
+
+    @property
+    def grid_sub(self):
+        if self._grid_sub is None :
+            mp = MP(comm = self.comm, decomposition = self.subcell.grid.mp.decomposition)
+            self._grid_sub = Grid(self.subcell.grid.lattice, self.subcell.grid.nrR, direct = True, mp = mp)
+        return self._grid_sub
+
+    def get_grid_driver(self, grid):
+        nr = np.zeros(3, dtype = 'int32')
+        self.engine.get_grid(nr)
+        if not np.all(grid.nrR == nr) and self.comm.rank == 0 :
+            grid_driver = Grid(grid.lattice, nr, direct = True)
+        else :
+            grid_driver = None
+        return grid_driver
+
+    def _driver_initialise(self, append = False, **kwargs):
+        if self.task == 'optical' :
+            self.engine.tddft_initial(self.filename, self.comm)
+        else :
+            self.engine.initial(self.filename, self.comm)
+
+    def _format_field(self, density, **kwargs):
+        if self.grid_driver is not None and self.comm.rank == 0:
+            charge = grid_map_data(density, grid = self.grid_driver)
+        else :
+            charge = density
+        #-----------------------------------------------------------------------
+        charge = charge.reshape((-1, self.nspin), order=self.engine.units['order']) / self.engine.units['volume']
+        return
+
+    def _format_field_invert(self, charge, grid = None, **kwargs):
+        if grid is None :
+            grid = self.grid
+
+        if self.grid_driver is not None and np.any(self.grid_driver.nrR != grid.nrR):
+            density = Field(grid=self.grid_driver, direct=True, data = charge, order = self.engine.units['order'])
+            rho = grid_map_data(density, grid = grid)
+        else :
+            rho = Field(grid=grid, rank=1, direct=True, data = charge, order = self.engine.units['order'])
+        rho *= self.engine.units['volume']
+        return rho
+
+    def get_energy(self, olevel = 0, **kwargs):
+        if olevel == 0 :
+            energy = self.engine.calc_energy(self.embed)
+        else :
+            energy = 0.0
+        return energy
+
+    def get_energy_potential(self, density = None, calcType = ['E', 'V'], olevel = 1, **kwargs):
+        func = Functional(name = 'ZERO', energy=0.0, potential=None)
+        if 'E' in calcType :
+            energy = self.get_energy(olevel = olevel)
+            func.energy = energy
+            if self.comm.rank > 0 : func.energy = 0.0
+            fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
+            sprint(fstr, comm=self.comm, level=1)
+            self.engine.write_stdout(fstr)
+        if 'V' in calcType :
+            pot = self.engine.get_potential(**kwargs)
+            func.potential = self._format_field(pot)
+        return func

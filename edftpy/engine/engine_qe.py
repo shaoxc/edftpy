@@ -61,9 +61,10 @@ class EngineQE(Engine):
         qepy.punch(what)
         qepy.close_files(False)
 
-    def scf(self, embed, **kwargs):
+    def scf(self, embed, initial = True, **kwargs):
         embed.mix_coef = -1.0
         embed.finish = False
+        embed.initial = initial
         qepy.qepy_electrons_scf(0, 0, embed)
 
     def scf_mix(self, embed, coef = 0.7, **kwargs):
