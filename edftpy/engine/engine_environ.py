@@ -75,7 +75,6 @@ class EngineEnviron(Engine):
         ityp = kwargs.get('ityp')
         zv = kwargs.get('zv')
         tau = kwargs.get('tau')
-        vltot = kwargs.get('vltot')
         rho = kwargs.get('rho') # maybe make this a named argument to parallel the scf function
 
         # raise Exceptions here if the keywords are not supplied
@@ -98,17 +97,13 @@ class EngineEnviron(Engine):
 
         self.dvtot = np.zeros((environ_calc.get_nnt(),), dtype=float)
 
-        if vltot is not None:
-            environ_control.update_potential(vltot)
-        else:
-            print("potential not initialized until scf")
         # TODO reconsider these steps
         if rho is not None: 
             environ_control.update_electrons(rho, lscatter=True)
             environ_calc.calc_potential(False, self.dvtot, lgather=True) # might not be necessary?
-        #else:
-        #    print("electrons not initialized until scf")
-        #    rho = np.zeros((environ_calc.get_nnt(), 1,), dtype=float, order='F')
+        else:
+            print("electrons not initialized until scf")
+            rho = np.zeros((environ_calc.get_nnt(), 1,), dtype=float, order='F')
 
     def scf(self, rho, **kwargs):
         """A single electronic step for Environ
