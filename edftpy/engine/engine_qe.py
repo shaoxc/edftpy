@@ -1,4 +1,5 @@
 import qepy
+import numpy as np
 import os
 import ase.io.espresso as ase_io_driver
 from ase.calculators.espresso import Espresso as ase_calc_driver
@@ -8,6 +9,7 @@ from dftpy.constants import LEN_CONV
 
 from edftpy.io import ions2ase
 from edftpy.engine.driver import Engine
+from edftpy.utils.common import Grid, Field, Atoms
 
 
 class EngineQE(Engine):
@@ -17,22 +19,25 @@ class EngineQE(Engine):
         units = kwargs.get('units', {})
         kwargs['units'] = units
         kwargs['units']['volume'] = unit_vol
+        kwargs['units']['energy'] = 0.5
         super().__init__(**kwargs)
+        self.embed = None
 
     def get_force(self, icalc = 0, **kwargs):
         qepy.qepy_forces(icalc)
-        forces = qepy.force_mod.get_array_force().T / 2.0  # Ry to a.u.
+        forces = qepy.force_mod.get_array_force().T * self.units['energy']
         return forces
 
     def embed_base(self, exttype = 0, diag_conv = 1E-6, **kwargs):
         embed = qepy.qepy_common.embed_base()
         embed.exttype = exttype
         embed.diag_conv = diag_conv
+        self.embed = embed
         return embed
 
-    def calc_energy(self, embed, **kwargs):
-        qepy.qepy_calc_energies(embed)
-        energy = embed.etotal * 0.5 # Ry to a.u.
+    def calc_energy(self, **kwargs):
+        qepy.qepy_calc_energies(self.embed)
+        energy = self.embed.etotal * self.units['energy']
         return energy
 
     def clean_saved(self, *args, **kwargs):
@@ -51,7 +56,11 @@ class EngineQE(Engine):
         return qepy.ener.get_ef()
 
     def initial(self, inputfile, comm = None, **kwargs):
-        qepy.qepy_pwscf(inputfile, comm)
+        if hasattr(comm, 'py2f') :
+            commf = comm.py2f()
+        else :
+            commf = None
+        qepy.qepy_pwscf(inputfile, commf)
 
     def save(self, save = ['D'], **kwargs):
         if 'W' in save :
@@ -61,19 +70,19 @@ class EngineQE(Engine):
         qepy.punch(what)
         qepy.close_files(False)
 
-    def scf(self, embed, initial = True, **kwargs):
-        embed.mix_coef = -1.0
-        embed.finish = False
-        embed.initial = initial
-        qepy.qepy_electrons_scf(0, 0, embed)
+    def scf(self, initial = True, **kwargs):
+        self.embed.mix_coef = -1.0
+        self.embed.finish = False
+        self.embed.initial = initial
+        qepy.qepy_electrons_scf(0, 0, self.embed)
 
-    def scf_mix(self, embed, coef = 0.7, **kwargs):
-        embed.mix_coef = coef
-        qepy.qepy_electrons_scf(2, 0, embed)
+    def scf_mix(self, coef = 0.7, **kwargs):
+        self.embed.mix_coef = coef
+        qepy.qepy_electrons_scf(2, 0, self.embed)
 
-    def set_extpot(self, embed, extpot, **kwargs):
-        extpot = extpot * 2.0 # a.u. to Ry
-        qepy.qepy_mod.qepy_set_extpot(embed, extpot)
+    def set_extpot(self, extpot, **kwargs):
+        extpot = extpot / self.units['energy']
+        qepy.qepy_mod.qepy_set_extpot(self.embed, extpot)
 
     def set_rho(self, rho, **kwargs):
         qepy.qepy_mod.qepy_set_rho(rho)
@@ -95,37 +104,44 @@ class EngineQE(Engine):
         qepy.qepy_mod.qepy_close_stdout('')
         qepy.qepy_clean_saved()
 
-    def end_scf(self, embed, **kwargs):
-        embed.finish = True
-        qepy.qepy_electrons_scf(0, 0, embed)
+    def end_scf(self, **kwargs):
+        self.embed.finish = True
+        qepy.qepy_electrons_scf(0, 0, self.embed)
 
-    def end_tddft(self, embed, **kwargs):
-        embed.tddft.finish = True
-        qepy.qepy_molecule_optical_absorption(embed)
+    def end_tddft(self, **kwargs):
+        self.embed.tddft.finish = True
+        qepy.qepy_molecule_optical_absorption(self.embed)
 
-    def tddft(self, embed, **kwargs):
-        qepy.qepy_molecule_optical_absorption(embed)
+    def tddft(self, **kwargs):
+        qepy.qepy_molecule_optical_absorption(self.embed)
 
-    def tddft_after_scf(self, inputfile, embed, **kwargs):
-        embed.tddft.initial = True
-        embed.tddft.finish = False
-        embed.tddft.nstep = 900000 # Any large enough number
+    def tddft_after_scf(self, inputfile, **kwargs):
+        self.embed.tddft.initial = True
+        self.embed.tddft.finish = False
+        self.embed.tddft.nstep = 900000 # Any large enough number
         qepy.qepy_tddft_readin(inputfile)
-        qepy.qepy_tddft_main_setup(embed)
+        qepy.qepy_tddft_main_setup(self.embed)
 
     def tddft_initial(self, inputfile, comm = None, **kwargs):
-        qepy.qepy_tddft_main_initial(inputfile, comm)
+        if hasattr(comm, 'py2f') :
+            commf = comm.py2f()
+        else :
+            commf = None
+        qepy.qepy_tddft_main_initial(inputfile, commf)
         qepy.read_file()
 
-    def update_ions(self, embed, subcell, update = 0, **kwargs):
+    def update_ions(self, subcell, update = 0, **kwargs):
         pos = subcell.ions.pos.to_cart().T / subcell.grid.latparas[0]
-        qepy.qepy_mod.qepy_update_ions(embed, pos, update)
+        qepy.qepy_mod.qepy_update_ions(self.embed, pos, update)
 
     def wfc2rho(self, *args, **kwargs):
         qepy.qepy_tddft_mod.qepy_cetddft_wfc2rho()
 
     def write_stdout(self, line, **kwargs):
         qepy.qepy_mod.qepy_write_stdout(line)
+
+    def get_dnorm(self, **kwargs):
+        return self.embed.dnorm
 
     def write_input(self, filename = 'sub_driver.in', subcell = None, params = {}, cell_params = {}, base_in_file = None, **kwargs):
         prefix = os.path.splitext(filename)[0]
@@ -299,3 +315,42 @@ class EngineQE(Engine):
         fd.write(''.join(fstrl))
         return
 
+    @staticmethod
+    def get_ions_from_pw():
+        alat = qepy.cell_base.get_alat()
+        lattice = qepy.cell_base.get_array_at() * alat
+        pos = qepy.ions_base.get_array_tau().T * alat
+        atm = qepy.ions_base.get_array_atm()
+        ityp = qepy.ions_base.get_array_ityp()
+        nat = qepy.ions_base.get_nat()
+        symbols = [1]
+        labels = []
+        for i in range(atm.shape[-1]):
+            s = atm[:,i].view('S3')[0].strip().decode("utf-8")
+            symbols.append(s)
+
+        for i in range(nat):
+            labels.append(symbols[ityp[i]])
+
+        ions = Atoms(labels=labels, pos=pos, cell=lattice, basis="Cartesian")
+        return ions
+
+    @staticmethod
+    def get_density_from_pw(ions, comm = None):
+        nr = np.zeros(3, dtype = 'int32')
+        qepy.qepy_mod.qepy_get_grid(nr)
+
+        if comm is None or comm.rank == 0 :
+            rho = np.zeros((np.prod(nr), 1), order = 'F')
+        else :
+            rho = np.zeros(3)
+
+        qepy.qepy_mod.qepy_get_rho(rho)
+
+        if comm is None or comm.rank == 0 :
+            grid = Grid(ions.pos.cell.lattice, nr)
+            density = Field(grid=grid, direct=True, data = rho, order = 'F')
+        else :
+            density = np.zeros(1)
+
+        return density

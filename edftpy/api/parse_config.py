@@ -20,8 +20,34 @@ from edftpy.engine.of_dftpy import DFTpyOF, dftpy_opt
 from edftpy.mpi import GraphTopo, MP, sprint
 from edftpy.utils.math import get_hash, get_formal_charge
 from edftpy.subsystem.decompose import decompose_sub
+from edftpy.engine.driver import DriverKS, DriverEX, DriverMM
 
-def import_drivers(config):
+def import_drivers(calcs = {}):
+    """
+    Import the engine of different drivers
+
+    Notes:
+        Must import driver firstly, before the mpi4py
+    """
+    try:
+        from edftpy.engine.engine_qe import EngineQE
+    except Exception as e:
+        if 'pwscf' in calcs or 'qe' in calcs :
+            raise AttributeError(e+"\nPlease install 'QEpy' firstly.")
+    try:
+        from edftpy.engine.engine_castep import EngineCastep
+    except Exception as e:
+        if 'castep' in calcs :
+            raise AttributeError(e+"\nPlease install 'caspytep' firstly.")
+    try:
+        from edftpy.engine.engine_environ import EngineEnviron
+    except Exception as e:
+        if 'environ' in calcs :
+            raise AttributeError(e+"\nPlease install 'environ' firstly.")
+    return
+
+
+def import_drivers_conf(config):
     """
     Import the engine of different drivers
 
@@ -56,13 +82,10 @@ def config_correct(config):
     Notes:
         Only correct some missing variables
     """
+    tech_keys = {'dftpy' : 'OF', 'pwscf' : 'KS', 'qe' : 'KS', 'environ'  : 'EX', 'mbx' : 'MM'}
     subkeys = [key for key in config if key.startswith('SUB')]
     for key in subkeys :
-        if config[key]['calculator'] == 'dftpy' :
-            config[key]['technique'] = 'OF'
-        else :
-            config[key]['technique'] = 'KS'
-
+        config[key]['technique'] = tech_keys.get(config[key]['technique'], 'KS')
         if not config[key]["prefix"] :
             config[key]["prefix"] = key.lower()
 
@@ -514,6 +537,10 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             driver = get_pwscf_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
         elif calculator == 'castep' :
             driver = get_castep_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
+        elif calculator == 'mbx' :
+            driver = get_mbx_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
+        elif calculator == 'environ' :
+            driver = get_environ_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
 
     return driver
 
@@ -682,7 +709,6 @@ def config2grid_sub(config, keysys, ions, grid, grid_sub = None, mp = None):
     return grid_sub
 
 def get_castep_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, margs = {}, **kwargs):
-    from edftpy.driver.ks_castep import CastepKS
     cell_params = {'species_pot' : pplist}
     if kpoints['grid'] is not None :
         cell_params['kpoints_mp_grid'] = ' '.join(map(str, kpoints['grid']))
@@ -699,12 +725,11 @@ def get_castep_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, ma
             'params': params,
             }
     margs.update(add)
+    from edftpy.driver.ks_castep import CastepKS
     driver = CastepKS(**margs)
     return driver
 
 def get_pwscf_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, margs = {}, **kwargs):
-    from edftpy.engine.ks_pwscf import PwscfKS
-
     cell_params = {'pseudopotentials' : pplist}
     if kpoints['grid'] is not None :
         cell_params['kpts'] = kpoints['grid']
@@ -729,11 +754,23 @@ def get_pwscf_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, mar
             'params': params,
             }
     margs.update(add)
-    driver = PwscfKS(**margs)
-    # from edftpy.engine.driver import DriverKS
-    # from edftpy.engine.engine_qe import EngineQE
-    # engine = EngineQE()
-    # driver = DriverKS(**margs, engine = engine)
+    # from edftpy.engine.ks_pwscf import PwscfKS
+    # driver = PwscfKS(**margs)
+    from edftpy.engine.engine_qe import EngineQE
+    engine = EngineQE()
+    driver = DriverKS(**margs, engine = engine)
+    return driver
+
+def get_environ_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, margs = {}, **kwargs):
+    from edftpy.engine.engine_environ import EngineEnviron
+    engine = EngineEnviron()
+    driver = DriverEX(**margs, engine = engine)
+    return driver
+
+def get_mbx_driver(pplist, margs = {}, **kwargs):
+    from edftpy.engine.engine_mbx import EngineMBX
+    engine = EngineMBX()
+    driver = DriverMM(**margs, engine = engine)
     return driver
 
 def _get_gap(config, optimizer):
