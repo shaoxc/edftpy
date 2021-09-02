@@ -105,6 +105,8 @@ class EngineEnviron(Engine):
         _check_kwargs('zv', zv, 'initial')
         _check_kwargs('tau', tau, 'initial')
 
+        self.comm = comm
+
         if hasattr(comm, 'py2f') :
             commf = comm.py2f()
         else :
@@ -195,17 +197,24 @@ class EngineEnviron(Engine):
         """
         environ_control.add_mbx_charges(rho, lscatter=True)
 
-    @print2file()
-    def clean(self, **kwargs):
-        """Clean up memory on the Fortran side
-        """
-        environ_setup.environ_clean(True)
-
     def get_grid(self, nr, **kwargs):
         nr[0] = environ_calc.get_nr1x()
         nr[1] = environ_calc.get_nr2x()
         nr[2] = environ_calc.get_nr3x()
         return nr
+
+    @print2file()
+    def update_ions(self, subcell = None, update = 0, **kwargs):
+        environ_setup.environ_clean(True)
+        self.write_input(subcell = subcell, **kwargs)
+        self.initial(comm = self.comm)
+
+    def end_scf(self, **kwargs):
+        pass
+
+    @print2file()
+    def stop_run(self, **kwargs):
+        environ_setup.environ_clean(True)
 
 def _check_kwargs(key, val, funlabel='\b'):
     """check that a kwargs value is set

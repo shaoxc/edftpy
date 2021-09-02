@@ -132,7 +132,7 @@ class EngineQE(Engine):
 
     def update_ions(self, subcell, update = 0, **kwargs):
         pos = subcell.ions.pos.to_cart().T / subcell.grid.latparas[0]
-        if hasattr('qepy_api', qepy):
+        if hasattr(qepy, 'qepy_api'):
             qepy.qepy_api.qepy_update_ions(self.embed, pos, update)
         else : # old version
             qepy.qepy_mod.qepy_update_ions(self.embed, pos, update)

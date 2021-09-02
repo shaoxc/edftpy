@@ -664,7 +664,7 @@ class DriverKS(Driver):
                 1 : no ewald
                 2 : no ewald and local_potential
         """
-        forces = self.engine.get_force()
+        forces = self.engine.get_force(icalc = icalc)
         return forces
 
     def get_stress(self, **kwargs):
@@ -733,6 +733,9 @@ class DriverEX(Driver):
         self.energy = 0.0
         self.residual_norm = 0.0
         self.dp_norm = 0.0
+
+        if not first :
+            self.engine.update_ions(self.subcell, update = update)
         return
 
     @property
@@ -816,6 +819,19 @@ class DriverEX(Driver):
             sprint(fstr, comm=self.comm, level=1)
             self.engine.write_stdout(fstr)
         return func
+
+    def get_forces(self, **kwargs):
+        forces = self.engine.get_force(**kwargs)
+        return forces
+
+    def end_scf(self, **kwargs):
+        self.engine.end_scf()
+
+    def save(self, save = ['D'], **kwargs):
+        self.engine.save(save)
+
+    def stop_run(self, status = 0, save = ['D'], **kwargs):
+        self.engine.stop_scf(status, save = save)
 
 class DriverMM(DriverEX):
     """
