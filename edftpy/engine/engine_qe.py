@@ -28,7 +28,7 @@ class EngineQE(Engine):
         forces = qepy.force_mod.get_array_force().T * self.units['energy']
         return forces
 
-    def embed_base(self, exttype = 0, diag_conv = 1E-6, **kwargs):
+    def embed_base(self, exttype = 0, diag_conv = 1E-1, **kwargs):
         embed = qepy.qepy_common.embed_base()
         embed.exttype = exttype
         embed.diag_conv = diag_conv
@@ -132,7 +132,10 @@ class EngineQE(Engine):
 
     def update_ions(self, subcell, update = 0, **kwargs):
         pos = subcell.ions.pos.to_cart().T / subcell.grid.latparas[0]
-        qepy.qepy_mod.qepy_update_ions(self.embed, pos, update)
+        if hasattr('qepy_api', qepy):
+            qepy.qepy_api.qepy_update_ions(self.embed, pos, update)
+        else : # old version
+            qepy.qepy_mod.qepy_update_ions(self.embed, pos, update)
 
     def wfc2rho(self, *args, **kwargs):
         qepy.qepy_tddft_mod.qepy_cetddft_wfc2rho()

@@ -10,6 +10,7 @@ import numpy as np
 from dftpy.constants import LEN_CONV
 
 from edftpy.engine.driver import Engine
+from edftpy.io import print2file
 
 class EngineEnviron(Engine):
     """Engine for Environ
@@ -36,7 +37,16 @@ class EngineEnviron(Engine):
         # this being persistent takes up memory, might want a better way of
         # temporariliy storing and then cleaning this up
         self.potential = None
+        #-----------------------------------------------------------------------
+        self.outfile = 'environ.out'
+        append = kwargs.get('append', False)
+        if append :
+            self.fileobj = open(self.outfile, 'a')
+        else :
+            self.fileobj = open(self.outfile, 'w')
+        #-----------------------------------------------------------------------
 
+    @print2file()
     def get_force(self, **kwargs):
         """get Environ force contribution
         """
@@ -44,6 +54,7 @@ class EngineEnviron(Engine):
         environ_calc.calc_force(force)
         return force.T * self.units['energy']
 
+    @print2file()
     def calc_energy(self, **kwargs):
         """get Environ energy contribution
         """
@@ -51,6 +62,7 @@ class EngineEnviron(Engine):
         energy = environ_calc.calc_energy()
         return energy * self.units['energy']
 
+    @print2file()
     def initial(self, inputfile= None, comm = None, **kwargs):
         """initialize the Environ module
 
@@ -97,11 +109,11 @@ class EngineEnviron(Engine):
             commf = comm.py2f()
         else :
             commf = None
-        print('comm', comm, commf)
         # TODO program unit needs to be set externally perhaps
-        environ_setup.init_io('PW', True, 0, commf, 6)
+        iounit = 6
+        environ_setup.init_io(comm.rank == 0, 0, commf, iounit)
         environ_setup.init_base_first(nelec, self.nat, ntyp, atom_label[:, :ntyp], False)
-        environ_setup.init_base_second(alat, at, commf, 0, 0, gcutm, e2)
+        environ_setup.init_base_second(alat, at, commf, gcutm, e2)
         environ_control.update_ions(self.nat, ntyp, ityp, zv[:ntyp], tau, alat)
         environ_control.update_cell(at, alat)
         nnr = environ_calc.get_nnt()
@@ -131,15 +143,16 @@ class EngineEnviron(Engine):
         tau = subcell.ions.pos.to_cart().T / subcell.grid.latparas[0]
         labels = subcell.ions.labels
         zv = np.zeros(ntyp)
-        atom_label = np.ones((3, ntyp), dtype = 'int32')*32
+        # atom_label = np.ones((3, ntyp), dtype = 'int32')*32
+        atom_label = np.zeros((3, ntyp), dtype = 'c')
+        atom_label[:] = ' '
         ityp = np.ones(nat, dtype = 'int32')
         i = -1
         nelec = 0.0
         for key, v in subcell.ions.Zval.items():
             i += 1
             zv[i] = v
-            for j, item in enumerate(key):
-                atom_label[j][i] = ord(item)
+            atom_label[:len(key), i] = key
             mask = labels == key
             ityp[mask] = i + 1
             nelec += v*np.count_nonzero(mask)
@@ -159,7 +172,8 @@ class EngineEnviron(Engine):
         self.inputs = defaults
         return
 
-    def scf(self, rho, **kwargs):
+    @print2file()
+    def scf(self, rho, update = True, **kwargs):
         """A single electronic step for Environ
 
         Args:
@@ -168,18 +182,20 @@ class EngineEnviron(Engine):
         environ_control.update_electrons(rho, lscatter=True)
         if self.potential is None:
             raise ValueError("`potential` not initialized, has `initial` been run?")
-        environ_calc.calc_potential(True, self.potential, lgather=True)
+        environ_calc.calc_potential(update, self.potential, lgather=True)
 
     def get_potential(self, **kwargs):
         """Returns the potential from Environ
         """
-        return self.potential
+        return self.potential * self.units['energy']
 
+    @print2file()
     def set_mbx_charges(self, rho):
         """Supply Environ with MBX charges
         """
         environ_control.add_mbx_charges(rho, lscatter=True)
 
+    @print2file()
     def clean(self, **kwargs):
         """Clean up memory on the Fortran side
         """

@@ -456,6 +456,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     kpoints = config[keysys]["kpoints"]
     exttype = config[keysys]["exttype"]
     atomicfiles = config[keysys]["density"]["atomic"].copy()
+    opt_options = config[keysys]["opt"].copy()
     tddft = config['TD']
     if atomicfiles :
         for k, v in atomicfiles.copy().items():
@@ -519,7 +520,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             'ncharge' : ncharge,
             'task' : task,
             'restart' : restart,
-            'append' : append
+            'append' : append,
+            'options' : opt_options
             }
 
     if cell_change == 'cell' :

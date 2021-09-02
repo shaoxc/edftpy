@@ -44,8 +44,9 @@ class Driver(ABC):
         self.base_in_file = base_in_file
         self.filename = base_in_file
         default_options = {
-                'update_delay' : 1,
-                'update_freq' : 1
+                'update_delay' : 0,
+                'update_freq' : 1,
+                'update_sleep' : 0
         }
         self.options = default_options
         if options is not None :
@@ -779,6 +780,7 @@ class DriverEX(Driver):
         return charge
 
     def _format_field_invert(self, charge, grid = None, **kwargs):
+        if self.comm.rank > 0 : return self.atmp
         if grid is None :
             grid = self.grid
 

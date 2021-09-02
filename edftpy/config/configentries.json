@@ -541,6 +541,24 @@
 			"maxiter": {
 				"type": "int",
 				"default": 800
+			},
+			"update_sleep": {
+				"type": "int",
+				"options": "",
+				"comment": "Subsytem will wait several steps then update.",
+				"default": "0"
+			},
+			"update_delay": {
+				"type": "int",
+				"options": "",
+				"comment": "Delay several steps to evaluate the update frequency.",
+				"default": "0"
+			},
+			"update_freq": {
+				"type": "int",
+				"options": "",
+				"comment": "The update frequency of subsystem",
+				"default": "1"
 			}
 		},
 		"kpoints": {

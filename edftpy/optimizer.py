@@ -116,6 +116,11 @@ class Optimization(object):
                 if pot is None :
                     pot = Field(grid=self.gsystem.grid)
                     extpots[technique] = pot
+                if potential is None and driver is not None:
+                    if driver.comm.rank == 0 :
+                        potential = Field(grid=driver.grid)*0.0
+                    else :
+                        potential = driver.atmp
                 self.gsystem.grid.scatter(potential, out = pot, root = root)
             else :
                 self.gsystem.update_density(density, isub = i)
@@ -508,9 +513,12 @@ class Optimization(object):
                 return key
 
     def get_update(self, driver, istep, residual):
-        update_delay = driver.options['update_delay']
-        update_freq = driver.options['update_freq']
-        if istep > update_delay and (istep - update_delay) % update_freq > 0:
+        update_delay = driver.options.get('update_delay', 0)
+        update_freq = driver.options.get('update_freq', 1)
+        update_sleep = driver.options.get('update_sleep', 0)
+        if istep < update_sleep  :
+            update = False
+        elif istep > update_delay and (istep - update_delay) % update_freq > 0:
             update = False
         else :
             update = True
