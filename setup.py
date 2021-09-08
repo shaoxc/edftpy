@@ -19,7 +19,7 @@ def pip_install_git(link):
     os.system('pip install --upgrade {}'.format(link))
     return
 
-# from edftpy import __version__, __author__, __contact__, __license__
+
 with open('edftpy/__init__.py') as fd :
     lines = fd.read()
     __version__ = re.search('__version__ = "(.*)"', lines).group(1)
@@ -52,7 +52,9 @@ setup(name='edftpy',
       description=description,
       long_description=long_description,
       url='https://gitlab.com/pavanello-research-group/edftpy',
-      version=__version__,
+      # version=__version__,
+      use_scm_version={'version_scheme': 'post-release'},
+      setup_requires=['setuptools_scm'],
       author=__author__,
       author_email=__contact__,
       license=__license__,
