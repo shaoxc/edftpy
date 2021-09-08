@@ -664,7 +664,7 @@ class DriverKS(Driver):
                 1 : no ewald
                 2 : no ewald and local_potential
         """
-        forces = self.engine.get_force(icalc = icalc)
+        forces = self.engine.get_force(icalc = icalc, **kwargs)
         return forces
 
     def get_stress(self, **kwargs):
