@@ -3,6 +3,7 @@ import os
 from collections import OrderedDict, ChainMap
 from functools import reduce
 import copy
+import textwrap
 
 from dftpy.constants import LEN_CONV, ENERGY_CONV
 from edftpy import io
@@ -170,7 +171,10 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         if optimizer is None :
             for key in config :
                 if key.startswith('SUB') :
-                    print('Subsytem : ', key, config[key]['technique'], config[key]['cell']['index'])
+                    # print('Subsytem : ', key, config[key]['technique'], config[key]['cell']['index'])
+                    f_str = 'Subsytem : {} {} {}'.format(key, config[key]['technique'], config[key]['cell']['index'])
+                    f_str = "\n".join(textwrap.wrap(f_str, width = 80))
+                    print(f_str)
     #-----------------------------------------------------------------------
     labels = set(ions.labels)
     pplist = {}
@@ -986,7 +990,10 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
                 raise AttributeError("ERROR : Not support this kind : {}".format(kind))
         # set the initial density as None
         config[key]["density"]["file"] = None
-        sprint('New Subsytem : ', key, kind, index)
+        # sprint('New Subsytem : ', key, kind, index)
+        f_str = 'New Subsytem : {} {} {}'.format(key, kind, index)
+        f_str = "\n".join(textwrap.wrap(f_str, width = 80))
+        sprint(f_str)
 
     # removed last step saved but unused subs
     for key in subkeys_prev :
