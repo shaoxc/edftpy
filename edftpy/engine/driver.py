@@ -851,7 +851,7 @@ class DriverMM(DriverEX):
         self.engine.set_extpot(self.evaluator.global_potential, **kwargs)
         if 'V' in calcType :
             pot = self.engine.get_potential(grid = self.grid_driver, **kwargs)
-            func.potential = self._format_field(pot)
+            func.potential = self._format_field_invert(pot)
         if 'E' in calcType :
             energy = self.get_energy(olevel = olevel)
             func.energy = energy

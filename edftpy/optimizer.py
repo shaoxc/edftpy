@@ -486,7 +486,7 @@ class Optimization(object):
                 pot = self.gsystem.total_evaluator.external_potential['QM']
                 if pot is None : continue
                 pot_en = self.gsystem.total_evaluator.external_potential.get('EX', None)
-                if pot_en is not None : pot += pot_en
+                if pot_en is not None : pot = pot + pot_en
                 # self.gsystem.sub_value(pot, global_potential, isub = isub)
                 pot.gather(out = global_potential, root = root)
             else : # if technique in ['OF', 'KS']:

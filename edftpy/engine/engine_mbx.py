@@ -27,7 +27,6 @@ class EngineMBX(Engine):
 
     def calc_energy(self, *args, **kwargs):
         energy = 0.0
-        print('eeee', energy)
         return energy
 
     def initial(self, filename = None, comm = None, subcell = None, grid = None, **kwargs):
@@ -62,7 +61,6 @@ class EngineMBX(Engine):
     def get_potential(self, out = None, grid = None, **kwargs):
         grid_points = grid.r.reshape((3, -1)).T
         grid_points = grid_points.ravel()
-        # grid_points = grid_points.ravel()[:9]
         pot, potfield = mbx.get_potential_and_electric_field_on_points(grid_points, grid_points.size//3)
         pot = np.asarray(pot)
         return pot.reshape(self.nr)
