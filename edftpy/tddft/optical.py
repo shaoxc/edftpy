@@ -74,6 +74,7 @@ class MoleculeOpticalAbsorption(Optimization):
         #-----------------------------------------------------------------------
         olevel = self.options.get('olevel', 2)
         seq = "-" * 100
+        update = [True for _ in range(self.nsub)]
         sdft = self.options['sdft']
         for it in range(self.options['maxiter']):
             self.iter += 1
@@ -89,8 +90,11 @@ class MoleculeOpticalAbsorption(Optimization):
                     driver = self.of_drivers[isub - self.nsub]
                     isub = self.of_ids[isub - self.nsub]
 
-                self.gsystem.density[:] = self.density
-                driver(gsystem = self.gsystem, calcType = ['O'], olevel = olevel, sdft = sdft)
+                update[isub] = self.get_update(driver, self.iter)
+
+                if update[isub] :
+                    self.gsystem.density[:] = self.density
+                    driver(gsystem = self.gsystem, calcType = ['O'], olevel = olevel, sdft = sdft)
             #-----------------------------------------------------------------------
             self.density, self.density_prev = self.density_prev, self.density
             self.update_density()

@@ -197,7 +197,7 @@ class Optimization(object):
                     driver = self.of_drivers[isub - self.nsub]
                     isub = self.of_ids[isub - self.nsub]
 
-                update[isub] = self.get_update(driver, it, res_norm[isub])
+                update[isub] = self.get_update(driver, it)
 
                 if update[isub] :
                     self.gsystem.density[:] = totalrho
@@ -512,7 +512,7 @@ class Optimization(object):
             if itech == techs[key] :
                 return key
 
-    def get_update(self, driver, istep, residual):
+    def get_update(self, driver, istep):
         update_delay = driver.options.get('update_delay', 0)
         update_freq = driver.options.get('update_freq', 1)
         update_sleep = driver.options.get('update_sleep', 0)

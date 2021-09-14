@@ -756,11 +756,11 @@ def get_pwscf_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, mar
             'params': params,
             }
     margs.update(add)
-    # from edftpy.engine.ks_pwscf import PwscfKS
-    # driver = PwscfKS(**margs)
-    from edftpy.engine.engine_qe import EngineQE
-    engine = EngineQE()
-    driver = DriverKS(**margs, engine = engine)
+    from edftpy.engine.ks_pwscf import PwscfKS
+    driver = PwscfKS(**margs)
+    # from edftpy.engine.engine_qe import EngineQE
+    # engine = EngineQE()
+    # driver = DriverKS(**margs, engine = engine)
     return driver
 
 def get_environ_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, margs = {}, **kwargs):
