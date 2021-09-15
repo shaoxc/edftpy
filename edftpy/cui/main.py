@@ -2,7 +2,6 @@
 # import sys; sys.settrace()
 import argparse
 import time
-import os
 
 from dftpy.time_data import TimeData
 
@@ -23,21 +22,13 @@ def get_conf():
 
 def run_job(args):
     from edftpy.mpi import pmi
-    from edftpy import __version__
-    from dftpy import __version__ as dftpy_version
     if len(args.confs) == 0 :
         args.confs.append(args.input)
     for fname in args.confs:
         config = read_conf(fname)
         parallel = args.mpi or pmi.size > 0
         graphtopo = conf2init(config, parallel)
-        if graphtopo.rank == 0 :
-            #-----------------------------------------------------------------------
-            # remove the stopfile
-            if os.path.isfile('edftpy_stopfile'): os.remove('edftpy_stopfile')
-            #-----------------------------------------------------------------------
-        sprint("eDFTpy {} Begin on : {}".format(__version__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
-        sprint("DFTpy  {}".format(dftpy_version))
+        sprint("Begin on : {}".format(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
         sprint("#" * 80)
         TimeData.Begin("TOTAL")
 
@@ -51,7 +42,7 @@ def run_job(args):
         conf2output(config, optimizer)
         #-----------------------------------------------------------------------
     sprint("#" * 80)
-    sprint("eDFTpy {} Finished on : {}".format(__version__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
+    sprint("Finished on : {}".format(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
 def main():
     args = get_conf()

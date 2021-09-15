@@ -102,7 +102,10 @@ class PwscfKS(Driver):
 
         if not first :
             pos = self.subcell.ions.pos.to_cart().T / self.subcell.grid.latparas[0]
-            qepy.qepy_mod.qepy_update_ions(self.embed, pos, update)
+            if hasattr(qepy, 'qepy_api'):
+                qepy.qepy_api.qepy_update_ions(self.embed, pos, update)
+            else : # old version
+                qepy.qepy_mod.qepy_update_ions(self.embed, pos, update)
             if update == 0 :
                 # get new density
                 qepy.qepy_mod.qepy_get_rho(self.charge)

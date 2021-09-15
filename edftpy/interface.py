@@ -1,11 +1,15 @@
 import numpy as np
+import os
 
 from dftpy.constants import LEN_CONV, ENERGY_CONV, FORCE_CONV, STRESS_CONV, ZERO
 from edftpy.io import write
 from edftpy.properties import get_electrostatic_potential
 
 from edftpy.api.parse_config import config2optimizer, import_drivers
-from edftpy.mpi import graphtopo, sprint, pmi
+from edftpy.mpi import graphtopo, sprint
+
+from edftpy import __version__
+from dftpy import __version__ as dftpy_version
 
 def conf2init(conf, parallel = False, *args, **kwargs):
     import_drivers(conf)
@@ -19,7 +23,16 @@ def conf2init(conf, parallel = False, *args, **kwargs):
             raise e
     else :
         info = 'Serial version on {0:>8d} processor'.format(1)
+    sprint('*'*80)
     sprint(info)
+    if graphtopo.rank == 0 :
+        #-----------------------------------------------------------------------
+        # remove the stopfile
+        if os.path.isfile('edftpy_stopfile'): os.remove('edftpy_stopfile')
+        #-----------------------------------------------------------------------
+    sprint("eDFTpy Version : {}".format(__version__))
+    sprint(" DFTpy Version : {}".format(dftpy_version))
+    sprint('*'*80)
     return graphtopo
 
 def optimize_density_conf(config, **kwargs):
