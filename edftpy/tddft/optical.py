@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import os
 
 from dftpy.constants import ENERGY_CONV
 
@@ -107,6 +108,9 @@ class MoleculeOpticalAbsorption(Optimization):
             fmt = "{:>10s}{:<8d}{:<24.12E}{:<14.6E}{:<14.6E}{:<14.6E}{:<16.6E}".format(
                     "Tddft: ", self.iter, self.energy, *self.dip, time.time()- self.time_begin)
             sprint(seq +'\n' + fmt +'\n' + seq)
+            if os.path.isfile('edftpy_stopfile'):
+                sprint("!WARN Optimization is exit due to the 'edftpy_stopfile' in {} iterations ###".format(it+1))
+                break
         return
 
     def end_run(self, **kwargs):

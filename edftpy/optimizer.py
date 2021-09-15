@@ -2,6 +2,7 @@ import numpy as np
 import time
 from collections import OrderedDict
 import pprint
+import os
 
 from dftpy.constants import ENERGY_CONV
 
@@ -238,6 +239,11 @@ class Optimization(object):
             if olevel == 0 and self.check_converge_energy(energy_history):
                 sprint("#### Subsytem Density Optimization Converged (Energy) In {} Iterations ####".format(it+1))
                 break
+            if os.path.isfile('edftpy_stopfile'):
+                sprint("!WARN Optimization is exit due to the 'edftpy_stopfile' in {} iterations ###".format(it+1))
+                break
+        else :
+            sprint("!WARN Optimization is exit due to reaching maxium iterations ###")
         self.end_scf()
         self.energy_all = self.print_energy()
         self.energy = self.energy_all['TOTAL']

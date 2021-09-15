@@ -2,6 +2,7 @@
 # import sys; sys.settrace()
 import argparse
 import time
+import os
 
 from dftpy.time_data import TimeData
 
@@ -30,6 +31,11 @@ def run_job(args):
         config = read_conf(fname)
         parallel = args.mpi or pmi.size > 0
         graphtopo = conf2init(config, parallel)
+        if graphtopo.rank == 0 :
+            #-----------------------------------------------------------------------
+            # remove the stopfile
+            if os.path.isfile('edftpy_stopfile'): os.remove('edftpy_stopfile')
+            #-----------------------------------------------------------------------
         sprint("eDFTpy {} Begin on : {}".format(__version__, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
         sprint("DFTpy  {}".format(dftpy_version))
         sprint("#" * 80)
