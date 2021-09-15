@@ -53,7 +53,14 @@ dyn.attach(printenergy, interval=1)
 traj = Trajectory("md.traj", "w", atoms)
 dyn.attach(traj.write, interval=1)
 
-dyn.run(30000)
+nsteps = 30000
+# dyn.run(nsteps)
+
+from ase.optimize.optimize import Dynamics
+dyn.max_steps = dyn.nsteps + nsteps
+for converged in Dynamics.irun(dyn):
+    if os.path.isfile('edftpy_stopfile'): exit()
+
 
 # trajfile = 'md.traj'
 # traj = Trajectory(trajfile)

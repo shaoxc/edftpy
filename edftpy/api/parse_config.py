@@ -509,8 +509,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
                 raise AttributeError("Sorry, 'Optmix' cannot start the TDDFT from 'initial'.")
             restart = tddft['restart'] == 'restart'
             task = config[keysys]["task"] or task
-            if restart :
-                restart = opt_options.get('update_sleep', 0) < 1
+        if restart :
+            restart = opt_options.get('update_sleep', 0) < 1
 
     margs = {
             'evaluator' : embed_evaluator,
