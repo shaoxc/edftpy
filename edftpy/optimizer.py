@@ -31,6 +31,7 @@ class Optimization(object):
             "ncheck": 2,
             "olevel": 2,
             "sdft": 'sdft',
+            "maxtime" : 0,
         }
 
         self.options = default_options
@@ -239,9 +240,7 @@ class Optimization(object):
             if olevel == 0 and self.check_converge_energy(energy_history):
                 sprint("#### Subsytem Density Optimization Converged (Energy) In {} Iterations ####".format(it+1))
                 break
-            if os.path.isfile('edftpy_stopfile'):
-                sprint("!WARN Optimization is exit due to the 'edftpy_stopfile' in {} iterations ###".format(it+1))
-                break
+            if self.check_stop(it): break
         else :
             sprint("!WARN Optimization is exit due to reaching maxium iterations ###")
         self.end_scf()
@@ -799,6 +798,17 @@ class Optimization(object):
                 outfile = driver.prefix + suffix
                 if driver.technique == 'OF' or driver.comm.rank == 0 or self.gsystem.graphtopo.isub is None:
                     write(outfile, driver.density, ions = driver.subcell.ions)
+
+    def check_stop(self, iteration = 0, stopfile = 'edftpy_stopfile'):
+        stop = False
+        if os.path.isfile(stopfile):
+            sprint("!WARN Optimization is exit due to the '{}' in {} iterations ###".format(stopfile, iteration+1))
+            stop = True
+        if self.options.get('maxtime', 0) > 1 :
+            if self.gsystem.graphtopo.timer.Time('TOTAL') > self.options['maxtime'] :
+                sprint("!WARN Optimization is exit due to the maxtime in {} iterations ###".format(iteration+1))
+                stop = True
+        return stop
 
 class MixOptimization(object):
     """

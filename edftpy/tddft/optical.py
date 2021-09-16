@@ -22,7 +22,8 @@ class MoleculeOpticalAbsorption(Optimization):
             "maxiter": 1000,
             "olevel": 2,
             "sdft": 'sdft',
-            "restart" : 'initial'
+            "restart" : 'initial',
+            "maxtime" : 0,
         }
         self.options = default_options
         if isinstance(options, dict):
@@ -108,9 +109,7 @@ class MoleculeOpticalAbsorption(Optimization):
             fmt = "{:>10s}{:<8d}{:<24.12E}{:<14.6E}{:<14.6E}{:<14.6E}{:<16.6E}".format(
                     "Tddft: ", self.iter, self.energy, *self.dip, time.time()- self.time_begin)
             sprint(seq +'\n' + fmt +'\n' + seq)
-            if os.path.isfile('edftpy_stopfile'):
-                sprint("!WARN Optimization is exit due to the 'edftpy_stopfile' in {} iterations ###".format(it+1))
-                break
+            if self.check_stop(it): break
         return
 
     def end_run(self, **kwargs):

@@ -1,5 +1,6 @@
 import numpy as np
 from dftpy.mpi import SerialComm
+from dftpy.time_data import TimeObj, TimeData
 
 class Graph :
     def __init__(self, nsub = 1, grid = None, **kwargs):
@@ -95,6 +96,9 @@ class GraphTopo:
         self._comm_sub = None # for subsystem, each processor only belong to one
         self.comm_region = [None] # for the data region of each subsystem
         self._scale_procs = False
+        # self.timer = TimeObj()
+        self.timer = TimeData
+        self.timer.Begin("TOTAL")
 
     def _set_default_vars(self, grid = None, drivers = None):
         self.grid = grid

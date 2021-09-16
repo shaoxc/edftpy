@@ -3,8 +3,6 @@
 import argparse
 import time
 
-from dftpy.time_data import TimeData
-
 from edftpy.interface import optimize_density_conf, conf2init, conf2output
 from edftpy.config import read_conf
 from edftpy.mpi import sprint
@@ -30,13 +28,12 @@ def run_job(args):
         graphtopo = conf2init(config, parallel)
         sprint("Begin on : {}".format(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
         sprint("#" * 80)
-        TimeData.Begin("TOTAL")
 
         optimizer = optimize_density_conf(config, graphtopo = graphtopo)
 
-        TimeData.End("TOTAL")
+        graphtopo.timer.End("TOTAL")
         if graphtopo.rank == 0 :
-            TimeData.output(config)
+            graphtopo.timer.output(config)
         sprint("-" * 80)
         #-----------------------------------------------------------------------
         conf2output(config, optimizer)

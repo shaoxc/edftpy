@@ -114,6 +114,12 @@
 			"options": "sdft, pdft",
 			"comment": "Subsytem DFT or Partition DFT",
 			"default": "sdft"
+		},
+		"maxtime": {
+			"type": "float",
+			"comment": "Maximum excution time. Non-positive number means no time limit.",
+			"unit": "second",
+			"default": 0
 		}
 	},
 	"TD": {
@@ -150,6 +156,12 @@
 			"comment": "The time step for TDDFT (as)",
 			"unit": "attosecond",
 			"default": "1"
+		},
+		"maxtime": {
+			"type": "float",
+			"comment": "Maximum excution time. Non-positive number means no time limit.",
+			"unit": "second",
+			"default": 0
 		}
 	},
 	"GSYSTEM": {
