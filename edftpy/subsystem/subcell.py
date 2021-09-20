@@ -104,14 +104,12 @@ class SubCell(object):
             nr = grid_sub.nrR
 
         pos_cry = ions.pos.to_crys()[index].copy()
-        cs = np.mean(pos_cry, axis = 0)
+        cs = np.min(pos_cry, axis = 0)
         pos_cry -= cs
         for i, p in enumerate(pos_cry) :
             for j in range(3):
                 if pos_cry[i][j] > 0.5 :
                     pos_cry[i][j] -= 1.0
-                elif pos_cry[i][j] < -0.5 :
-                    pos_cry[i][j] += 1.0
         pos = pos_cry.to_cart()
         #-----------------------------------------------------------------------
         cell_size = np.ptp(pos, axis = 0)
