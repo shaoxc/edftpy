@@ -63,23 +63,49 @@ def interpolation_3d(data, nr = None, direct = True, index = None, grid = None):
     results = Field(grid, data=results)
     return results
 
-def union_mlist(arrs, keys = None, array = False):
+def union_mlist_u(arrs, keys = None, array = False):
     if keys is None :
         keys = set(itertools.chain.from_iterable(arrs))
     for key in keys:
-        comp = [(i, item) for i, item in enumerate(arrs) if key in item]
-        ind, comp = zip(*comp)
-        ind = set(ind)
-        if len(comp) > 0 :
-            arrs = [arrs[i] for i, item in enumerate(arrs) if i not in ind]
-            if len(comp) > 1 :
-                if array :
-                    arrs.append(reduce(np.union1d, comp))
-                else :
-                    arrs.append(set(itertools.chain.from_iterable(comp)))
+        comp = []
+        for i, item in enumerate(arrs):
+            if key in item :
+                arrs.pop(i)
+                comp.append(item)
+        nl = len(comp)
+        if nl > 1 :
+            if array :
+                arrs.append(reduce(np.union1d, comp))
             else :
-                arrs.append(comp[0])
+                arrs.append(set(itertools.chain.from_iterable(comp)))
+        elif nl == 1 :
+            arrs.append(comp[0])
     return arrs
+
+def union_mlist(arrs, keys = None, array = False):
+    sub_inds = [[] for _ in arrs]
+    for i, item in enumerate(arrs):
+        for j in item :
+            sub_inds[j].append(i)
+    for key in keys:
+        comp = []
+        for i in sub_inds[key] :
+            comp.append(arrs[i])
+        nl = len(comp)
+        if nl > 1 :
+            if array :
+                v = reduce(np.union1d, comp)
+            else :
+                v = set(itertools.chain.from_iterable(comp))
+        for i in sub_inds[key] :
+            arrs[i] = v
+    used = []
+    values = []
+    for i, item in enumerate(arrs):
+        if i in used : continue
+        values.append(item)
+        used.extend(item)
+    return values
 
 def dict_update(d, u):
     """
