@@ -11,8 +11,12 @@ from edftpy.mpi import graphtopo, sprint
 from edftpy import __version__
 from dftpy import __version__ as dftpy_version
 
-def conf2init(conf, parallel = False, *args, **kwargs):
+def conf2init(conf, parallel = False, **kwargs):
     import_drivers(conf)
+    graphtopo = init_graphtopo(parallel, **kwargs)
+    return graphtopo
+
+def init_graphtopo(parallel = False, **kwargs):
     if parallel :
         try :
             from mpi4py import MPI

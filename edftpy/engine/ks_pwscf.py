@@ -27,7 +27,7 @@ class PwscfKS(Driver):
     Note :
         The extpot separated into two parts : v.of_r and vltot will be a better and safe way
     """
-    def __init__(self, params = None, cell_params = None, diag_conv = 1E-6, **kwargs):
+    def __init__(self, params = None, cell_params = None, diag_conv = 1E-1, **kwargs):
         '''
         Here, prefix is the name of the input file
         exttype :
