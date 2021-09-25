@@ -150,6 +150,12 @@
 			"comment": "Start the job from new one, scf results or restart from previous run",
 			"default": "initial"
 		},
+		"iter": {
+			"type": "int",
+			"options": "",
+			"comment": "The iteration number of restart", 
+			"default": "0"
+		},
 		"timestep": {
 			"type": "float",
 			"options": "",

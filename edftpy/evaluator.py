@@ -1,5 +1,5 @@
 import numpy as np
-from .utils.common import Field, Functional, AbsFunctional
+from edftpy.utils.common import Field, Functional, AbsFunctional
 from edftpy.mpi import sprint
 
 
@@ -33,7 +33,7 @@ class Evaluator(AbsFunctional):
         eplist = {}
         results = None
         for key, evalfunctional in self.funcdicts.items():
-            obj = evalfunctional(density, calcType, **kwargs)
+            obj = evalfunctional(density, calcType = calcType, **kwargs)
             # if hasattr(obj, 'energy'): sprint(key, density.mp.asum(obj.energy), comm = density.mp.comm)
             # if hasattr(obj, 'energy'): sprint(key, density.mp.asum(obj.energy * 27.21138), comm = density.mp.comm)
             # if hasattr(obj, 'potential'): sprint(key, obj.potential[:3, 0, 0] * 2, comm = density.mp.comm)

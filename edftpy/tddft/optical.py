@@ -61,8 +61,18 @@ class MoleculeOpticalAbsorption(Optimization):
             if initial :
                 self.gsystem.update_density(gaussian_density, isub = i, fake = True)
                 self.gsystem.update_density(core_density, isub = i, core = True)
+        self.density, self.density_prev = self.density_prev, self.density
+        self.density = self.gsystem.density.copy()
 
-    def optimize(self, restart = None):
+    def optimize(self, **kwargs):
+        self.run(**kwargs)
+
+    def run(self, **kwargs):
+        for item in self.irun(**kwargs):
+            pass
+        return item
+
+    def irun(self, restart = None, **kwargs):
         self.initialization(restart = restart)
         self.update_density(initial = True)
         self.add_xc_correction()
@@ -73,47 +83,28 @@ class MoleculeOpticalAbsorption(Optimization):
             self.time_begin = time.time()
             self.density_prev = None
             self.density = self.gsystem.density.copy()
+            self.converged = False
+            self.iter = self.options.get('iter', 0) # The iteration number of restart
+            yield self.converged
+            self.call_observers(self.iter)
         #-----------------------------------------------------------------------
-        olevel = self.options.get('olevel', 2)
         seq = "-" * 100
-        update = [True for _ in range(self.nsub)]
-        sdft = self.options['sdft']
+        self.converged = False
         for it in range(self.options['maxiter']):
-            self.iter += 1
-            # update the rhomax for NLKEDF
-            self.set_kedf_params(level = 3) # If NL KEDF, always contains NL parts
-            self.set_global_potential()
-            for isub in range(self.nsub + len(self.of_drivers)):
-                if isub < self.nsub :
-                    driver = self.drivers[isub]
-                    if driver is None or driver.technique == 'OF' :
-                        continue
-                else :
-                    driver = self.of_drivers[isub - self.nsub]
-                    isub = self.of_ids[isub - self.nsub]
-
-                update[isub] = self.get_update(driver, self.iter)
-
-                if update[isub] :
-                    self.gsystem.density[:] = self.density
-                    driver(gsystem = self.gsystem, calcType = ['O'], olevel = olevel, sdft = sdft)
             #-----------------------------------------------------------------------
-            self.density, self.density_prev = self.density_prev, self.density
+            self.step()
+            yield self.converged
+            self.call_observers(self.iter)
             self.update_density()
-            self.density = self.gsystem.density.copy()
-            totalfunc = self.gsystem.total_evaluator(self.density, calcType = ['E'], olevel = olevel)
+            #-----------------------------------------------------------------------
             # use new density to calculate the energy is very important, otherwise the restart will not correct.
-            self.energy = self.get_energy(self.density, totalfunc.energy, update = update, olevel = olevel)[0]
+            self.energy = self.get_energy(self.density, update = self.update, olevel =self.options['olevel'])[0]
             self.dip = get_dipole(self.density_prev, self.gsystem.ions)
             #-----------------------------------------------------------------------
             fmt = "{:>10s}{:<8d}{:<24.12E}{:<14.6E}{:<14.6E}{:<14.6E}{:<16.6E}".format(
                     "Tddft: ", self.iter, self.energy, *self.dip, time.time()- self.time_begin)
             sprint(seq +'\n' + fmt +'\n' + seq)
-            if self.check_stop(it): break
-        return
-
-    def end_run(self, **kwargs):
-        self.end_scf()
-        self.energy_all = self.print_energy()
-        self.energy = self.energy_all['TOTAL']
-        return
+            if self.check_stop(): break
+        else :
+            self.converged = True
+        yield self.converged

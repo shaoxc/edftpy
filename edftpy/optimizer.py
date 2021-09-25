@@ -19,6 +19,8 @@ class Optimization(object):
     def __init__(self, drivers=None, gsystem = None, options=None):
         if drivers is None:
             raise AttributeError("Must provide optimization driver (list)")
+        if gsystem is None :
+            raise AttributeError("Must provide global system")
 
         self.drivers = drivers
         self.gsystem = gsystem
@@ -44,7 +46,13 @@ class Optimization(object):
             if driver is not None and driver.technique== 'OF' :
                     self.of_drivers.append(driver)
                     self.of_ids.append(i)
+        self.energy = 0
         self.iter = 0
+        self.density = None
+        self.density_prev = None
+        self.converged = False
+        self.update = [True for _ in range(self.nsub)]
+        self.observers = []
 
     def guess_pconv(self):
         if self.options['pconv'] is None:
@@ -126,21 +134,58 @@ class Optimization(object):
                 self.gsystem.grid.scatter(potential, out = pot, root = root)
             else :
                 self.gsystem.update_density(density, isub = i)
-        totalrho = self.gsystem.density.copy()
-        return totalrho
+        self.density, self.density_prev = self.density_prev, self.density
+        self.density = self.gsystem.density.copy()
+        return
 
-    def optimize(self, gsystem = None, **kwargs):
+    def step(self, **kwargs):
+        # Update the rhomax for NLKEDF, first step without NL will be better for scf not for tddft.
+        self.set_kedf_params()
+        self.set_global_potential()
+        for isub in range(self.nsub + len(self.of_drivers)):
+            if isub < self.nsub :
+                driver = self.drivers[isub]
+                if driver is None or driver.technique == 'OF' : continue
+            else :
+                driver = self.of_drivers[isub - self.nsub]
+                isub = self.of_ids[isub - self.nsub]
+
+            self.update[isub] = self.get_update(driver, self.iter)
+
+            if self.update[isub] :
+                self.gsystem.density[:] = self.density
+                if driver.technique in ['EX', 'MM'] :
+                    calcType = ['V']
+                else :
+                    calcType = ['O']
+                driver(gsystem = self.gsystem, calcType = calcType, olevel = self.options['olevel'], sdft = self.options['sdft'])
+        self.iter += 1
+
+    def attach(self, function, interval=1, *args, **kwargs):
+        self.observers.append((function, interval, args, kwargs))
+
+    def call_observers(self, istep = 0):
+        for function, interval, args, kwargs in self.observers:
+            call = False
+            if interval > 0 and istep % interval == 0:
+                call = True
+            elif interval <= 0 and istep == abs(interval):
+                call = True
+            if call: function(*args, **kwargs)
+
+    def optimize(self, **kwargs):
+        self.run(**kwargs)
+
+    def run(self, **kwargs):
+        for item in self.irun(**kwargs):
+            pass
+        return item
+
+    def irun(self, **kwargs):
         #-----------------------------------------------------------------------
         sprint('Begin optimize')
-        if gsystem is None:
-            if self.gsystem is None :
-                raise AttributeError("Must provide global system")
-            gsystem = self.gsystem
-        else:
-            self.gsystem = gsystem
 
         self.guess_pconv()
-        olevel = self.options.get('olevel', 2)
 
         self.gsystem.gaussian_density[:] = 0.0
         self.gsystem.density[:] = 0.0
@@ -156,61 +201,36 @@ class Optimization(object):
                     driver.gaussian_density = driver.core_density
                 gaussian_density = driver.gaussian_density
                 core_density = driver.core_density
-                # write(str(i) + '_gauss.xsf', gaussian_density, ions = driver.subcell.ions)
             technique = self._get_driver_technique(driver)
             if technique not in ['EX', 'MM'] :
                 self.gsystem.update_density(density, isub = i)
                 self.gsystem.update_density(gaussian_density, isub = i, fake = True)
                 self.gsystem.update_density(core_density, isub = i, core = True)
-        sprint('update density')
-        sprint('density', self.gsystem.density.integral())
-        totalrho = self.gsystem.density.copy()
+        sprint('Update density :', self.gsystem.density.integral())
+        self.density = self.gsystem.density.copy()
         #-----------------------------------------------------------------------
         self.add_xc_correction()
-        # write('a.xsf', totalrho, ions = self.gsystem.ions)
+        #-----------------------------------------------------------------------
         energy_history = [0.0]
-        #-----------------------------------------------------------------------
         fmt = "{:10s}{:8s}{:24s}{:16s}{:10s}{:10s}{:16s}".format(" ", "Step", "Energy(a.u.)", "dE", "dP", "dC", "Time(s)")
-        #-----------------------------------------------------------------------
         sprint(fmt)
         seq = "-" * 100
         time_begin = time.time()
         timecost = time.time()
-        # resN = np.einsum("..., ...->", residual, residual, optimize = 'optimal') * rho.grid.dV
-        # dE = energy
-        # fmt = "    Embed: {:<8d}{:<24.12E}{:<16.6E}{:<16.6E}{:<8d}{:<16.6E}".format(0, energy, dE, resN, 1, timecost - time_begin)
-        # sprint(seq +'\n' + fmt +'\n' + seq)
-        update = [True for _ in range(self.nsub)]
         res_norm = np.ones(self.nsub)
-        totalrho_prev = None
-        sdft = self.options['sdft']
+        olevel = self.options['olevel']
+
+        self.converged = False
+        yield self.converged
+        self.call_observers(self.iter)
+
         for it in range(self.options['maxiter']):
-            self.iter += 1
-            # update the rhomax for NLKEDF
-            self.set_kedf_params(level = it + 2) # first step without NL
-            self.set_global_potential()
-            # write('pot.xsf', self.gsystem.total_evaluator.embed_potential, ions = self.gsystem.ions)
-            for isub in range(self.nsub + len(self.of_drivers)):
-                if isub < self.nsub :
-                    driver = self.drivers[isub]
-                    if driver is None or driver.technique == 'OF' :
-                        continue
-                else :
-                    driver = self.of_drivers[isub - self.nsub]
-                    isub = self.of_ids[isub - self.nsub]
-
-                update[isub] = self.get_update(driver, it)
-
-                if update[isub] :
-                    self.gsystem.density[:] = totalrho
-                    if driver.technique in ['EX', 'MM'] :
-                        calcType = ['V']
-                    else :
-                        calcType = ['O']
-                    driver(gsystem = self.gsystem, calcType = calcType, olevel = olevel, sdft = sdft)
             #-----------------------------------------------------------------------
-            totalrho, totalrho_prev = totalrho_prev, totalrho
-            totalrho = self.update_density(update = update)
+            self.step()
+            yield self.converged
+            self.call_observers(self.iter)
+            #-----------------------------------------------------------------------
+            self.update_density(update = self.update)
             res_norm = self.get_diff_residual()
             dp_norm = self.get_diff_potential()
             f_str = 'Norm of reidual density : \n'
@@ -220,34 +240,29 @@ class Optimization(object):
             sprint(f_str, level = 2)
             if self.check_converge_potential(dp_norm):
                 sprint("#### Subsytem Density Optimization Converged (Potential) In {} Iterations ####".format(it+1))
+                self.converged = True
                 break
-            # scf_correction = self.get_scf_correction(static_potential, totalrho, totalrho_prev)
-            totalfunc = self.gsystem.total_evaluator(totalrho, calcType = ['E'], olevel = olevel)
-            energy = self.get_energy(totalrho, totalfunc.energy, update = update, olevel = olevel)[0]
+            energy = self.get_energy(self.density, update = self.update, olevel = olevel)[0]
             #-----------------------------------------------------------------------
-            # energy += scf_correction
             energy_history.append(energy)
             timecost = time.time()
             dE = energy_history[-1] - energy_history[-2]
             d_ehart = np.max(dp_norm)
-            # d_res = np.max(res_norm)
-            d_res= hartree_energy(totalrho-totalrho_prev)
+            d_res = np.max(res_norm)
+            # d_res= hartree_energy(totalrho-totalrho_prev)
             #-----------------------------------------------------------------------
             fmt = "{:>10s}{:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format("Embed: ", self.iter, energy, dE, d_ehart, d_res, timecost - time_begin)
-            # fmt += "\n{:>10s}{:<8d}{:<24.12E}".format("Total: ", it, totalfunc.energy)
             sprint(seq +'\n' + fmt +'\n' + seq)
             # Only check when accurately calculate the energy
             if olevel == 0 and self.check_converge_energy(energy_history):
                 sprint("#### Subsytem Density Optimization Converged (Energy) In {} Iterations ####".format(it+1))
+                self.converged = True
                 break
-            if self.check_stop(it): break
+            if self.check_stop(): break
         else :
             sprint("!WARN Optimization is exit due to reaching maxium iterations ###")
         self.end_scf()
-        self.energy_all = self.print_energy()
-        self.energy = self.energy_all['TOTAL']
-        self.density = totalrho
-        return
+        yield self.converged
 
     def set_global_potential(self, **kwargs):
         sdft = self.options['sdft']
@@ -685,6 +700,8 @@ class Optimization(object):
         for i, driver in enumerate(self.drivers):
             if driver is not None :
                 driver.end_scf()
+        self.energy_all = self.print_energy()
+        self.energy = self.energy_all['TOTAL']
         return
 
     def stop_run(self, save = ['D'], **kwargs):
@@ -799,14 +816,14 @@ class Optimization(object):
                 if driver.technique == 'OF' or driver.comm.rank == 0 or self.gsystem.graphtopo.isub is None:
                     write(outfile, driver.density, ions = driver.subcell.ions)
 
-    def check_stop(self, iteration = 0, stopfile = 'edftpy_stopfile'):
+    def check_stop(self, stopfile = 'edftpy_stopfile', **kwargs):
         stop = False
         if os.path.isfile(stopfile):
-            sprint("!WARN Optimization is exit due to the '{}' in {} iterations ###".format(stopfile, iteration+1))
+            sprint("!WARN Optimization is exit due to the '{}' in {} iterations ###".format(stopfile, self.iter))
             stop = True
         if self.options.get('maxtime', 0) > 1 :
             if self.gsystem.graphtopo.timer.Time('TOTAL') > self.options['maxtime'] :
-                sprint("!WARN Optimization is exit due to the maxtime in {} iterations ###".format(iteration+1))
+                sprint("!WARN Optimization is exit due to the maxtime in {} iterations ###".format(self.iter))
                 stop = True
         return stop
 
