@@ -22,14 +22,14 @@ class Test(unittest.TestCase):
         for method in ['full', 'part', 'hamiltonian'] :
             # Test TFvW-KE
             ke_kwargs = {'name' :'TF'}
-            gsystem, drivers = self.get_optimizer(ke_kwargs, xc_kwargs = xc_kwargs, method = method)
-            energy = self.get_energy(gsystem, drivers)
+            opt = self.get_optimizer(ke_kwargs, xc_kwargs = xc_kwargs, method = method)
+            energy = self.get_energy(opt)
             print('method = ', method, 'TFvW : energy', energy)
             self.assertTrue(np.isclose(energy, -8.281114354275829, rtol = 1E-3))
             # Test vW-KE
             ke_kwargs = None
-            gsystem, drivers = self.get_optimizer(ke_kwargs, xc_kwargs = xc_kwargs, method = method)
-            energy = self.get_energy(gsystem, drivers)
+            opt = self.get_optimizer(ke_kwargs, xc_kwargs = xc_kwargs, method = method)
+            energy = self.get_energy(opt)
             print('method = ', method, 'vW : energy', energy)
             self.assertTrue(np.isclose(energy, -11.394097752526489, rtol = 1E-3))
 
@@ -69,13 +69,13 @@ class Test(unittest.TestCase):
         driver_a = self.gen_sub_of(ions, grid, pplist, index_a, atomicd, xc_kwargs, ke_kwargs, emb_ke_kwargs = emb_ke_kwargs, gsystem = gsystem, method = method, mp = mp)
         drivers = [driver_a]
         graphtopo.build_region(grid=gsystem.grid, drivers=drivers)
-        return gsystem, drivers
-
-    def get_energy(self, gsystem, drivers):
         optimization_options = {'econv' : 1e-6, 'maxiter' : 70}
         optimization_options["econv"] *= gsystem.ions.nat
-        opt = Optimization(drivers = drivers, options = optimization_options)
-        opt.optimize(gsystem = gsystem)
+        opt = Optimization(gsystem = gsystem, drivers = drivers, options = optimization_options)
+        return opt
+
+    def get_energy(self, opt):
+        opt.optimize()
         energy = opt.energy
         opt.stop_run()
         return energy
