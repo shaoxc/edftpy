@@ -17,11 +17,10 @@ from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import LinearMixer, PulayMixer
-from edftpy.engine.of_dftpy import DFTpyOF, dftpy_opt
 from edftpy.mpi import GraphTopo, MP, sprint
 from edftpy.utils.math import get_hash, get_formal_charge
 from edftpy.subsystem.decompose import decompose_sub
-from edftpy.engine.driver import DriverKS, DriverEX, DriverMM
+from edftpy.engine.driver import DriverKS, DriverEX, DriverMM, DriverOF
 
 def import_drivers(calcs = {}):
     """
@@ -65,11 +64,8 @@ def import_drivers_conf(config):
             calcs.append(calc)
     if 'pwscf' in calcs or 'qe' in calcs :
         import qepy
-        from edftpy.engine.ks_pwscf import PwscfKS
     if 'castep' in calcs :
-        from edftpy.engine.ks_castep import CastepKS
-    if 'dftpy' in calcs :
-        from edftpy.engine.of_dftpy import DFTpyOF
+        import caspytep
     return
 
 def config_correct(config):
@@ -590,7 +586,7 @@ def get_dftpy_driver(config, keysys, ions, grid, pplist = None, optimizer = None
             }
 
     margs.update(add)
-    driver = DFTpyOF(**margs)
+    driver = DriverOF(**margs)
     return driver
 
 def config2subcell(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None, driver = None, mp = None, comm = None):
@@ -676,7 +672,8 @@ def config2subcell(config, keysys, ions, grid, pplist = None, optimizer = None, 
             atomicd = AtomicDensity()
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
         elif technique == 'OF' :
-            subcell.density[:] = dftpy_opt(subcell.ions, subcell.density, pplist)
+            from edftpy.engine.engine_dftpy import EngineDFTpy
+            subcell.density[:] = EngineDFTpy.dftpy_opt(subcell.ions, subcell.density, pplist)
         else :
             # given a negative value which means will get from driver
             subcell.density[:] = -1.0
@@ -762,11 +759,11 @@ def get_pwscf_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, mar
             'params': params,
             }
     margs.update(add)
-    from edftpy.engine.ks_pwscf import PwscfKS
-    driver = PwscfKS(**margs)
-    # from edftpy.engine.engine_qe import EngineQE
-    # engine = EngineQE()
-    # driver = DriverKS(**margs, engine = engine)
+    # from edftpy.engine.ks_pwscf import PwscfKS
+    # driver = PwscfKS(**margs)
+    from edftpy.engine.engine_qe import EngineQE
+    engine = EngineQE()
+    driver = DriverKS(**margs, engine = engine)
     return driver
 
 def get_environ_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, margs = {}, **kwargs):

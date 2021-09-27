@@ -2,7 +2,7 @@ import mbx
 
 import numpy as np
 # from dftpy.constants import LEN_CONV
-from edftpy.engine.driver import Engine
+from edftpy.engine.engine import Engine
 
 class EngineMBX(Engine):
     """Engine for Environ

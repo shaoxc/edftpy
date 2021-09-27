@@ -10,7 +10,6 @@ from edftpy.utils.common import Field, Grid, Atoms
 from edftpy.functional import LocalPP, KEDF, Hartree, XC
 from edftpy.optimizer import Optimization
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
-from edftpy.engine.of_dftpy import DFTpyOF
 from edftpy.density.init_density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import PulayMixer, LinearMixer
@@ -111,7 +110,8 @@ class Test(unittest.TestCase):
         rho_a = subsys_a.density
         rho_a[:] = atomicd.guess_rho(ions_a, subsys_a.grid)
         options = {"method" :'CG-HS', "maxiter": 220, "econv": 1.0e-6, "ncheck": 2, "opt_method" : method}
-        of_enginer_a = DFTpyOF(evaluator = embed_evaluator, mixer = mixer, options = options, subcell = subsys_a, evaluator_of = evaluator_of)
+        from edftpy.engine.driver import DriverOF
+        of_enginer_a = DriverOF(evaluator = embed_evaluator, mixer = mixer, options = options, subcell = subsys_a, evaluator_of = evaluator_of)
         return of_enginer_a
 
     def tearDown(self):

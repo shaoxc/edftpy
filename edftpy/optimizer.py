@@ -95,15 +95,11 @@ class Optimization(object):
         return (etotal, elist)
 
     def update_density(self, update = None, **kwargs):
-        #-----------------------------------------------------------------------
         # diff_res = self.get_diff_residual()
-        # sprint('diff_res', diff_res)
         for i, driver in enumerate(self.drivers):
-            # coef = driver.calculator.mixer.coef.copy()
-            # sprint('coef',coef, 'i', i)
-            # coef[0] = self.get_frag_coef(coef[0], diff_res[i], diff_res)
-            # sprint('outcoef',coef)
             if driver is None : continue
+            # coef = driver.calculator.mixer.coef.copy()
+            # coef[0] = self.get_frag_coef(coef[0], diff_res[i], diff_res)
             coef = None
             if update is not None and update[i]:
                 driver.update_density(coef = coef)

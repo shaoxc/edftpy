@@ -10,10 +10,10 @@ from edftpy.utils.math import grid_map_data
 from edftpy.functional import hartree_energy, KEDFunctional
 from edftpy.mpi import sprint
 from .hamiltonian import Hamiltonian
-from .driver import Driver
+from edftpy.engine.engine import Driver
 
 
-class DFTpyOF(Driver):
+class EngineDFTpy(Driver):
     """description"""
     def __init__(self, grid = None, evaluator_of = None, **kwargs):
         default_options = {
@@ -373,34 +373,35 @@ class DFTpyOF(Driver):
         if self.comm.rank == 0 :
             self.fileobj.close()
 
-def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = None, options = {}):
-    from edftpy.functional import LocalPP, KEDF, Hartree, XC
-    from edftpy.evaluator import Evaluator
-    from edftpy.density.init_density import AtomicDensity
-    #-----------------------------------------------------------------------
-    save = environ['STDOUT']
-    if stdout is not None :
-        environ['STDOUT'] = stdout
-    if xc_kwargs is None :
-        xc_kwargs = {"x_str":'gga_x_pbe','c_str':'gga_c_pbe'}
-    if ke_kwargs is None :
-        ke_kwargs = {'name' :'GGA', 'k_str' : 'REVAPBEK'}
-        # ke_kwargs = {'name' :'TFvW', 'y' :0.2}
-    #-----------------------------------------------------------------------
-    pseudo = LocalPP(grid = rho.grid, ions=ions, PP_list=pplist, PME=True)
-    hartree = Hartree()
-    xc = XC(**xc_kwargs)
-    ke = KEDF(**ke_kwargs)
-    funcdicts = {'KE' :ke, 'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
-    evaluator_of = Evaluator(**funcdicts)
-    evaluator = partial(evaluator_of.compute, gather = True)
-    atomicd = AtomicDensity()
-    rho_ini = atomicd.guess_rho(ions, rho.grid)
-    #-----------------------------------------------------------------------
-    optimization_options = {'econv' : 1e-6 * ions.nat, 'maxfun' : 50, 'maxiter' : 100}
-    optimization_options["econv"] *= ions.nat
-    optimization_options.update(options)
-    opt = Optimization(EnergyEvaluator= evaluator, optimization_options = optimization_options, optimization_method = 'CG-HS')
-    new_rho = opt.optimize_rho(guess_rho=rho_ini)
-    environ['STDOUT'] = save
-    return new_rho
+    @staticmethod
+    def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = None, options = {}):
+        from edftpy.functional import LocalPP, KEDF, Hartree, XC
+        from edftpy.evaluator import Evaluator
+        from edftpy.density.init_density import AtomicDensity
+        #-----------------------------------------------------------------------
+        save = environ['STDOUT']
+        if stdout is not None :
+            environ['STDOUT'] = stdout
+        if xc_kwargs is None :
+            xc_kwargs = {"x_str":'gga_x_pbe','c_str':'gga_c_pbe'}
+        if ke_kwargs is None :
+            ke_kwargs = {'name' :'GGA', 'k_str' : 'REVAPBEK'}
+            # ke_kwargs = {'name' :'TFvW', 'y' :0.2}
+        #-----------------------------------------------------------------------
+        pseudo = LocalPP(grid = rho.grid, ions=ions, PP_list=pplist, PME=True)
+        hartree = Hartree()
+        xc = XC(**xc_kwargs)
+        ke = KEDF(**ke_kwargs)
+        funcdicts = {'KE' :ke, 'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
+        evaluator_of = Evaluator(**funcdicts)
+        evaluator = partial(evaluator_of.compute, gather = True)
+        atomicd = AtomicDensity()
+        rho_ini = atomicd.guess_rho(ions, rho.grid)
+        #-----------------------------------------------------------------------
+        optimization_options = {'econv' : 1e-6 * ions.nat, 'maxfun' : 50, 'maxiter' : 100}
+        optimization_options["econv"] *= ions.nat
+        optimization_options.update(options)
+        opt = Optimization(EnergyEvaluator= evaluator, optimization_options = optimization_options, optimization_method = 'CG-HS')
+        new_rho = opt.optimize_rho(guess_rho=rho_ini)
+        environ['STDOUT'] = save
+        return new_rho

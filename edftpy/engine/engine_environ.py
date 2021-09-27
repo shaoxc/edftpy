@@ -9,7 +9,7 @@ import numpy as np
 
 from dftpy.constants import LEN_CONV
 
-from edftpy.engine.driver import Engine
+from edftpy.engine.engine import Engine
 from edftpy.io import print2file
 
 class EngineEnviron(Engine):

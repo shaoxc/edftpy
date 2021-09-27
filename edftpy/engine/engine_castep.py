@@ -7,7 +7,7 @@ from collections import OrderedDict
 from dftpy.constants import LEN_CONV
 
 from edftpy.io import ions2ase
-from edftpy.engine.driver import Engine
+from edftpy.engine.engine import Engine
 
 
 class EngineCastep(Engine):
