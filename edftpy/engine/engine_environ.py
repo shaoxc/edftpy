@@ -88,10 +88,10 @@ class EngineEnviron(Engine):
             alat = kwargs.get('alat')
             _check_kwargs('ecutrho', ecutrho, 'initial')
             gcutm = ecutrho / (2 * np.pi / alat) ** 2
-        e2 = kwargs.get('e2')
         ityp = kwargs.get('ityp')
         zv = kwargs.get('zv')
         tau = kwargs.get('tau')
+        do_comp_mt = kwargs.get('do_comp_mt')
         # rho = kwargs.get('rho') # maybe make this a named argument to parallel the scf function
 
         # raise Exceptions here if the keywords are not supplied
@@ -100,10 +100,10 @@ class EngineEnviron(Engine):
         _check_kwargs('nelec', nelec, 'initial')
         _check_kwargs('atom_label', atom_label, 'initial')
         _check_kwargs('at', at, 'initial')
-        _check_kwargs('e2', e2, 'initial')
         _check_kwargs('ityp', ityp, 'initial')
         _check_kwargs('zv', zv, 'initial')
         _check_kwargs('tau', tau, 'initial')
+        _check_kwargs('do_comp_mt', do_comp_mt, 'initial')
 
         self.comm = comm
 
@@ -114,9 +114,11 @@ class EngineEnviron(Engine):
         # TODO program unit needs to be set externally perhaps
         iounit = 6
         environ_setup.init_io(comm.rank == 0, 0, commf, iounit)
-        environ_setup.init_base_first(nelec, self.nat, ntyp, atom_label[:, :ntyp], False)
-        environ_setup.init_base_second(alat, at, commf, gcutm, e2)
-        environ_control.update_ions(self.nat, ntyp, ityp, zv[:ntyp], tau, alat)
+        environ_setup.read_input()
+        environ_setup.init_environ(
+                commf, nelec, self.nat, ntyp, atom_label[:, :ntyp], ityp, zv,
+                do_comp_mt, alat, at, gcutm)
+        environ_control.update_ions(self.nat, tau, alat)
         environ_control.update_cell(at, alat)
         nnr = environ_calc.get_nnt()
 
@@ -135,7 +137,6 @@ class EngineEnviron(Engine):
 
     def write_input(self, subcell = None, **kwargs):
         defaults = {
-                'e2' : 2.0,
                 'ecutrho' : 300,
                 }
         nat = subcell.ions.nat
@@ -205,7 +206,7 @@ class EngineEnviron(Engine):
 
     @print2file()
     def update_ions(self, subcell = None, update = 0, **kwargs):
-        environ_setup.environ_clean(True)
+        environ_setup.clean_environ()
         self.write_input(subcell = subcell, **kwargs)
         self.initial(comm = self.comm)
 
@@ -214,7 +215,7 @@ class EngineEnviron(Engine):
 
     @print2file()
     def stop_run(self, **kwargs):
-        environ_setup.environ_clean(True)
+        environ_setup.clean_environ()
 
 def _check_kwargs(key, val, funlabel='\b'):
     """check that a kwargs value is set
