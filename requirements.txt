@@ -2,3 +2,8 @@ numpy>=1.11.0
 scipy>=0.18.0
 ase>=3.21.1
 git+https://gitlab.com/pavanello-research-group/dftpy.git
+pylibxc2
+xmltodict
+upf_to_json
+mpi4py>=3.0.2
+mpi4py-fft>=2.0.4
