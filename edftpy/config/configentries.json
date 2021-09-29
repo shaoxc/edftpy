@@ -79,7 +79,7 @@
 			"type": "str",
 			"options": "Normal",
 			"default": "Normal",
-			"comment": "Charge density optimization method"
+			"comment": "Charge density optimization method."
 		},
 		"econv": {
 			"type": "float",
@@ -96,28 +96,28 @@
 		"maxiter": {
 			"type": "int",
 			"default": 100,
-			"comment": "The max steps for optimization"
+			"comment": "The max steps for optimization."
 		},
 		"ncheck": {
 			"type": "int",
-			"comment": "How many step satisfy the convergence",
+			"comment": "How many step satisfy the convergence.",
 			"default": 2
 		},
 		"olevel": {
 			"type": "int",
 			"comment": "The level of output energy, large will faster.",
-			"note": "Only set 0, the energy of each cycle is useful",
+			"note": "Only set 0, the energy of each cycle is useful.",
 			"default": 2
 		},
 		"sdft": {
 			"type": "str",
 			"options": "sdft, pdft",
-			"comment": "Subsytem DFT or Partition DFT",
+			"comment": "Subsystem DFT or Partition DFT.",
 			"default": "sdft"
 		},
 		"maxtime": {
 			"type": "float",
-			"comment": "Maximum excution time. Non-positive number means no time limit.",
+			"comment": "Maximum execution time. Non-positive number means no time limit.",
 			"unit": "second",
 			"default": 0
 		}
@@ -130,42 +130,42 @@
 		"maxiter": {
 			"type": "int",
 			"default": 1000,
-			"comment": "The max steps for TDDFT"
+			"comment": "The max steps for TDDFT."
 		},
 		"olevel": {
 			"type": "int",
 			"comment": "The level of output energy, large will faster.",
-			"note": "Only set 0, the energy of each cycle is useful",
+			"note": "Only set 0, the energy of each cycle is useful.",
 			"default": 2
 		},
 		"sdft": {
 			"type": "str",
 			"options": "sdft, pdft",
-			"comment": "Subsytem DFT or Partition DFT",
+			"comment": "Subsystem DFT or Partition DFT.",
 			"default": "sdft"
 		},
 		"restart": {
 			"type": "str",
 			"options": "initial, scf, restart",
-			"comment": "Start the job from new one, scf results or restart from previous run",
+			"comment": "Start the job from new one, scf results or restart from previous run.",
 			"default": "initial"
 		},
 		"iter": {
 			"type": "int",
 			"options": "",
-			"comment": "The iteration number of restart", 
+			"comment": "The iteration number of restart.",
 			"default": "0"
 		},
 		"timestep": {
 			"type": "float",
 			"options": "",
-			"comment": "The time step for TDDFT (as)",
+			"comment": "The time step for TDDFT (as).",
 			"unit": "attosecond",
 			"default": "1"
 		},
 		"maxtime": {
 			"type": "float",
-			"comment": "Maximum excution time. Non-positive number means no time limit.",
+			"comment": "Maximum execution time. Non-positive number means no time limit.",
 			"unit": "second",
 			"default": 0
 		}
@@ -190,7 +190,7 @@
 			"optfft": {
 				"type": "bool",
 				"default": true,
-				"comment": "Optimize the number of grid points"
+				"comment": "Optimize the number of grid points."
 			}
 		},
 		"density": {
@@ -199,14 +199,14 @@
 				"default": "Control the charge density."
 			},
 			"nspin": {
-				"comment": "non/spin-polarized calculation",
+				"comment": "non/spin-polarized calculation.",
 				"options": "1, 2",
 				"type": "int",
 				"default": 1
 			},
 			"ncharge": {
 				"type": "float",
-				"comment": "Total charge of the system",
+				"comment": "Total charge of the system.",
 				"default": null
 			},
 			"magmom": {
@@ -217,7 +217,7 @@
 			"file": {
 				"type": "str",
 				"options": "",
-				"comment": "The input density file for initial density",
+				"comment": "The input density file for initial density.",
 				"default": null
 			},
 			"output": {
@@ -274,30 +274,30 @@
 		"decompose": {
 			"comment": {
 				"type": "str",
-				"default": "The way to decompose the subsytem to more subsytems"
+				"default": "The way to decompose the subsystem to more subsystems"
 			},
 			"method": {
 				"type": "str",
 				"default": "manual",
-				"comment": "'manual' means use the given subsystem; 'distance' means base on the distance of atoms to decompose the subsytem.",
+				"comment": "'manual' means use the given subsystem; 'distance' means base on the distance of atoms to decompose the subsystem.",
 				"options": "manual, distance"
 			},
 			"adaptive": {
 				"type": "str",
 				"default": "manual",
-				"comment": "The decompose method after first step, 'manual' will remove all 'NSUB'",
+				"comment": "The decompose method after first step, 'manual' will remove all 'NSUB'.",
 				"options": "manual, distance"
 			},
 			"rcut": {
 				"type": "float",
 				"default": 3,
-				"comment": "The cutoff for decompose the subsytems.",
+				"comment": "The cutoff for decompose the subsystems.",
 				"unit": "Angstrom"
 			},
 			"radius": {
 				"type": "cfdict",
 				"default": {},
-				"comment": "The radius of each elements for decompose the subsytems.",
+				"comment": "The radius of each elements for decompose the subsystems.",
 				"unit": "Angstrom"
 			}
 		}
@@ -307,7 +307,7 @@
 			"comment": {
 				"type": "str",
 				"default": "Structure information of system.",
-				"note": "Subsytem(`SUB`_) use :ref:`cell-index<cell-index>` to define the atoms in the subsytem"
+				"note": "Subsystem(`SUB`_) use :ref:`cell-index<cell-index>` to define the atoms in the subsystem."
 			},
 			"dftpy": {
 				"type": "str",
@@ -326,7 +326,7 @@
 			},
 			"cut": {
 				"type": "floatlist",
-				"comment": "Base on the subsystem atoms build the small cell, and add the vaccum on each direction. 0 means use whole cell.",
+				"comment": "Base on the subsystem atoms build the small cell, and add the vacuum on each direction. 0 means use whole cell.",
 				"default": 0
 			},
 			"index": {
@@ -352,7 +352,7 @@
 			"optfft": {
 				"type": "bool",
 				"default": true,
-				"comment": "Optimize the number of grid points"
+				"comment": "Optimize the number of grid points."
 			}
 		},
 		"density": {
@@ -361,14 +361,14 @@
 				"default": "Control the charge density."
 			},
 			"nspin": {
-				"comment": "non/spin-polarized calculation",
+				"comment": "non/spin-polarized calculation.",
 				"options": "1, 2",
 				"type": "int",
 				"default": 1
 			},
 			"ncharge": {
 				"type": "float",
-				"comment": "Total charge of the system",
+				"comment": "Total charge of the system.",
 				"default": null
 			},
 			"magmom": {
@@ -379,7 +379,7 @@
 			"file": {
 				"type": "str",
 				"options": "",
-				"comment": "The input density file for initial density",
+				"comment": "The input density file for initial density.",
 				"default": null
 			},
 			"output": {
@@ -395,7 +395,7 @@
 				"comment": "For OFDFT subsystem the default is `Ofdft`."
 			},
 			"atomic": {
-				"comment": "If `initial` set the Atomic, here need give each elements atomic density",
+				"comment": "If `initial` set the Atomic, here need give each elements atomic density.",
 				"type": "cdict",
 				"default": {}
 			},
@@ -456,30 +456,30 @@
 		"decompose": {
 			"comment": {
 				"type": "str",
-				"default": "The way to decompose the subsytem to more subsytems"
+				"default": "The way to decompose the subsystem to more subsystems"
 			},
 			"method": {
 				"type": "str",
 				"default": "manual",
-				"comment": "'manual' means use the given subsystem; 'distance' means base on the distance of atoms to decompose the subsytem.",
+				"comment": "'manual' means use the given subsystem; 'distance' means base on the distance of atoms to decompose the subsystem.",
 				"options": "manual, distance"
 			},
 			"adaptive": {
 				"type": "str",
 				"default": "manual",
-				"comment": "The decompose method after first step, 'manual' will remove all 'NSUB'",
+				"comment": "The decompose method after first step, 'manual' will remove all 'NSUB'.",
 				"options": "manual, distance"
 			},
 			"rcut": {
 				"type": "float",
 				"default": 3,
-				"comment": "The cutoff for decompose the subsytems.",
+				"comment": "The cutoff for decompose the subsystems.",
 				"unit": "Angstrom"
 			},
 			"radius": {
 				"type": "cfdict",
 				"default": {},
-				"comment": "The radius of each elements for decompose the subsytems.",
+				"comment": "The radius of each elements for decompose the subsystems.",
 				"unit": "Angstrom"
 			}
 		},
@@ -496,13 +496,13 @@
 			},
 			"predtype": {
 				"type": "str",
-				"comment": "The preconditioning method",
+				"comment": "The preconditioning method.",
 				"options": "kerker, inverse_kerker, resta",
 				"default": "kerker"
 			},
 			"predcoef": {
 				"type": "floatlist",
-				"comment": "The parameters for preconditioning",
+				"comment": "The parameters for preconditioning.",
 				"options": "",
 				"default": "1.0 1.0 1.0"
 			},
@@ -526,7 +526,7 @@
 			},
 			"delay": {
 				"type": "int",
-				"comment": "Delay several step to mixing the density",
+				"comment": "Delay several step to mixing the density.",
 				"options": "",
 				"default": "2"
 			},
@@ -546,7 +546,7 @@
 		"opt": {
 			"comment": {
 				"type": "str",
-				"default": "Control the charge density optimization for subsytem."
+				"default": "Control the charge density optimization for subsystem."
 			},
 			"dftpy": {
 				"type": "str",
@@ -563,7 +563,7 @@
 			"update_sleep": {
 				"type": "int",
 				"options": "",
-				"comment": "Subsytem will wait several steps then update.",
+				"comment": "Subsystem will wait several steps then update.",
 				"default": "0"
 			},
 			"update_delay": {
@@ -575,60 +575,60 @@
 			"update_freq": {
 				"type": "int",
 				"options": "",
-				"comment": "The update frequency of subsystem",
+				"comment": "The update frequency of subsystem.",
 				"default": "1"
 			}
 		},
 		"kpoints": {
 			"comment": {
 				"type": "str",
-				"default": "Set the kpoints for subsytem."
+				"default": "Set the kpoints for subsystem."
 			},
 			"method": {
 				"type": "str",
 				"options": "",
-				"comment": "The method for generate the kpoints",
+				"comment": "The method for generate the kpoints.",
 				"default": "auto"
 			},
 			"grid": {
 				"type": "intlist",
 				"options": "",
-				"comment": "The grid of kpoints",
+				"comment": "The grid of kpoints.",
 				"default": null
 			},
 			"offset": {
 				"type": "floatlist",
 				"options": "",
-				"comment": "The offset of kpoints",
+				"comment": "The offset of kpoints.",
 				"default": null
 			}
 		},
 		"subs": {
 			"type": "strlist",
 			"default": null,
-			"comment": "The name of all subsystems in this subsystem"
+			"comment": "The name of all subsystems in this subsystem."
 		},
 		"calculator": {
 			"type": "str",
 			"default": "dftpy",
-			"comment": "The SCF driver of subsystem",
+			"comment": "The SCF driver of subsystem.",
 			"options": "dftpy, castep, qe"
 		},
 		"technique": {
 			"type": "str",
 			"default": "OF",
-			"comment": "The technique (OF|KS) of the driver"
+			"comment": "The technique (OF|KS) of the driver."
 		},
 		"nprocs": {
 			"type": "float",
 			"default": 1,
-			"comment": "The number of processors for the subsystem",
-			"note": "If the minimum of all subsystems is 1, can also be used as ratio of number os processors of each subsystem"
+			"comment": "The number of processors for the subsystem.",
+			"note": "If the minimum of all subsystems is 1, can also be used as ratio of number of processors for each subsystem."
 		},
 		"embed": {
 			"type": "strlist",
 			"default": "KE  XC",
-			"comment": "The embedding potential",
+			"comment": "The embedding potential.",
 			"options": "KE, XC"
 		},
 		"exttype": {
@@ -640,19 +640,19 @@
 		"basefile": {
 			"type": "str",
 			"options": "",
-			"comment": "The base input file for subsytem",
+			"comment": "The base input file for subsystem.",
 			"default": null
 		},
 		"prefix": {
 			"type": "str",
 			"options": "",
-			"comment": "The prefix of each subsystem. If not set, it's same as the name of subsytem.",
+			"comment": "The prefix of each subsystem. If not set, it's same as the name of subsystem.",
 			"default": null
 		},
 		"task": {
 			"type": "str",
 			"default": null,
-			"comment": "The task to be performed for subsytem. Only works for JOB-task = Optmix.",
+			"comment": "The task to be performed for subsystem. Only works for JOB-task = Optmix.",
 			"options": "scf, optical"
 		}
 	},
