@@ -175,7 +175,7 @@ class EngineQE(Engine):
                     },
                 'electrons' :
                 {
-                    'mixing_beta' : 0.5,
+                    'mixing_beta' : 0.7,
                     },
                 'ions' :
                 {

@@ -522,7 +522,7 @@
 				"type": "float",
 				"comment": "",
 				"options": "The mixing parameter.",
-				"default": "0.5"
+				"default": "0.7"
 			},
 			"delay": {
 				"type": "int",

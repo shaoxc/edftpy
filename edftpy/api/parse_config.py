@@ -90,7 +90,12 @@ def config_correct(config):
             if config[key]['density']['output'].startswith('.') :
                 config[key]['density']['output'] = config[key]["prefix"] + config[key]['density']['output']
         config[key]['hash'] = get_hash(config[key]['cell']['index'])
-
+    #-----------------------------------------------------------------------
+    key = 'GSYSTEM'
+    if config[key]['density']['output'] :
+        if config[key]['density']['output'].startswith('.') :
+            config[key]['density']['output'] = key.lower() + config[key]['density']['output']
+    #-----------------------------------------------------------------------
     return config
 
 def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, pseudo = None, cell_change = None, append = False, **kwargs):
