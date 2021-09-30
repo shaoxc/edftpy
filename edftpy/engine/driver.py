@@ -59,13 +59,13 @@ class DriverKS(Driver):
         '''
         Here, prefix is the name of the input file
         exttype :
-                    1 : only pseudo                  : 001
-                    2 : only hartree                 : 010
-                    3 : hartree + pseudo             : 011
-                    4 : only xc                      : 100
-                    5 : pseudo + xc                  : 101
-                    6 : hartree + xc                 : 110
-                    7 : pseudo + hartree + xc        : 111
+              1 : pseudo                       : 001
+              2 : hartree                      : 010
+              3 : hartree + pseudo             : 011
+              4 : xc                           : 100
+              5 : pseudo + xc                  : 101
+              6 : hartree + xc                 : 110
+              7 : pseudo + hartree + xc        : 111
         '''
         kwargs["technique"] = 'KS'
         super().__init__(**kwargs)
@@ -423,12 +423,13 @@ class DriverKS(Driver):
         results = self.engine.get_ef()
         return results
 
-    def get_forces(self, icalc = 2, **kwargs):
+    def get_forces(self, icalc = 3, **kwargs):
         """
         icalc :
-                0 : all
-                1 : no ewald
-                2 : no ewald and local_potential
+            0 : all                              : 000
+            1 : no ewald                         : 001
+            2 : no local                         : 010
+            3 : no ewald and local               : 011
         """
         forces = self.engine.get_force(icalc = icalc, **kwargs)
         return forces

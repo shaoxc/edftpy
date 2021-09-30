@@ -424,13 +424,7 @@ class CastepKS(Driver):
         energy = caspytep.electronic.electronic_get_energy(key)
         return energy
 
-    def get_forces(self, icalc = 2, **kwargs):
-        """
-        icalc :
-                0 : all
-                1 : no ewald
-                2 : no ewald and local_potential
-        """
+    def get_forces(self, icalc = 3, **kwargs):
         extpot, extene = self._get_extpot(self.mdl.den, self.grid)
         #-----------------------------------------------------------------------
         # labels = self.subcell.ions.labels

@@ -23,7 +23,7 @@ class EngineQE(Engine):
         super().__init__(**kwargs)
         self.embed = None
 
-    def get_force(self, icalc = 2, **kwargs):
+    def get_force(self, icalc = 3, **kwargs):
         qepy.qepy_forces(icalc)
         forces = qepy.force_mod.get_array_force().T * self.units['energy']
         return forces

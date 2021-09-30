@@ -623,12 +623,13 @@ class PwscfKS(Driver):
         results = qepy.ener.get_ef()
         return results
 
-    def get_forces(self, icalc = 2, **kwargs):
+    def get_forces(self, icalc = 3, **kwargs):
         """
         icalc :
-                0 : all
-                1 : no ewald
-                2 : no ewald and local_potential
+            0 : all                              : 000
+            1 : no ewald                         : 001
+            2 : no local                         : 010
+            3 : no ewald and local               : 011
         """
         qepy.qepy_forces(icalc)
         # forces = qepy.force_mod.force.T
