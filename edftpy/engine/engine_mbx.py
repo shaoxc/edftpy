@@ -4,6 +4,11 @@ import numpy as np
 # from dftpy.constants import LEN_CONV
 from edftpy.engine.engine import Engine
 
+try:
+    __version__ = mbx.__version__
+except Exception :
+    __version__ = '0.0.1'
+
 class EngineMBX(Engine):
     """Engine for Environ
 

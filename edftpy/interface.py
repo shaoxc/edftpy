@@ -5,38 +5,82 @@ from dftpy.constants import LEN_CONV, ENERGY_CONV, FORCE_CONV, STRESS_CONV, ZERO
 from edftpy.io import write
 from edftpy.properties import get_electrostatic_potential
 
-from edftpy.api.parse_config import config2optimizer, import_drivers
+from edftpy.api.parse_config import config2optimizer
 from edftpy.mpi import graphtopo, sprint
 
-from edftpy import __version__
-from dftpy import __version__ as dftpy_version
+import edftpy
+import dftpy
+
+def import_drivers(calcs = {}):
+    """
+    Import the engine of different drivers
+
+    Notes:
+        Must import driver firstly, before the mpi4py
+    """
+    if 'GSYSTEM' in calcs :
+        config = calcs
+        calcs = []
+        for key in config :
+            if key.startswith('SUB'):
+                calc = config[key]['calculator']
+                calcs.append(calc)
+    fs = "{:>20s} Version : {}\n"
+    info = fs.format('eDFTpy', edftpy.__version__)
+    info += fs.format('DFTpy', dftpy.__version__)
+    try:
+        from edftpy.engine import engine_qe
+        if 'pwscf' in calcs or 'qe' in calcs :
+            info += fs.format('QEpy', engine_qe.__version__)
+    except Exception as e:
+        if 'pwscf' in calcs or 'qe' in calcs :
+            raise AttributeError(e+"\nPlease install 'QEpy' firstly.")
+    try:
+        from edftpy.engine import engine_castep
+        if 'castep' in calcs :
+            info += fs.format('Caspytep', engine_castep.__version__)
+    except Exception as e:
+        if 'castep' in calcs :
+            raise AttributeError(e+"\nPlease install 'caspytep' firstly.")
+    try:
+        from edftpy.engine import engine_environ
+        if 'environ' in calcs :
+            info += fs.format('Environ', engine_environ.__version__)
+    except Exception as e:
+        if 'environ' in calcs :
+            raise AttributeError(e+"\nPlease install 'environ' firstly.")
+    return info
 
 def conf2init(conf, parallel = False, **kwargs):
-    import_drivers(conf)
-    graphtopo = init_graphtopo(parallel, **kwargs)
+    info = import_drivers(conf)
+    graphtopo = init_graphtopo(parallel, info = info, **kwargs)
     return graphtopo
 
-def init_graphtopo(parallel = False, **kwargs):
+def init_graphtopo(parallel = False, info = None, **kwargs):
+    header = '*'*80 + '\n'
     if parallel :
         try :
             from mpi4py import MPI
             from mpi4py_fft import PFFT
             graphtopo.comm = MPI.COMM_WORLD
-            info = 'Parallel version (MPI) on {0:>8d} processors'.format(graphtopo.comm.size)
+            header += 'Parallel version (MPI) on {0:>8d} processors\n'.format(graphtopo.comm.size)
         except Exception as e:
             raise e
     else :
-        info = 'Serial version on {0:>8d} processor'.format(1)
-    sprint('*'*80)
-    sprint(info)
+        header += 'Serial version on {0:>8d} processor\n'.format(1)
     if graphtopo.rank == 0 :
         #-----------------------------------------------------------------------
         # remove the stopfile
         if os.path.isfile('edftpy_stopfile'): os.remove('edftpy_stopfile')
         #-----------------------------------------------------------------------
-    sprint("eDFTpy Version : {}".format(__version__))
-    sprint(" DFTpy Version : {}".format(dftpy_version))
-    sprint('*'*80)
+    if info is None :
+        fs = "{:>20s} Version : {}\n"
+        header += fs.format('eDFTpy', edftpy.__version__)
+        header += fs.format('DFTpy', dftpy.__version__)
+    else :
+        header += info
+    header += '*'*80
+    sprint(header)
     return graphtopo
 
 def optimize_density_conf(config, **kwargs):

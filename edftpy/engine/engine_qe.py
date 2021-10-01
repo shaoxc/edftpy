@@ -11,6 +11,10 @@ from edftpy.io import ions2ase
 from edftpy.engine.engine import Engine
 from edftpy.utils.common import Grid, Field, Atoms
 
+try:
+    __version__ = qepy.__version__
+except Exception :
+    __version__ = '0.0.1'
 
 class EngineQE(Engine):
     def __init__(self, **kwargs):

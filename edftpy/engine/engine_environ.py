@@ -1,5 +1,6 @@
 import sys
 
+import pyec
 import pyec.setup_interface as environ_setup
 import pyec.control_interface as environ_control
 import pyec.calc_interface as environ_calc
@@ -11,6 +12,11 @@ from dftpy.constants import LEN_CONV
 
 from edftpy.engine.engine import Engine
 from edftpy.io import print2file
+
+try:
+    __version__ = pyec.__version__
+except Exception :
+    __version__ = '0.0.1'
 
 class EngineEnviron(Engine):
     """Engine for Environ

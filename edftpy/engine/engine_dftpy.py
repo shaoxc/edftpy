@@ -1,6 +1,7 @@
 import copy
 import numpy as np
 from functools import partial
+import dftpy
 from dftpy.constants import LEN_CONV, ENERGY_CONV
 from dftpy.optimization import Optimization
 from dftpy.constants import environ
@@ -12,6 +13,10 @@ from edftpy.mpi import sprint
 from .hamiltonian import Hamiltonian
 from edftpy.engine.engine import Driver
 
+try:
+    __version__ = dftpy.__version__
+except Exception :
+    __version__ = '0.0.1'
 
 class EngineDFTpy(Driver):
     """description"""

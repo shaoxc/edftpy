@@ -6,10 +6,9 @@ import copy
 import textwrap
 
 from dftpy.constants import LEN_CONV, ENERGY_CONV
+
 from edftpy import io
-
 from edftpy.config import read_conf, write_conf
-
 from edftpy.functional import LocalPP, KEDF, Hartree, XC
 from edftpy.optimizer import Optimization, MixOptimization
 from edftpy.tddft import TDDFT
@@ -21,30 +20,6 @@ from edftpy.mpi import GraphTopo, MP, sprint
 from edftpy.utils.math import get_hash, get_formal_charge
 from edftpy.subsystem.decompose import decompose_sub
 from edftpy.engine.driver import DriverKS, DriverEX, DriverMM, DriverOF
-
-def import_drivers(calcs = {}):
-    """
-    Import the engine of different drivers
-
-    Notes:
-        Must import driver firstly, before the mpi4py
-    """
-    try:
-        from edftpy.engine.engine_qe import EngineQE
-    except Exception as e:
-        if 'pwscf' in calcs or 'qe' in calcs :
-            raise AttributeError(e+"\nPlease install 'QEpy' firstly.")
-    try:
-        from edftpy.engine.engine_castep import EngineCastep
-    except Exception as e:
-        if 'castep' in calcs :
-            raise AttributeError(e+"\nPlease install 'caspytep' firstly.")
-    try:
-        from edftpy.engine.engine_environ import EngineEnviron
-    except Exception as e:
-        if 'environ' in calcs :
-            raise AttributeError(e+"\nPlease install 'environ' firstly.")
-    return
 
 
 def import_drivers_conf(config):
@@ -285,7 +260,6 @@ def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell
         mp_global = MP(comm = graphtopo.comm, parallel = graphtopo.is_mpi, decomposition = graphtopo.decomposition)
         gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo)
     return gsystem
-
 
 def config2graphtopo(config, graphtopo = None, scale = None):
     """
