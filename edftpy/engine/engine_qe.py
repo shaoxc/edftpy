@@ -300,6 +300,11 @@ class EngineQE(Engine):
         keys = ['inputtddft']
         for section in params:
             if section not in keys : continue
+            if section == 'inputtddft' :
+                if 'prefix' not in params[section] :
+                    params[section]['prefix'] = prefix
+                if 'tmp_dir' not in params[section] :
+                    params[section]['tmp_dir'] = prefix + '.tmp/'
             fstrl.append('&{0}\n'.format(section.upper()))
             for key, value in params[section].items():
                 #-----------------------------------------------------------------------
