@@ -9,15 +9,8 @@ def parse_requirements():
     with open('requirements.txt', 'r') as fr :
         for line in fr :
             pkg = line.strip()
-            if pkg.startswith('git+'):
-                pip_install_git(pkg)
-            else:
-                requires.append(pkg)
+            requires.append(pkg)
     return requires
-
-def pip_install_git(link):
-    os.system('pip install --upgrade {}'.format(link))
-    return
 
 
 with open('edftpy/__init__.py') as fd :
