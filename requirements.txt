@@ -7,3 +7,4 @@ xmltodict
 upf_to_json
 mpi4py>=3.0.2
 mpi4py-fft>=2.0.3
+importlib-metadata>=0.12;python_version<"3.8"
