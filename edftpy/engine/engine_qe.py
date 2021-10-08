@@ -164,18 +164,18 @@ class EngineQE(Engine):
                     # 'verbosity' : 'high',
                     'restart_mode' : 'from_scratch',
                     # 'iprint' : 1,
-                    'disk_io' : 'none', # do not save anything for qe
+                    # 'disk_io' : 'none', # do not save anything for qe
                     },
                 'system' :
                 {
                     'ibrav' : 0,
                     'nat' : 1,
                     'ntyp' : 1,
+                    'nosym' : True,
                     # 'ecutwfc' : 40,
-                    # 'nosym' : True,
-                    'occupations' : 'smearing',
-                    'degauss' : 0.001,
-                    'smearing' : 'gaussian',
+                    # 'occupations' : 'smearing',
+                    # 'degauss' : 0.001,
+                    # 'smearing' : 'gaussian',
                     },
                 'electrons' :
                 {

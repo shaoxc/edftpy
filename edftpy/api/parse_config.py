@@ -642,8 +642,15 @@ def config2subcell(config, keysys, ions, grid, pplist = None, optimizer = None, 
         if infile : # initial='Read'
             ext = os.path.splitext(infile)[1].lower()
             if ext != ".snpy":
-                raise AttributeError("Only support snpy format for density initialization")
-            subcell.density[:] = io.read_density(infile, grid=subcell.grid)
+                fstr = f'!WARN : snpy format for density initialization will better, but this file is "{infile}".'
+                sprint(fstr, comm=subcell.grid.mp.comm, level=2)
+                if subcell.grid.mp.comm.rank == 0 :
+                    density = io.read_density(infile)
+                else :
+                    density = np.zeros(1)
+                subcell.grid.scatter(density, out = subcell.density)
+            else :
+                subcell.density[:] = io.read_density(infile, grid=subcell.grid)
         elif initial == 'Atomic' and len(atomicfiles) > 0 :
             atomicd = AtomicDensity(files = atomicfiles)
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
