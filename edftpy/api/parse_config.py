@@ -20,6 +20,8 @@ from edftpy.mpi import GraphTopo, MP, sprint
 from edftpy.utils.math import get_hash, get_formal_charge
 from edftpy.subsystem.decompose import decompose_sub
 from edftpy.engine.driver import DriverKS, DriverEX, DriverMM, DriverOF
+from edftpy.utils.common import Grid
+from edftpy.utils.math import grid_map_data
 
 
 def import_drivers_conf(config):
@@ -64,6 +66,9 @@ def config_correct(config):
         if config[key]['density']['output'] :
             if config[key]['density']['output'].startswith('.') :
                 config[key]['density']['output'] = config[key]["prefix"] + config[key]['density']['output']
+        if config[key]['embedpot'] :
+            if config[key]['embedpot'].startswith('.') :
+                config[key]['embedpot'] = config[key]["prefix"] + config[key]['embedpot']
         config[key]['hash'] = get_hash(config[key]['cell']['index'])
     #-----------------------------------------------------------------------
     key = 'GSYSTEM'
@@ -232,6 +237,32 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         opt = MixOptimization(optimizer = opt)
     return opt
 
+def config2total_embed(config, driver = None, optimizer = None, **kwargs):
+    """
+    Only support KS subsystems
+    """
+    grid_global = optimizer.gsystem.grid
+    if driver is None :
+        pass
+    else :
+        if driver.technique != 'KS' :
+            raise AttributeError("Sorry config2total_embed only support KS subsystem yet.")
+        if driver.comm.rank == 0 :
+            grid = Grid(lattice=grid_global.lattice, nr=grid_global.nrR, full=grid_global.full, direct = True)
+            pseudo = optimizer.gsystem.total_evaluator.funcdicts['PSEUDO'].restart(duplicate=True)
+            total_embed = config2total_evaluator(config, driver.subcell.ions, grid, pseudo = pseudo)
+            # add core density to XC
+            if 'XC' in total_embed.funcdicts :
+                if driver.core_density is not None :
+                    core_density = grid_map_data(driver.core_density, grid = grid)
+                    total_embed.funcdicts['XC'].core_density = core_density
+            density = grid_map_data(driver.density, grid = grid)
+            driver.density_global = density
+        else :
+            total_embed = None
+        driver.total_embed = total_embed
+    return driver
+
 def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell_change = None, **kwargs):
     ############################## Gsystem ##############################
     keysys = "GSYSTEM"
@@ -313,8 +344,6 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
     else :
         if pseudo is None :
             pseudo = LocalPP(grid = grid, ions=ions, PP_list=pplist, PME=pme)
-            # pseudo(calcType = ['V'])
-            # exit()
         hartree = Hartree()
         xc = XC(**xc_kwargs)
         funcdicts = {'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}

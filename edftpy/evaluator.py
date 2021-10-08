@@ -61,10 +61,12 @@ class Evaluator(AbsFunctional):
         return results
 
     def update_functional(self, remove = [], add = {}):
+        removed = {}
         for key in remove :
             if key in self.funcdicts :
-                del self.funcdicts[key]
+                removed[key] = self.funcdicts.pop(key)
         self.funcdicts.update(add)
+        return removed
 
 class EmbedEvaluator(Evaluator):
     def __init__(self, ke_evaluator = None, **kwargs):

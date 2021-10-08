@@ -631,6 +631,12 @@
 			"comment": "The embedding potential.",
 			"options": "KE, XC"
 		},
+		"embedpot": {
+			"type": "str",
+			"default": null,
+			"comment": "The output file or format of embedding potential. The name starts with '.' represent the format.",
+			"options": ""
+		},
 		"exttype": {
 			"type": "int",
 			"options": "0, 1,..., 7",
