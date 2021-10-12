@@ -5,11 +5,11 @@ from edftpy.config.config import default_option
 header = r"""
 .. _config:
 
-=====================
-Script mode of eDFTpy
-=====================
+===========================
+Run eDFTpy with input files
+===========================
 
-eDFTpy is a set of python modules. However, it can be executed by using the `edftpy` script which is generated at installation time. Here's a quick guide to the script's configuration dictionary, or `config`.
+eDFTpy is a set of python modules. However,you can run it using the `edftpy` executable. Here's a quick guide to the available keywords.
 
 .. graphviz::
 

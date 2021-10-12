@@ -7,7 +7,7 @@
 		"task": {
 			"type": "cstr",
 			"default": "Optdensity",
-			"comment": "The task to be performed.",
+			"comment": "The task to be performed. Optdensity solves for the electronic structure to selfconsistency. Calculation performs a one-shot evaluation of calctype (see below) without selconsistency.",
 			"options": "Optdensity, Calculation, Tddft, Optmix"
 		},
 		"calctype": {
@@ -316,7 +316,7 @@
 			},
 			"file": {
 				"type": "str",
-				"comment": "The file name of input structure. ",
+				"comment": "The file name of input structure. Many file formats are available. We use `ASE's I/O <https://wiki.fysik.dtu.dk/ase/ase/io/io.html#module-ase.io>'_.",
 				"default": null
 			},
 			"split": {
@@ -440,11 +440,13 @@
 			},
 			"x_str": {
 				"type": "str",
-				"default": null
+				"default": null,
+                                "comment": "See `libxc's available exchange functionals <https://www.tddft.org/programs/libxc/functionals/>'_."
 			},
 			"c_str": {
 				"type": "str",
-				"default": null
+				"default": null,
+                                "comment": "See `libxc's available correlation functionals <https://www.tddft.org/programs/libxc/functionals/>'_."
 			}
 		},
 		"kedf": {
