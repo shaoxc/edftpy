@@ -316,7 +316,7 @@
 			},
 			"file": {
 				"type": "str",
-				"comment": "The file name of input structure. Many file formats are available. We use `ASE's I/O <https://wiki.fysik.dtu.dk/ase/ase/io/io.html#module-ase.io>'_.",
+				"comment": "The file name of input structure. Many file formats are available. We use `ASE's I/O <https://wiki.fysik.dtu.dk/ase/ase/io/io.html#module-ase.io>`_.",
 				"default": null
 			},
 			"split": {
@@ -432,7 +432,8 @@
 			},
 			"dftpy": {
 				"type": "str",
-				"default": "exc"
+				"default": "exc",
+				"comment": "x_str, c_str"
 			},
 			"xc": {
 				"type": "str",
@@ -441,12 +442,12 @@
 			"x_str": {
 				"type": "str",
 				"default": null,
-                                "comment": "See `libxc's available exchange functionals <https://www.tddft.org/programs/libxc/functionals/>'_."
+				"comment": "See `libxc's available exchange functionals <https://www.tddft.org/programs/libxc/functionals/>`_."
 			},
 			"c_str": {
 				"type": "str",
 				"default": null,
-                                "comment": "See `libxc's available correlation functionals <https://www.tddft.org/programs/libxc/functionals/>'_."
+				"comment": "See `libxc's available correlation functionals <https://www.tddft.org/programs/libxc/functionals/>`_."
 			}
 		},
 		"kedf": {
