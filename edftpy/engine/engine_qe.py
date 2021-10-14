@@ -281,6 +281,7 @@ class EngineQE(Engine):
         ase_io_driver.write_espresso_in(fileobj, ase_atoms, pw_params, **cell_params)
         self._write_params_cards(fileobj, params, cards)
         prefix = pw_params['control'].get('prefix', None)
+        if 'inputtddft' not in params : params['inputtddft'] = {}
         self._write_params_others(fileobj, params, prefix = prefix)
         fileobj.close()
         return
@@ -319,12 +320,9 @@ class EngineQE(Engine):
                         fd.write(line + '\n')
         return
 
-    def _write_params_others(self, fd, params = None, prefix = 'sub_', **kwargs):
-        if params is None or len(params) == 0 :
-            return
+    def _write_params_others(self, fd, params = None, prefix = 'sub_', keys = ['inputtddft'], **kwargs):
+        if params is None : return
         fstrl = []
-        # pw_keys = ['control', 'system', 'electrons', 'ions', 'cell']
-        keys = ['inputtddft']
         for section in params:
             if section not in keys : continue
             if section == 'inputtddft' :
