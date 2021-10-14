@@ -188,7 +188,7 @@ class DriverKS(Driver):
         self.gaussian_density_sub = Field(grid = self.grid_sub)
 
         if rho_ini is None :
-            if density_initial and density_initial == 'temp' :
+            if density_initial and density_initial != 'temp' :
                 rho_ini = self.subcell.density.gather(grid = self.grid)
 
         if rho_ini is not None :
@@ -423,7 +423,7 @@ class DriverKS(Driver):
         else :
             self.engine.stop_scf(status, save = save)
 
-class DriverEX(Driver):
+class DriverEX(DriverKS):
     """
     Note :
         The potential and density will gather in rank == 0 for engine.
@@ -431,22 +431,6 @@ class DriverEX(Driver):
     def __init__(self, engine = None, **kwargs):
         kwargs["technique"] = kwargs.get("technique", 'EX')
         super().__init__(**kwargs)
-        self.engine = engine
-
-        self._driver_initialise(**kwargs)
-        if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = 0.5, predecut = 0, delay = 1)
-        elif isinstance(self.mixer, float):
-            self.mix_coef = self.mixer
-
-        fstr = f'Subcell grid({self.prefix}): {self.subcell.grid.nrR}  {self.subcell.grid.nr}\n'
-        fstr += f'Subcell shift({self.prefix}): {self.subcell.grid.shift}\n'
-        if self.grid_driver is not None :
-            fstr += f'{self.__class__.__name__} has two grids :{self.grid.nrR} and {self.grid_driver.nrR}'
-        sprint(fstr, comm=self.comm, level=1)
-        self.engine.write_stdout(fstr)
-        #-----------------------------------------------------------------------
-        self.update_workspace(first = True, restart = self.restart)
 
     def update_workspace(self, subcell = None, first = False, update = 0, restart = False, **kwargs):
         """
@@ -463,60 +447,8 @@ class DriverEX(Driver):
             self.engine.update_ions(self.subcell, update = update)
         return
 
-    @property
-    def grid(self):
-        if self._grid is None :
-            if np.all(self.subcell.grid.nrR == self.subcell.grid.nr):
-                self._grid = self.subcell.grid
-            else :
-                self._grid = Grid(self.subcell.grid.lattice, self.subcell.grid.nrR, direct = True)
-        return self._grid
-
-    @property
-    def grid_sub(self):
-        if self._grid_sub is None :
-            mp = MP(comm = self.comm, decomposition = self.subcell.grid.mp.decomposition)
-            self._grid_sub = Grid(self.subcell.grid.lattice, self.subcell.grid.nrR, direct = True, mp = mp)
-        return self._grid_sub
-
-    def get_grid_driver(self, grid):
-        nr = np.zeros(3, dtype = 'int32')
-        self.engine.get_grid(nr)
-        if not np.all(grid.nrR == nr) and self.comm.rank == 0 :
-            grid_driver = Grid(grid.lattice, nr, direct = True)
-        else :
-            grid_driver = None
-        return grid_driver
-
-    def _driver_initialise(self, append = False, **kwargs):
-        self.engine.set_stdout(self.outfile, append = append)
-        if self.task == 'optical' :
-            self.engine.tddft_initial(self.filename, comm = self.comm)
-        else :
-            self.engine.initial(self.filename, comm = self.comm)
-        self.grid_driver = self.get_grid_driver(self.grid)
-
-    def _format_field(self, density, **kwargs):
-        if self.grid_driver is not None and self.comm.rank == 0:
-            charge = grid_map_data(density, grid = self.grid_driver)
-        else :
-            charge = density
-        #-----------------------------------------------------------------------
-        charge = charge.reshape((-1, self.nspin), order=self.engine.units['order']) / self.engine.units['volume']
-        return charge
-
-    def _format_field_invert(self, charge, grid = None, **kwargs):
-        if self.comm.rank > 0 : return self.atmp
-        if grid is None :
-            grid = self.grid
-
-        if self.grid_driver is not None and np.any(self.grid_driver.nrR != grid.nrR):
-            density = Field(grid=self.grid_driver, direct=True, data = charge, order = self.engine.units['order'])
-            rho = grid_map_data(density, grid = grid)
-        else :
-            rho = Field(grid=grid, rank=1, direct=True, data = charge, order = self.engine.units['order'])
-        rho *= self.engine.units['volume']
-        return rho
+    def init_density(self, rho_ini = None, density_initial = None, **kwargs):
+        pass
 
     def get_energy(self, olevel = 0, **kwargs):
         if olevel == 0 :
@@ -543,26 +475,13 @@ class DriverEX(Driver):
             self.engine.write_stdout(fstr)
         return func
 
-    def get_forces(self, **kwargs):
-        forces = self.engine.get_force(**kwargs)
-        return forces
-
-    def end_scf(self, **kwargs):
-        self.engine.end_scf()
-
-    def save(self, save = ['D'], **kwargs):
-        self.engine.save(save)
-
-    def stop_run(self, status = 0, save = ['D'], **kwargs):
-        self.engine.stop_scf(status, save = save)
-
 class DriverMM(DriverEX):
     """
     Note :
         The potential and density will gather in rank == 0 for engine.
     """
     def __init__(self, **kwargs):
-        kwargs["technique"] = 'MM'
+        kwargs["technique"] = kwargs.get("technique", 'MM')
         super().__init__(**kwargs)
 
     def _driver_initialise(self, append = False, **kwargs):
