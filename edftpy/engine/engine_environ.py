@@ -35,7 +35,6 @@ class EngineEnviron(Engine):
         kwargs['units']['volume'] = unit_vol
         kwargs['units']['energy'] = 0.5
         super().__init__(**kwargs)
-        self.inputs = {}
 
         # initialize some persistent objects that Environ needs
         # TODO this should be inferred through edftpy
@@ -43,14 +42,6 @@ class EngineEnviron(Engine):
         # this being persistent takes up memory, might want a better way of
         # temporariliy storing and then cleaning this up
         self.potential = None
-        #-----------------------------------------------------------------------
-        self.outfile = 'environ.out'
-        append = kwargs.get('append', False)
-        if append :
-            self.fileobj = open(self.outfile, 'a')
-        else :
-            self.fileobj = open(self.outfile, 'w')
-        #-----------------------------------------------------------------------
 
     @print2file()
     def get_force(self, **kwargs):
@@ -78,8 +69,7 @@ class EngineEnviron(Engine):
         # TODO verify units for values that get communicated to Environ from edftpy
         # TODO handle any input value missing things better?
         #-----------------------------------------------------------------------
-        self.inputs.update(kwargs)
-        kwargs = self.inputs
+        kwargs = self.write_input(**kwargs)
         #-----------------------------------------------------------------------
         self.nat = kwargs.get('nat')
         ntyp = kwargs.get('ntyp')
@@ -111,7 +101,7 @@ class EngineEnviron(Engine):
         _check_kwargs('tau', tau, 'initial')
         _check_kwargs('do_comp_mt', do_comp_mt, 'initial')
 
-        self.comm = comm
+        self.comm = comm or self.comm
 
         if hasattr(comm, 'py2f') :
             commf = comm.py2f()
@@ -178,8 +168,7 @@ class EngineEnviron(Engine):
                 }
         defaults.update(kwargs)
         defaults.update(subs)
-        self.inputs = defaults
-        return
+        return defaults
 
     @print2file()
     def scf(self, rho, update = True, **kwargs):

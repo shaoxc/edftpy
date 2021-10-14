@@ -454,8 +454,6 @@ def config2evaluator_of(config, keysys, ions=None, grid=None, pplist = None, gsy
 
 def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None, driver = None, subcell = None, mp = None, comm = None, append = False):
     gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
-    pp_path = config["PATH"]["pp"]
-
     ecut = config[keysys]["grid"]["ecut"]
     calculator = config[keysys]["calculator"]
     mix_kwargs = config[keysys]["mix"].copy()
@@ -463,13 +461,9 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
     prefix = config[keysys]["prefix"]
     kpoints = config[keysys]["kpoints"]
     exttype = config[keysys]["exttype"]
-    atomicfiles = config[keysys]["density"]["atomic"].copy()
     opt_options = config[keysys]["opt"].copy()
+    density_initial = config[keysys]["density"]["initial"]
     tddft = config['TD']
-    if atomicfiles :
-        for k, v in atomicfiles.copy().items():
-            if not os.path.exists(v):
-                atomicfiles[k] = pp_path + os.sep + v
     #-----------------------------------------------------------------------
     if ecut :
         ecut *= ENERGY_CONV["eV"]["Hartree"]
@@ -531,7 +525,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
             'task' : task,
             'restart' : restart,
             'append' : append,
-            'options' : opt_options
+            'options' : opt_options,
+            'density_initial' : density_initial
             }
 
     if cell_change == 'cell' :
@@ -668,7 +663,7 @@ def config2subcell(config, keysys, ions, grid, pplist = None, optimizer = None, 
         if subcell.density.shape == driver.density.shape :
             subcell.density[:] = driver.density
     else :
-        if infile : # initial='Read'
+        if infile : # initial='read'
             ext = os.path.splitext(infile)[1].lower()
             if ext != ".snpy":
                 fstr = f'!WARN : snpy format for density initialization will better, but this file is "{infile}".'
@@ -680,18 +675,17 @@ def config2subcell(config, keysys, ions, grid, pplist = None, optimizer = None, 
                 subcell.grid.scatter(density, out = subcell.density)
             else :
                 subcell.density[:] = io.read_density(infile, grid=subcell.grid)
-        elif initial == 'Atomic' and len(atomicfiles) > 0 :
+        elif initial == 'atomic' and len(atomicfiles) > 0 :
             atomicd = AtomicDensity(files = atomicfiles)
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
-        elif initial == 'Heg' :
+        elif initial == 'heg' :
             atomicd = AtomicDensity()
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
-        elif technique == 'OF' :
+        elif technique == 'OF' : # ofdft
             from edftpy.engine.engine_dftpy import EngineDFTpy
             subcell.density[:] = EngineDFTpy.dftpy_opt(subcell.ions, subcell.density, pplist)
         else :
-            # given a negative value which means will get from driver
-            subcell.density[:] = -1.0
+            pass
 
     return subcell
 
