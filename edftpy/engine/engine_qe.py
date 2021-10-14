@@ -23,8 +23,10 @@ class EngineQE(Engine):
         unit_vol = unit_len ** 3
         units = kwargs.get('units', {})
         kwargs['units'] = units
+        kwargs['units']['length'] = unit_len
         kwargs['units']['volume'] = unit_vol
         kwargs['units']['energy'] = 0.5
+        kwargs['units']['order'] = 'F'
         super().__init__(**kwargs)
         self.embed = None
         self.comm = SerialComm()
