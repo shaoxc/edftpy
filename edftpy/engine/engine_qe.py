@@ -36,12 +36,14 @@ class EngineQE(Engine):
         forces = qepy.force_mod.get_array_force().T * self.units['energy']
         return forces
 
-    def embed_base(self, exttype = 0, diag_conv = 1E-1, lewald = False, **kwargs):
+    def embed_base(self, exttype = 0, diag_conv = 1E-1, lewald = False, iterative = True, **kwargs):
         embed = qepy.qepy_common.embed_base()
         embed.exttype = exttype
         embed.diag_conv = diag_conv
         # Include ewald or not
         embed.lewald = lewald
+        embed.iterative = iterative
+        embed.tddft.iterative = iterative
         self.embed = embed
         return embed
 
@@ -82,10 +84,12 @@ class EngineQE(Engine):
             if self.comm.size > 1 : self.comm.Barrier()
         self.inputfile = inputfile
 
-    def initial(self, inputfile = None, comm = None, **kwargs):
+    def initial(self, inputfile = None, comm = None, iterative = True, **kwargs):
         self._initial_files(inputfile = inputfile, comm = comm, **kwargs)
         qepy.qepy_pwscf(self.inputfile, self.commf)
         self.embed = self.embed_base(**kwargs)
+        if iterative :
+            qepy.control_flags.set_niter(1)
 
     def tddft_initial(self, inputfile = None, comm = None, **kwargs):
         self._initial_files(inputfile = inputfile, comm = comm, **kwargs)
@@ -101,10 +105,8 @@ class EngineQE(Engine):
         qepy.punch(what)
         qepy.close_files(False)
 
-    def scf(self, initial = True, **kwargs):
+    def scf(self, **kwargs):
         self.embed.mix_coef = -1.0
-        self.embed.finish = False
-        self.embed.initial = initial
         qepy.qepy_electrons_scf(0, 0, self.embed)
 
     def scf_mix(self, coef = 0.7, **kwargs):
@@ -136,20 +138,19 @@ class EngineQE(Engine):
         qepy.qepy_clean_saved()
 
     def end_scf(self, **kwargs):
-        self.embed.finish = True
-        qepy.qepy_electrons_scf(0, 0, self.embed)
+        if self.embed.iterative :
+            self.embed.finish = True
+            qepy.qepy_electrons_scf(0, 0, self.embed)
 
     def end_tddft(self, **kwargs):
-        self.embed.tddft.finish = True
-        qepy.qepy_molecule_optical_absorption(self.embed)
+        if self.embed.tddft.iterative :
+            self.embed.tddft.finish = True
+            qepy.qepy_molecule_optical_absorption(self.embed)
 
     def tddft(self, **kwargs):
         qepy.qepy_molecule_optical_absorption(self.embed)
 
     def tddft_after_scf(self, inputfile = None, **kwargs):
-        self.embed.tddft.initial = True
-        self.embed.tddft.finish = False
-        self.embed.tddft.nstep = 900000 # Any large enough number
         inputfile = inputfile or self.inputfile
         qepy.qepy_tddft_readin(inputfile)
         qepy.qepy_tddft_main_setup(self.embed)

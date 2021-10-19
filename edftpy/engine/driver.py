@@ -11,7 +11,7 @@ from edftpy.utils.math import grid_map_data
 from edftpy.utils import clean_variables
 from edftpy.functional import hartree_energy
 from edftpy.mpi import sprint, MP
-from edftpy.engine.engine import Driver, Engine
+from edftpy.engine.engine import Driver
 
 
 class DriverConstraint(object):
@@ -276,16 +276,11 @@ class DriverKS(Driver):
 
     def get_density(self, vext = None, sdft = 'sdft', **kwargs):
         self._iter += 1
-        if self._iter == 1 :
-            # The first step density mixing also need keep initial = True
-            initial = True
-        else :
-            initial = False
 
         self.prev_density[:] = self.density
 
         if self.mix_coef is not None :
-            # If use pwscf mixer, do not need format the density
+            # If use engine mixer, do not need format the density
             pass
         else :
             self.charge[:] = self._format_field()
@@ -301,7 +296,7 @@ class DriverKS(Driver):
 
         self.engine.set_extpot(extpot)
         #
-        self._get_charge(initial = initial)
+        self._get_charge()
         #
         self.energy = 0.0
         self.dp_norm = 1.0
