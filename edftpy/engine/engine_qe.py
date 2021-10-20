@@ -84,12 +84,10 @@ class EngineQE(Engine):
             if self.comm.size > 1 : self.comm.Barrier()
         self.inputfile = inputfile
 
-    def initial(self, inputfile = None, comm = None, iterative = True, **kwargs):
+    def initial(self, inputfile = None, comm = None, **kwargs):
         self._initial_files(inputfile = inputfile, comm = comm, **kwargs)
         qepy.qepy_pwscf(self.inputfile, self.commf)
         self.embed = self.embed_base(**kwargs)
-        if iterative :
-            qepy.control_flags.set_niter(1)
 
     def tddft_initial(self, inputfile = None, comm = None, **kwargs):
         self._initial_files(inputfile = inputfile, comm = comm, **kwargs)
@@ -177,36 +175,17 @@ class EngineQE(Engine):
         self._write_params(filename, ase_atoms, params = in_params, cell_params = cell_params, cards = cards, **kwargs)
 
     def _fix_params(self, params = None, prefix = 'sub_'):
-        #output of qe
         default_params = OrderedDict({
-                'control' :
-                {
+                'control' : {
                     'calculation' : 'scf',
-                    # 'verbosity' : 'high',
-                    'restart_mode' : 'from_scratch',
-                    # 'iprint' : 1,
-                    # 'disk_io' : 'none', # do not save anything for qe
                     },
                 'system' :
                 {
                     'ibrav' : 0,
-                    'nat' : 1,
-                    'ntyp' : 1,
                     'nosym' : True,
-                    # 'ecutwfc' : 40,
-                    # 'occupations' : 'smearing',
-                    # 'degauss' : 0.001,
-                    # 'smearing' : 'gaussian',
                     },
-                'electrons' :
-                {
-                    'mixing_beta' : 0.7,
-                    },
-                'ions' :
-                {
-                    'pot_extrapolation' : 'atomic',  # extrapolation for potential from preceding ionic steps
-                    'wfc_extrapolation' : 'none'   # no extrapolation for wfc from preceding ionic steps
-                    },
+                'electrons' : {},
+                'ions' : {},
                 'cell' : {}
                 })
         fix_params = {
@@ -217,7 +196,6 @@ class EngineQE(Engine):
                     },
                 'electrons' :
                 {
-                    'electron_maxstep' : 1, # only run 1 step for scf
                     'conv_thr' : 0.0, # set very high accuracy, otherwise pwscf mixer cause davcio (15) error
                     },
                 }
