@@ -392,10 +392,10 @@
 				"type": "lstr",
 				"default": null,
 				"options": "None, heg, temp, atomic",
-				"comment": "Default is None, which means engines determine the initial density by themself. 'temp' means initial density from engine temporary output. 'atomic' means base on the atomic density files initialize the density."
+				"comment": "Default is None, which means engines determine the initial density by themself. 'temp' means initial density from engine temporary output. 'atomic' means base on the atomic density files or pseudopotentials initialize the density."
 			},
 			"atomic": {
-				"comment": "If `initial` set the Atomic, here need give each elements atomic density.",
+				"comment": "If :ref:`density-initial<density-initial>` set the Atomic, here can set each elements atomic density.",
 				"type": "cdict",
 				"default": {}
 			},

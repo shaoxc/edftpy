@@ -1,8 +1,9 @@
 import numpy as np
 import os
+import contextlib
 
 from dftpy.constants import LEN_CONV, ENERGY_CONV, FORCE_CONV, STRESS_CONV, ZERO
-from edftpy.io import write
+from edftpy.io import write, print2file
 from edftpy.properties import get_electrostatic_potential
 
 from edftpy.api.parse_config import config2optimizer, config2total_embed
@@ -11,6 +12,7 @@ from edftpy.mpi import graphtopo, sprint
 import edftpy
 import dftpy
 
+@print2file(fileobj = '/dev/null')
 def import_drivers(calcs = {}):
     """
     Import the engine of different drivers
@@ -28,6 +30,7 @@ def import_drivers(calcs = {}):
     fs = "{:>20s} Version : {}\n"
     info = fs.format('eDFTpy', edftpy.__version__)
     info += fs.format('DFTpy', dftpy.__version__)
+    #
     try:
         from edftpy.engine import engine_qe
         if 'pwscf' in calcs or 'qe' in calcs :

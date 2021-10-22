@@ -59,7 +59,7 @@ def config_correct(config):
     tech_keys = {'dftpy' : 'OF', 'pwscf' : 'KS', 'qe' : 'KS', 'environ'  : 'EX', 'mbx' : 'MM'}
     subkeys = [key for key in config if key.startswith('SUB')]
     for key in subkeys :
-        config[key]['technique'] = tech_keys.get(config[key]['technique'], 'KS')
+        config[key]['technique'] = tech_keys.get(config[key]['calculator'], 'KS')
         if not config[key]["prefix"] :
             config[key]["prefix"] = key.lower()
 
@@ -189,7 +189,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
                 mp = gsystem.grid.mp
             else :
                 mp = MP(comm = graphtopo.comm_sub, decomposition = graphtopo.decomposition)
-            driver = config2driver(config, keysys, ions, grid, pplist, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp, append = append)
+            driver = config2driver(config, keysys, ions, grid, pplist, total_evaluator = total_evaluator, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp, append = append)
             #-----------------------------------------------------------------------
             #PSEUDO was evaluated on all processors, so directly remove from embedding
             # if 'PSEUDO' in driver.evaluator.funcdicts :
@@ -452,7 +452,7 @@ def config2evaluator_of(config, keysys, ions=None, grid=None, pplist = None, gsy
 
     return evaluator_of
 
-def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None, driver = None, subcell = None, mp = None, comm = None, append = False):
+def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = None, optimizer = None, cell_change = None, driver = None, subcell = None, mp = None, comm = None, append = False):
     gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
     ecut = config[keysys]["grid"]["ecut"]
     calculator = config[keysys]["calculator"]
@@ -469,7 +469,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, optimizer = None, c
         ecut *= ENERGY_CONV["eV"]["Hartree"]
     #-----------------------------------------------------------------------
     if subcell is None :
-        subcell = config2subcell(config, keysys, ions, grid, pplist = pplist, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp, comm = comm)
+        subcell = config2subcell(config, keysys, ions, grid, pplist = pplist, total_evaluator = total_evaluator, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp, comm = comm)
     #-----------------------------------------------------------------------
     if mix_kwargs['predecut'] : mix_kwargs['predecut'] *= ENERGY_CONV["eV"]["Hartree"]
     if mix_kwargs['scheme'] == 'Pulay' :
@@ -592,7 +592,7 @@ def get_dftpy_driver(config, keysys, ions, grid, pplist = None, optimizer = None
     driver = DriverOF(**margs)
     return driver
 
-def config2subcell(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None, driver = None, mp = None, comm = None):
+def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = None, optimizer = None, cell_change = None, driver = None, mp = None, comm = None):
     gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
     pp_path = config["PATH"]["pp"]
 
@@ -659,6 +659,11 @@ def config2subcell(config, keysys, ions, grid, pplist = None, optimizer = None, 
 
     subcell = SubCell(ions, grid, **kwargs)
 
+    if total_evaluator is not None :
+        pseudo = total_evaluator.funcdicts['PSEUDO']
+    else :
+        pseudo = None
+
     if cell_change == 'position' :
         if subcell.density.shape == driver.density.shape :
             subcell.density[:] = driver.density
@@ -675,15 +680,15 @@ def config2subcell(config, keysys, ions, grid, pplist = None, optimizer = None, 
                 subcell.grid.scatter(density, out = subcell.density)
             else :
                 subcell.density[:] = io.read_density(infile, grid=subcell.grid)
-        elif initial == 'atomic' and len(atomicfiles) > 0 :
-            atomicd = AtomicDensity(files = atomicfiles)
+        elif initial == 'atomic' :
+            atomicd = AtomicDensity(files = atomicfiles, pseudo = pseudo)
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
         elif initial == 'heg' :
             atomicd = AtomicDensity()
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
         elif technique == 'OF' : # ofdft
             from edftpy.engine.engine_dftpy import EngineDFTpy
-            subcell.density[:] = EngineDFTpy.dftpy_opt(subcell.ions, subcell.density, pplist)
+            subcell.density[:] = EngineDFTpy.dftpy_opt(subcell.ions, subcell.density, pplist, pseudo = pseudo)
         else :
             pass
 
