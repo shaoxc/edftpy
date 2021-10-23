@@ -681,7 +681,7 @@ def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = 
             else :
                 subcell.density[:] = io.read_density(infile, grid=subcell.grid)
         elif initial == 'atomic' :
-            atomicd = AtomicDensity(files = atomicfiles, pseudo = pseudo)
+            atomicd = AtomicDensity(files = atomicfiles, pseudo = pseudo, comm = subcell.grid.mp.comm)
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
         elif initial == 'heg' :
             atomicd = AtomicDensity()

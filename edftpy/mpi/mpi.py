@@ -237,6 +237,9 @@ class GraphTopo:
             return
         elif nprocs is None :
             raise AttributeError("Must give the 'nprocs' in parallel version")
+        elif len(nprocs) == 1 and nprocs[0] == 0 :
+            self.nprocs = np.ones(1, dtype = 'int')
+            return
         nprocs = np.asarray(nprocs, dtype = 'float')
         self.nprocs = np.rint(nprocs).astype(dtype = 'int')
         nmin = np.min(nprocs[nprocs > zero])

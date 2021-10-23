@@ -199,9 +199,9 @@ class Engine(ABC):
 
     def set_stdout(self, outfile, append = False, **kwargs):
         if append :
-            self.fileobj = open(outfile, 'a')
+            self.fileobj = open(outfile, 'a', buffering = 1)
         else :
-            self.fileobj = open(outfile, 'w')
+            self.fileobj = open(outfile, 'w', buffering = 1)
 
     def stop_scf(self, status = 0, save = ['D'], **kwargs):
         pass

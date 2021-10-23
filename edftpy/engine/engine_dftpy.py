@@ -60,9 +60,9 @@ class EngineDFTpy(Driver):
         self.outfile = self.prefix + '.out'
         if self.comm.rank == 0 :
             if self.append :
-                self.fileobj = open(self.outfile, 'a')
+                self.fileobj = open(self.outfile, 'a', buffering = 1)
             else :
-                self.fileobj = open(self.outfile, 'w')
+                self.fileobj = open(self.outfile, 'w', buffering = 1)
         else :
             self.fileobj = None
 
@@ -157,7 +157,7 @@ class EngineDFTpy(Driver):
         This is different compare to KS-driver, because here can use different embedding from KS-driver
         '''
         if extpot is None :
-            self.evaluator.get_embed_potential(self.density, gaussian_density = self.subcell.gaussian_density, with_ke = True, with_global = False)
+            self.evaluator.get_embed_potential(self.density, gaussian_density = self.subcell.gaussian_density, with_ke = True, with_global = True)
             extpot = self.evaluator.embed_potential
 
         if with_global :
@@ -342,7 +342,7 @@ class EngineDFTpy(Driver):
             func.energy += func_driver.energy
             fstr += f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
             sprint(fstr, comm=self.comm, level=1)
-            if self.fileobj : self.fileobj.write(fstr)
+            if self.fileobj : self.fileobj.write(fstr + '\n')
         return func
 
     @print2file()

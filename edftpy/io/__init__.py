@@ -17,7 +17,7 @@ def print2file(fileobj = None):
             else :
                 fobj = fileobj
             stdout = os.dup(1)
-            os.dup2(fobj.fileno(), 1)
+            if fobj is not None : os.dup2(fobj.fileno(), 1)
             results = function(*args, **kwargs)
             os.dup2(stdout, 1)
             if isinstance(fileobj, str): fobj.close()
