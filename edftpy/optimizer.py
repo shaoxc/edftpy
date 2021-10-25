@@ -280,12 +280,8 @@ class Optimization(object):
             # initial the global_potential
             self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = calcType)
             # static_potential = self.gsystem.total_evaluator.static_potential.copy()
-        for isub in range(self.nsub + len(self.of_drivers)):
-            if isub < self.nsub :
-                driver = self.drivers[isub]
-            else :
-                driver = self.of_drivers[isub - self.nsub]
-                isub = self.of_ids[isub - self.nsub]
+        for isub in range(self.nsub):
+            driver = self.drivers[isub]
             if driver is None :
                 global_potential = None
                 global_density = None
@@ -350,7 +346,6 @@ class Optimization(object):
               \sum_{J \neq I}^{N_{s}}\rho^{J}\left(v_{H}^{J}+v_{XC}^{J}+v_{ie}^{J}+v_{T_{s}}^{J}\right)\Bigr) (2)
         """
         approximate = 'density2'
-        # approximate = 'same'
         # approximate = 'density4'
 
         if approximate == 'density4' :
@@ -368,8 +363,14 @@ class Optimization(object):
         else :
             raise AttributeError("{} not supported now".format(approximate))
 
-        for isub in range(self.nsub):
-            driver = self.drivers[isub]
+        for isub in range(self.nsub + len(self.of_drivers)):
+            if isub < self.nsub :
+                driver = self.drivers[isub]
+                if driver is not None and driver.technique == 'OF' : continue
+            else :
+                driver = self.of_drivers[isub - self.nsub]
+                isub = self.of_ids[isub - self.nsub]
+
             if driver is None :
                 global_potential = None
                 extpot = None
@@ -465,8 +466,7 @@ class Optimization(object):
         for isub in range(self.nsub + len(self.of_drivers)):
             if isub < self.nsub :
                 driver = self.drivers[isub]
-                if driver is not None and driver.technique == 'OF' :
-                    continue
+                if driver is not None and driver.technique == 'OF' : continue
             else :
                 driver = self.of_drivers[isub - self.nsub]
                 isub = self.of_ids[isub - self.nsub]
@@ -476,10 +476,13 @@ class Optimization(object):
                 global_density = None
             else :
                 if driver.evaluator.global_potential is None :
-                    if driver.comm.rank == 0 :
+                    if driver.technique == 'OF' :
                         driver.evaluator.global_potential = Field(grid=driver.grid)
                     else :
-                        driver.evaluator.global_potential = driver.atmp
+                        if driver.comm.rank == 0 :
+                            driver.evaluator.global_potential = Field(grid=driver.grid)
+                        else :
+                            driver.evaluator.global_potential = driver.atmp
                 global_potential = driver.evaluator.global_potential
                 if driver.comm.rank == 0 : root = self.gsystem.comm.rank
             root = self.gsystem.grid.mp.amax(root)

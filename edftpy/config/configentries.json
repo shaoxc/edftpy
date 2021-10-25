@@ -389,13 +389,13 @@
 				"default": null
 			},
 			"initial": {
-				"type": "cstr",
+				"type": "lstr",
 				"default": null,
-				"options": "None, Atomic, Read, Ofdft, Heg",
-				"comment": "For OFDFT subsystem the default is `Ofdft`."
+				"options": "None, heg, temp, atomic",
+				"comment": "Default is None, which means engines determine the initial density by themself. 'temp' means initial density from engine temporary output. 'atomic' means base on the atomic density files or pseudopotentials initialize the density."
 			},
 			"atomic": {
-				"comment": "If `initial` set the Atomic, here need give each elements atomic density.",
+				"comment": "If :ref:`density-initial<density-initial>` set the Atomic, here can set each elements atomic density.",
 				"type": "cdict",
 				"default": {}
 			},
@@ -633,6 +633,12 @@
 			"default": "KE  XC",
 			"comment": "The embedding potential.",
 			"options": "KE, XC"
+		},
+		"embedpot": {
+			"type": "str",
+			"default": null,
+			"comment": "The output file or format of embedding potential. The name starts with '.' represent the format.",
+			"options": ""
 		},
 		"exttype": {
 			"type": "int",

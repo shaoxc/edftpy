@@ -16,23 +16,67 @@ from edftpy.mixer import PulayMixer, LinearMixer
 from edftpy.mpi import GraphTopo, MP
 
 class Test(unittest.TestCase):
-    def test_optim(self):
-        xc_kwargs = {"x_str":'lda_x','c_str':'lda_c_pz', 'libxc' :False}
-        for method in ['full', 'part', 'hamiltonian'] :
-            # Test TFvW-KE
-            ke_kwargs = {'name' :'TF'}
-            opt = self.get_optimizer(ke_kwargs, xc_kwargs = xc_kwargs, method = method)
-            energy = self.get_energy(opt)
-            print('method = ', method, 'TFvW : energy', energy)
-            self.assertTrue(np.isclose(energy, -8.281114354275829, rtol = 1E-3))
-            # Test vW-KE
-            ke_kwargs = None
-            opt = self.get_optimizer(ke_kwargs, xc_kwargs = xc_kwargs, method = method)
-            energy = self.get_energy(opt)
-            print('method = ', method, 'vW : energy', energy)
-            self.assertTrue(np.isclose(energy, -11.394097752526489, rtol = 1E-3))
+    def setUp(self):
+        self.energy = {'tfvw' :-8.281114354275829,
+                'vw' : -11.394097752526489}
+        self.kwargs = {}
 
-    def get_optimizer(self, ke_kwargs, xc_kwargs = {}, method = 'full'):
+    def test_full_sdft_tfvw(self):
+        kwargs = {'method' : 'full', 'sdft' : 'sdft', 'kedf' : 'tfvw'}
+        self._check_energy(**kwargs)
+
+    def test_full_sdft_vw(self):
+        kwargs = {'method' : 'full', 'sdft' : 'sdft', 'kedf' : 'vw'}
+        self._check_energy(**kwargs)
+
+    def test_part_sdft_tfvw(self):
+        kwargs = {'method' : 'part', 'sdft' : 'sdft', 'kedf' : 'tfvw'}
+        self._check_energy(**kwargs)
+
+    def test_part_sdft_vw(self):
+        kwargs = {'method' : 'part', 'sdft' : 'sdft', 'kedf' : 'vw'}
+        self._check_energy(**kwargs)
+
+    def test_part_pdft_tfvw(self):
+        kwargs = {'method' : 'part', 'sdft' : 'pdft', 'kedf' : 'tfvw'}
+        self._check_energy(**kwargs)
+
+    def test_part_pdft_vw(self):
+        kwargs = {'method' : 'part', 'sdft' : 'pdft', 'kedf' : 'vw'}
+        self._check_energy(**kwargs)
+
+    def test_hamiltonian_sdft_tfvw(self):
+        kwargs = {'method' : 'hamiltonian', 'sdft' : 'sdft', 'kedf' : 'tfvw'}
+        self._check_energy(**kwargs)
+
+    def test_hamiltonian_sdft_vw(self):
+        kwargs = {'method' : 'hamiltonian', 'sdft' : 'sdft', 'kedf' : 'vw'}
+        self._check_energy(**kwargs)
+
+    def test_hamiltonian_pdft_tfvw(self):
+        kwargs = {'method' : 'hamiltonian', 'sdft' : 'pdft', 'kedf' : 'tfvw'}
+        self._check_energy(**kwargs)
+
+    def test_hamiltonian_pdft_vw(self):
+        kwargs = {'method' : 'hamiltonian', 'sdft' : 'pdft', 'kedf' : 'vw'}
+        self._check_energy(**kwargs)
+
+    def _check_energy(self, **kwargs):
+        method = kwargs['method']
+        sdft = kwargs['sdft']
+        kedf = kwargs['kedf']
+        if kedf == 'tfvw' :
+            ke_kwargs = {'name' :'TF'}
+        else :
+            ke_kwargs = None
+        xc_kwargs = {"x_str":'lda_x','c_str':'lda_c_pz', 'libxc' :False}
+        opt = self.get_optimizer(ke_kwargs, xc_kwargs = xc_kwargs, method = method, sdft = sdft)
+        energy = self.get_energy(opt)
+        ref_energy = self.energy[kedf]
+        print("method = '{}', kedf = '{}', energy = {}, ref = {}".format(method, kedf, energy, ref_energy))
+        self.assertTrue(np.isclose(energy, ref_energy, rtol = 1E-3))
+
+    def get_optimizer(self, ke_kwargs, xc_kwargs = {}, method = 'full', sdft = 'sdft'):
         data_path = os.environ.get('EDFTPY_DATA_PATH')
         if not data_path : data_path = 'DATA/'
         if not os.path.exists(data_path) : data_path = '../DATA/'
@@ -68,7 +112,7 @@ class Test(unittest.TestCase):
         driver_a = self.gen_sub_of(ions, grid, pplist, index_a, atomicd, xc_kwargs, ke_kwargs, emb_ke_kwargs = emb_ke_kwargs, gsystem = gsystem, method = method, mp = mp)
         drivers = [driver_a]
         graphtopo.build_region(grid=gsystem.grid, drivers=drivers)
-        optimization_options = {'econv' : 1e-6, 'maxiter' : 70}
+        optimization_options = {'econv' : 1e-6, 'maxiter' : 70, 'sdft' : sdft}
         optimization_options["econv"] *= gsystem.ions.nat
         opt = Optimization(gsystem = gsystem, drivers = drivers, options = optimization_options)
         return opt

@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import signal
 from abc import ABC, abstractmethod
+from edftpy.mpi import sprint, SerialComm
 
 class Driver(ABC):
     def __init__(self, technique = 'OF', key = None,
@@ -49,6 +50,12 @@ class Driver(ABC):
         self.residual_norm = 0.0
         self.dp_norm = 0.0
         self.energy = None
+        self._grid = None
+        self._grid_sub = None
+        self.atmp = np.zeros(1)
+        self.atmp2 = np.zeros((1, self.nspin), order='F')
+        self.mix_coef = None
+        self.outfile = self.prefix + '.out'
 
     def get_density(self, **kwargs):
         pass
@@ -134,7 +141,7 @@ class Engine(ABC):
         embed : The object contains the embedding information.
         units : The engine/driver to eDFTpy. (e.g. energy : Ry -> Hartree is 0.5)
     """
-    def __init__(self, units = {}, **kwargs):
+    def __init__(self, units = {}, comm = None, **kwargs):
         self.units = {
                 'length' : 1.0,
                 'volume' : 1.0,
@@ -142,14 +149,12 @@ class Engine(ABC):
                 'order' : 'F',
                 }
         self.units.update(units)
+        self.fileobj = None
+        self.comm = SerialComm()
 
     def get_force(self, icalc = 0, **kwargs):
         force = None
         return force
-
-    def embed_base(self, *args, **kwargs):
-        embed = None
-        return embed
 
     def calc_energy(self, **kwargs):
         energy = None
@@ -193,7 +198,10 @@ class Engine(ABC):
         pass
 
     def set_stdout(self, outfile, append = False, **kwargs):
-        pass
+        if append :
+            self.fileobj = open(outfile, 'a', buffering = 1)
+        else :
+            self.fileobj = open(outfile, 'w', buffering = 1)
 
     def stop_scf(self, status = 0, save = ['D'], **kwargs):
         pass
@@ -225,10 +233,7 @@ class Engine(ABC):
         pass
 
     def write_stdout(self, line, **kwargs):
-        pass
-
-    def write_input(self, filename = 'sub_driver.in', subcell = None, params = {}, cell_params = {}, base_in_file = None, **kwargs):
-        pass
+        sprint(line, comm = self.comm, fileobj = self.fileobj, **kwargs)
 
     def get_potential(self, **kwargs):
         return None

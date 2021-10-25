@@ -20,16 +20,17 @@ except Exception:
 class EngineEnviron(Engine):
     """Engine for Environ."""
     def __init__(self, **kwargs) -> None:
+        unit_len = kwargs.get('length', 1.0)
+        unit_vol = unit_len ** 3
+        units = kwargs.get('units', {})
+        kwargs['units'] = units
+        kwargs['units']['volume'] = unit_vol
+        kwargs['units']['energy'] = 0.5
+        super().__init__(**kwargs)
 
         self.nat = 0
         self.threshold = 0.0
         self.potential = None  # TODO does this need to be persist?
-        self.outfile = 'environ.out'
-
-        if kwargs.get('append', False):
-            self.fileobj = open(self.outfile, 'a')
-        else:
-            self.fileobj = open(self.outfile, 'w')
 
     # TODO move initial into __init__
 
@@ -198,7 +199,7 @@ class EngineEnviron(Engine):
     def set_mbx_charges(self, rho) -> None:
         """
         Add MBX charges to Environ's charge density.
-        
+
         :param rho: the MBX charge density
         :type  rho: ndarray[float]
         """
@@ -230,3 +231,42 @@ class EngineEnviron(Engine):
     def stop_run(self, **kwargs) -> None:
         """Destroy Environ objects."""
         setup.clean_environ()
+
+    def write_input(self, subcell = None, **kwargs):
+        defaults = {
+                'ecutrho' : 300,
+                }
+        nat = subcell.ions.nat
+        ntyp = len(subcell.ions.Zval)
+        alat = subcell.grid.latparas[0]
+        at = subcell.ions.pos.cell.lattice/alat
+        tau = subcell.ions.pos.to_cart().T / subcell.grid.latparas[0]
+        labels = subcell.ions.labels
+        zv = np.zeros(ntyp)
+        # atom_label = np.ones((3, ntyp), dtype = 'int32')*32
+        atom_label = np.zeros((3, ntyp), dtype = 'c')
+        atom_label[:] = ' '
+        ityp = np.ones(nat, dtype = 'int32')
+        i = -1
+        nelec = 0.0
+        for key, v in subcell.ions.Zval.items():
+            i += 1
+            zv[i] = v
+            atom_label[:len(key), i] = key
+            mask = labels == key
+            ityp[mask] = i + 1
+            nelec += v*np.count_nonzero(mask)
+        subs = {
+                'at' : at,
+                'nat' : nat,
+                'ntyp' : ntyp,
+                'alat' : alat,
+                'tau' : tau,
+                'zv' : zv,
+                'atom_label' : atom_label,
+                'ityp' : ityp,
+                'nelec' : nelec,
+                }
+        defaults.update(kwargs)
+        defaults.update(subs)
+        return defaults

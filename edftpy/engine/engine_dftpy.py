@@ -10,6 +10,7 @@ from edftpy.mixer import LinearMixer, PulayMixer, AbstractMixer
 from edftpy.utils.math import grid_map_data
 from edftpy.functional import hartree_energy, KEDFunctional
 from edftpy.mpi import sprint
+from edftpy.io import print2file
 from .hamiltonian import Hamiltonian
 from edftpy.engine.engine import Driver
 
@@ -59,15 +60,15 @@ class EngineDFTpy(Driver):
         self.outfile = self.prefix + '.out'
         if self.comm.rank == 0 :
             if self.append :
-                self.fileobj = open(self.outfile, 'a')
+                self.fileobj = open(self.outfile, 'a', buffering = 1)
             else :
-                self.fileobj = open(self.outfile, 'w')
+                self.fileobj = open(self.outfile, 'w', buffering = 1)
         else :
             self.fileobj = None
 
         fstr = f'Subcell grid({self.prefix}): {self.subcell.grid.nrR}  {self.subcell.grid.nr}\n'
         fstr += f'Subcell shift({self.prefix}): {self.subcell.grid.shift}\n'
-        if self.comm.rank == 0 : self.fileobj.write(fstr)
+        if self.fileobj : self.fileobj.write(fstr)
         sprint(fstr, comm=self.comm)
 
         self.update_workspace(first = True)
@@ -156,7 +157,7 @@ class EngineDFTpy(Driver):
         This is different compare to KS-driver, because here can use different embedding from KS-driver
         '''
         if extpot is None :
-            self.evaluator.get_embed_potential(self.density, gaussian_density = self.subcell.gaussian_density, with_ke = True, with_global = False)
+            self.evaluator.get_embed_potential(self.density, gaussian_density = self.subcell.gaussian_density, with_ke = True, with_global = True)
             extpot = self.evaluator.embed_potential
 
         if with_global :
@@ -187,6 +188,7 @@ class EngineDFTpy(Driver):
         self.evaluator_of.set_rest_rho(self.charge)
         return
 
+    @print2file()
     def get_density(self, res_max = None, sdft = 'sdft', **kwargs):
         self._iter += 1
         #-----------------------------------------------------------------------
@@ -239,8 +241,8 @@ class EngineDFTpy(Driver):
 
         self.prev_charge[:] = self.charge
         #-----------------------------------------------------------------------
-        stdout = environ['STDOUT']
-        environ['STDOUT'] = self.fileobj
+        # stdout = environ['STDOUT']
+        # environ['STDOUT'] = self.fileobj
         if self.options['opt_method'] == 'full' :
             self.get_density_full_opt(**kwargs)
         elif self.options['opt_method'] == 'part' :
@@ -249,7 +251,7 @@ class EngineDFTpy(Driver):
             if self.comm.size > 1 :
                 raise AttributeError("Not support parallel")
             self.get_density_hamiltonian(**kwargs)
-        environ['STDOUT'] = stdout
+        # environ['STDOUT'] = stdout
         #-----------------------------------------------------------------------
         self._format_density_invert(self.charge, self.grid)
         return self.density
@@ -340,10 +342,10 @@ class EngineDFTpy(Driver):
             func.energy += func_driver.energy
             fstr += f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
             sprint(fstr, comm=self.comm, level=1)
-            if self.fileobj :
-                self.fileobj.write(fstr + '\n')
+            if self.fileobj : self.fileobj.write(fstr + '\n')
         return func
 
+    @print2file()
     def update_density(self, **kwargs):
         r = self.charge - self.prev_charge
         self.dp_norm = hartree_energy(r)
@@ -379,7 +381,7 @@ class EngineDFTpy(Driver):
             self.fileobj.close()
 
     @staticmethod
-    def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = None, options = {}):
+    def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = None, options = {}, pseudo = None):
         from edftpy.functional import LocalPP, KEDF, Hartree, XC
         from edftpy.evaluator import Evaluator
         from edftpy.density.init_density import AtomicDensity
@@ -393,7 +395,8 @@ class EngineDFTpy(Driver):
             ke_kwargs = {'name' :'GGA', 'k_str' : 'REVAPBEK'}
             # ke_kwargs = {'name' :'TFvW', 'y' :0.2}
         #-----------------------------------------------------------------------
-        pseudo = LocalPP(grid = rho.grid, ions=ions, PP_list=pplist, PME=True)
+        if not pseudo :
+            pseudo = LocalPP(grid = rho.grid, ions=ions, PP_list=pplist, PME=True)
         hartree = Hartree()
         xc = XC(**xc_kwargs)
         ke = KEDF(**ke_kwargs)

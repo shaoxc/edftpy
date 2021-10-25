@@ -39,10 +39,14 @@ class Graph :
         shape = [b[1,0]-b[0,0], b[1,1]-b[0,1], b[1,2]-b[0,2]]
         return np.array(shape)
 
-    def get_sub_index(self, i):
-        indl = self.sub_shift[i] - self.region_shift[i]
+    def get_sub_index(self, i, in_global = False):
+        if in_global :
+            indl = self.sub_shift[i]
+            ir = self.grid.nrR
+        else :
+            indl = self.sub_shift[i] - self.region_shift[i]
+            ir = self.region_shape[i]
         indr = indl + self.sub_shape[i]
-        ir = self.region_shape[i]
         # print('get_sub_index', indl, indr, ir)
         if np.all(indl > -1) and np.all(indr < ir + 1) :
             index = np.s_[indl[0]:indr[0], indl[1]:indr[1], indl[2]:indr[2]]
@@ -233,6 +237,9 @@ class GraphTopo:
             return
         elif nprocs is None :
             raise AttributeError("Must give the 'nprocs' in parallel version")
+        elif len(nprocs) == 1 and nprocs[0] == 0 :
+            self.nprocs = np.ones(1, dtype = 'int')
+            return
         nprocs = np.asarray(nprocs, dtype = 'float')
         self.nprocs = np.rint(nprocs).astype(dtype = 'int')
         nmin = np.min(nprocs[nprocs > zero])

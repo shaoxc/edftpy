@@ -1,16 +1,18 @@
 import numpy as np
 import os
+import contextlib
 
 from dftpy.constants import LEN_CONV, ENERGY_CONV, FORCE_CONV, STRESS_CONV, ZERO
-from edftpy.io import write
+from edftpy.io import write, print2file
 from edftpy.properties import get_electrostatic_potential
 
-from edftpy.api.parse_config import config2optimizer
+from edftpy.api.parse_config import config2optimizer, config2total_embed
 from edftpy.mpi import graphtopo, sprint
 
 import edftpy
 import dftpy
 
+@print2file(fileobj = '/dev/null')
 def import_drivers(calcs = {}):
     """
     Import the engine of different drivers
@@ -28,6 +30,7 @@ def import_drivers(calcs = {}):
     fs = "{:>20s} Version : {}\n"
     info = fs.format('eDFTpy', edftpy.__version__)
     info += fs.format('DFTpy', dftpy.__version__)
+    #
     try:
         from edftpy.engine import engine_qe
         if 'pwscf' in calcs or 'qe' in calcs :
@@ -101,7 +104,37 @@ def optimize_density_conf(config, **kwargs):
     sprint('Final energy (eV/atom)', energy * ENERGY_CONV['Hartree']['eV']/opt.gsystem.ions.nat)
     return opt
 
+def optimize_embed(config, optimizer, lprint = False, **kwargs):
+    if not lprint :
+        subkeys = [key for key in config if key.startswith('SUB')]
+        for keysys in subkeys:
+            if config[keysys].get("embedpot", None):
+                lprint = True
+                break
+    if lprint :
+        optimizer.set_kedf_params()
+        # remove = ['PSEUDO', 'HARTREE', 'KE']
+        remove = []
+        removed = optimizer.gsystem.total_evaluator.update_functional(remove = remove)
+        optimizer.set_global_potential()
+        optimizer.gsystem.total_evaluator.update_functional(add = removed)
+        for i, driver in enumerate(optimizer.drivers):
+            if driver is None : continue
+            outfile = config[driver.key]["embedpot"]
+            if outfile :
+                driver = config2total_embed(config, driver = driver, optimizer = optimizer)
+                if driver.technique == 'OF' or driver.comm.rank == 0 or graphtopo.isub is None:
+                    removed_sub = driver.total_embed.update_functional(remove = remove)
+                    potential = driver.total_embed(driver.density_global, calcType = ['V']).potential
+                    index = optimizer.gsystem.graphtopo.graph.get_sub_index(i, in_global = True)
+                    potential = driver.evaluator.global_potential - potential[index]
+                    write(outfile, potential, ions = driver.subcell.ions, data_type = 'potential')
+                    driver.total_embed.update_functional(add = removed_sub)
+
+    return
+
 def conf2output(config, optimizer):
+    optimize_embed(config, optimizer)
     if config["GSYSTEM"]["density"]['output']:
         sprint("Write Density...")
         outfile = config["GSYSTEM"]["density"]['output']

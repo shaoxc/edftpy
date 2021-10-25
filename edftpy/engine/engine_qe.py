@@ -10,6 +10,7 @@ from dftpy.constants import LEN_CONV
 from edftpy.io import ions2ase
 from edftpy.engine.engine import Engine
 from edftpy.utils.common import Grid, Field, Atoms
+from edftpy.mpi import SerialComm
 
 try:
     __version__ = qepy.__version__
@@ -22,20 +23,27 @@ class EngineQE(Engine):
         unit_vol = unit_len ** 3
         units = kwargs.get('units', {})
         kwargs['units'] = units
+        kwargs['units']['length'] = unit_len
         kwargs['units']['volume'] = unit_vol
         kwargs['units']['energy'] = 0.5
+        kwargs['units']['order'] = 'F'
         super().__init__(**kwargs)
         self.embed = None
+        self.comm = SerialComm()
 
     def get_force(self, icalc = 3, **kwargs):
         qepy.qepy_forces(icalc)
         forces = qepy.force_mod.get_array_force().T * self.units['energy']
         return forces
 
-    def embed_base(self, exttype = 0, diag_conv = 1E-1, **kwargs):
+    def embed_base(self, exttype = 0, diag_conv = 1E-1, lewald = False, iterative = True, **kwargs):
         embed = qepy.qepy_common.embed_base()
         embed.exttype = exttype
         embed.diag_conv = diag_conv
+        # Include ewald or not
+        embed.lewald = lewald
+        embed.iterative = iterative
+        embed.tddft.iterative = iterative
         self.embed = embed
         return embed
 
@@ -59,12 +67,33 @@ class EngineQE(Engine):
     def get_ef(self, **kwargs):
         return qepy.ener.get_ef()
 
-    def initial(self, inputfile, comm = None, **kwargs):
+    def _initial_files(self, inputfile = None, comm = None, **kwargs):
         if hasattr(comm, 'py2f') :
             commf = comm.py2f()
         else :
             commf = None
-        qepy.qepy_pwscf(inputfile, commf)
+
+        self.comm = comm or self.comm
+        self.commf = commf
+
+        if inputfile is None :
+            prefix = kwargs.get('prefix', 'sub_qe')
+            inputfile = prefix + '.in'
+            if self.comm.rank == 0 :
+                self.write_input(inputfile, **kwargs)
+            if self.comm.size > 1 : self.comm.Barrier()
+        self.inputfile = inputfile
+
+    def initial(self, inputfile = None, comm = None, **kwargs):
+        self._initial_files(inputfile = inputfile, comm = comm, **kwargs)
+        qepy.qepy_pwscf(self.inputfile, self.commf)
+        self.embed = self.embed_base(**kwargs)
+
+    def tddft_initial(self, inputfile = None, comm = None, **kwargs):
+        self._initial_files(inputfile = inputfile, comm = comm, **kwargs)
+        qepy.qepy_tddft_main_initial(self.inputfile, self.commf)
+        qepy.read_file()
+        self.embed = self.embed_base(**kwargs)
 
     def save(self, save = ['D'], **kwargs):
         if 'W' in save :
@@ -74,10 +103,8 @@ class EngineQE(Engine):
         qepy.punch(what)
         qepy.close_files(False)
 
-    def scf(self, initial = True, **kwargs):
+    def scf(self, **kwargs):
         self.embed.mix_coef = -1.0
-        self.embed.finish = False
-        self.embed.initial = initial
         qepy.qepy_electrons_scf(0, 0, self.embed)
 
     def scf_mix(self, coef = 0.7, **kwargs):
@@ -109,30 +136,22 @@ class EngineQE(Engine):
         qepy.qepy_clean_saved()
 
     def end_scf(self, **kwargs):
-        self.embed.finish = True
-        qepy.qepy_electrons_scf(0, 0, self.embed)
+        if self.embed.iterative :
+            self.embed.finish = True
+            qepy.qepy_electrons_scf(0, 0, self.embed)
 
     def end_tddft(self, **kwargs):
-        self.embed.tddft.finish = True
-        qepy.qepy_molecule_optical_absorption(self.embed)
+        if self.embed.tddft.iterative :
+            self.embed.tddft.finish = True
+            qepy.qepy_molecule_optical_absorption(self.embed)
 
     def tddft(self, **kwargs):
         qepy.qepy_molecule_optical_absorption(self.embed)
 
-    def tddft_after_scf(self, inputfile, **kwargs):
-        self.embed.tddft.initial = True
-        self.embed.tddft.finish = False
-        self.embed.tddft.nstep = 900000 # Any large enough number
+    def tddft_after_scf(self, inputfile = None, **kwargs):
+        inputfile = inputfile or self.inputfile
         qepy.qepy_tddft_readin(inputfile)
         qepy.qepy_tddft_main_setup(self.embed)
-
-    def tddft_initial(self, inputfile, comm = None, **kwargs):
-        if hasattr(comm, 'py2f') :
-            commf = comm.py2f()
-        else :
-            commf = None
-        qepy.qepy_tddft_main_initial(inputfile, commf)
-        qepy.read_file()
 
     def update_ions(self, subcell, update = 0, **kwargs):
         pos = subcell.ions.pos.to_cart().T / subcell.grid.latparas[0]
@@ -153,39 +172,20 @@ class EngineQE(Engine):
     def write_input(self, filename = 'sub_driver.in', subcell = None, params = {}, cell_params = {}, base_in_file = None, **kwargs):
         prefix = os.path.splitext(filename)[0]
         in_params, cards, ase_atoms = self._build_ase_atoms(params, base_in_file, ions = subcell.ions, prefix = prefix)
-        self._write_params(filename, ase_atoms, params = in_params, cell_params = cell_params, cards = cards)
+        self._write_params(filename, ase_atoms, params = in_params, cell_params = cell_params, cards = cards, **kwargs)
 
     def _fix_params(self, params = None, prefix = 'sub_'):
-        #output of qe
         default_params = OrderedDict({
-                'control' :
-                {
+                'control' : {
                     'calculation' : 'scf',
-                    # 'verbosity' : 'high',
-                    'restart_mode' : 'from_scratch',
-                    # 'iprint' : 1,
-                    # 'disk_io' : 'none', # do not save anything for qe
                     },
                 'system' :
                 {
                     'ibrav' : 0,
-                    'nat' : 1,
-                    'ntyp' : 1,
                     'nosym' : True,
-                    # 'ecutwfc' : 40,
-                    # 'occupations' : 'smearing',
-                    # 'degauss' : 0.001,
-                    # 'smearing' : 'gaussian',
                     },
-                'electrons' :
-                {
-                    'mixing_beta' : 0.7,
-                    },
-                'ions' :
-                {
-                    'pot_extrapolation' : 'atomic',  # extrapolation for potential from preceding ionic steps
-                    'wfc_extrapolation' : 'none'   # no extrapolation for wfc from preceding ionic steps
-                    },
+                'electrons' : {},
+                'ions' : {},
                 'cell' : {}
                 })
         fix_params = {
@@ -196,7 +196,6 @@ class EngineQE(Engine):
                     },
                 'electrons' :
                 {
-                    'electron_maxstep' : 1, # only run 1 step for scf
                     'conv_thr' : 0.0, # set very high accuracy, otherwise pwscf mixer cause davcio (15) error
                     },
                 }
@@ -232,7 +231,7 @@ class EngineQE(Engine):
 
         return in_params, card_lines, ase_atoms
 
-    def _write_params(self, outfile, ase_atoms, params = None, cell_params = {}, cards = None, **kwargs):
+    def _write_params(self, outfile, ase_atoms, params = None, cell_params = {}, cards = None, density_initial = None, **kwargs):
         cell_params.update(kwargs)
         if 'pseudopotentials' not in cell_params :
             raise AttributeError("!!!ERROR : Must give the pseudopotentials")
@@ -255,9 +254,13 @@ class EngineQE(Engine):
             if item in pw_params['system'] :
                 del pw_params['system'][item]
         #-----------------------------------------------------------------------
+        if density_initial and density_initial == 'temp' :
+            pw_params['electrons']['startingpot'] = 'file'
+        #-----------------------------------------------------------------------
         ase_io_driver.write_espresso_in(fileobj, ase_atoms, pw_params, **cell_params)
         self._write_params_cards(fileobj, params, cards)
         prefix = pw_params['control'].get('prefix', None)
+        if 'inputtddft' not in params : params['inputtddft'] = {}
         self._write_params_others(fileobj, params, prefix = prefix)
         fileobj.close()
         return
@@ -296,12 +299,9 @@ class EngineQE(Engine):
                         fd.write(line + '\n')
         return
 
-    def _write_params_others(self, fd, params = None, prefix = 'sub_', **kwargs):
-        if params is None or len(params) == 0 :
-            return
+    def _write_params_others(self, fd, params = None, prefix = 'sub_', keys = ['inputtddft'], **kwargs):
+        if params is None : return
         fstrl = []
-        # pw_keys = ['control', 'system', 'electrons', 'ions', 'cell']
-        keys = ['inputtddft']
         for section in params:
             if section not in keys : continue
             if section == 'inputtddft' :
