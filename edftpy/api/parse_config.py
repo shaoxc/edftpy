@@ -92,7 +92,8 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
                 format=config[keysys]["cell"]["format"],
                 names=config[keysys]["cell"]["elename"])
         except Exception:
-            ions = io.ase_read(config["PATH"]["cell"] +os.sep+ config[keysys]["cell"]["file"])
+            ions = io.ase_read(config["PATH"]["cell"] +os.sep+ config[keysys]["cell"]["file"],
+                    format=config[keysys]["cell"]["format"])
 
     if optimizer is None :
         cell_change = None

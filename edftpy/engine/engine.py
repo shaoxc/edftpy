@@ -44,9 +44,13 @@ class Driver(ABC):
         self.comm = self.subcell.grid.mp.comm
         #-----------------------------------------------------------------------
         self.density = None
-        self.potential = None
+        self.prev_density = None
         self.gaussian_density = None
         self.core_density = None
+        self.charge = None
+        self.prev_charge = None
+        self.potential = None
+        #-----------------------------------------------------------------------
         self.residual_norm = 0.0
         self.dp_norm = 0.0
         self.energy = None
