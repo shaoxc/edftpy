@@ -149,8 +149,7 @@ class DriverKS(Driver):
         return self._grid_sub
 
     def get_grid_driver(self, grid):
-        nr = np.zeros(3, dtype = 'int32')
-        self.engine.get_grid(nr)
+        nr = self.engine.get_grid()
         if not np.all(grid.nrR == nr) and self.comm.rank == 0 :
             grid_driver = Grid(grid.lattice, nr, direct = True)
         else :
