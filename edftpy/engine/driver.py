@@ -423,7 +423,7 @@ class DriverEX(DriverKS):
     Note :
         The potential and density will gather in rank == 0 for engine.
     """
-    def __init__(self, engine = None, **kwargs):
+    def __init__(self, **kwargs):
         kwargs["technique"] = kwargs.get("technique", 'EX')
         super().__init__(**kwargs)
 
@@ -451,6 +451,9 @@ class DriverEX(DriverKS):
         else :
             energy = 0.0
         return energy
+
+    def update_density(self, **kwargs):
+        return self.density
 
     def get_energy_potential(self, density = None, calcType = ['E', 'V'], olevel = 1, **kwargs):
         func = Functional(name = 'ZERO', energy=0.0, potential=None)
