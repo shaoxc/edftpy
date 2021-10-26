@@ -176,6 +176,9 @@ class EngineQE(Engine):
     def get_dnorm(self, **kwargs):
         return self.embed.dnorm
 
+    def check_convergence(self, **kwargs):
+        return qepy.control_flags.get_conv_elec()
+
     def write_input(self, filename = 'sub_driver.in', subcell = None, params = {}, cell_params = {}, base_in_file = None, **kwargs):
         prefix = os.path.splitext(filename)[0]
         in_params, cards, ase_atoms = self._build_ase_atoms(params, base_in_file, ions = subcell.ions, prefix = prefix)

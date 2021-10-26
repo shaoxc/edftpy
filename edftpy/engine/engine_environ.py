@@ -217,14 +217,17 @@ class EngineEnviron(Engine):
         controller.add_mbx_charges(rho, True)
 
     @print2file()
-    def calc_energy(self, **kwargs) -> float:
+    def get_energy(self, olevel = 0, **kwargs) -> float:
         """
         Compute Environ's contribution to the energy.
 
         :return: Environ's contribution to the energy
         :rtype : float
         """
-        energy = calculator.calc_energy()
+        if olevel == 0 :
+            energy = calculator.calc_energy()
+        else :
+            energy = 0.0
         return energy  * self.units['energy']
 
     def print_energies(self) -> None:
