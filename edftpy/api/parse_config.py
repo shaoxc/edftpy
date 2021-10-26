@@ -843,6 +843,15 @@ def config_from_index(config, keysys, indices):
     if subs is not None :
         for key in subs : del config[key]
 
+    # allocate resources according to the the number of atoms
+    nprocs = []
+    natoms = sum([len(ind) for ind in indices])
+    for ind in indices :
+        n = config[keysys]["nprocs"]*len(ind)/natoms
+        nprocs.append(n)
+    nprocs = np.asarray(nprocs)
+    if nprocs.min() < 1 : nprocs /= nprocs.min()
+
     prefix = config[keysys]["prefix"]
     if not prefix : prefix = keysys[1:].lower()
     subs = []
@@ -852,7 +861,8 @@ def config_from_index(config, keysys, indices):
         config[key]["prefix"] = prefix + '_' + str(i)
         config[key]['decompose']['method'] = 'manual'
         config[key]['cell']['index'] = ind
-        config[key]["nprocs"] = max(1, config[keysys]["nprocs"] / len(indices))
+        # config[key]["nprocs"] = max(1, config[keysys]["nprocs"]*len(ind)/natoms)
+        config[key]["nprocs"] = nprocs[i]
         config[key]['subs'] = None
         subs.append(key)
     config[keysys]['subs'] = subs
