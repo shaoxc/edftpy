@@ -20,17 +20,20 @@ except Exception:
 class EngineEnviron(Engine):
     """Engine for Environ."""
     def __init__(self, **kwargs) -> None:
-        unit_len = kwargs.get('length', 1.0)
-        unit_vol = unit_len ** 3
         units = kwargs.get('units', {})
         kwargs['units'] = units
+        unit_len = units.get('length', 1.0)
+        unit_ene = units.get('energy', 0.5)
+        unit_vol = unit_len ** 3
         kwargs['units']['volume'] = unit_vol
-        kwargs['units']['energy'] = 0.5
+        kwargs['units']['energy'] = unit_ene
+        kwargs['units']['order'] = 'F'
         super().__init__(**kwargs)
 
         self.nat = 0
         self.threshold = 0.0
         self.potential = None  # TODO does this need to be persist?
+        self.first = True
 
     # TODO move initial into __init__
 
@@ -50,6 +53,10 @@ class EngineEnviron(Engine):
         :raises ValueError: if missing necessary input parameters in kwargs
         """
         # EXPECTED INPUT
+        #-----------------------------------------------------------------------
+        kwargs = self.write_input(**kwargs)
+        self.first = True
+        #-----------------------------------------------------------------------
         inputs = dict.fromkeys([
             'nelec', 'nat', 'ntyp', 'atom_label', 'ityp', 'zv',
             'use_internal_pbc_corr', 'alat', 'at', 'tau'
@@ -106,8 +113,7 @@ class EngineEnviron(Engine):
     @print2file()
     def update_ions(self, subcell=None, update: int = 0, **kwargs) -> None:
         setup.clean_environ()
-        self.write_input(subcell=subcell, **kwargs)
-        self.initial(comm=self.comm)
+        self.initial(subcell = subcell, comm=self.comm, **kwargs)
 
     def pre_scf(self, rho) -> None:
         """
@@ -116,8 +122,10 @@ class EngineEnviron(Engine):
         :param rho   : the density object
         :type  rho   : ndarray[float]
         """
+        self.first = False
         restart = controller.is_restart()
         self.scf(rho, restart)
+        self.potential[:] = 0.0 # initial potential is not used.
 
     @print2file()
     def scf(self, rho, update: bool = True, **kwargs) -> None:
@@ -134,6 +142,7 @@ class EngineEnviron(Engine):
         if self.potential is None:
             raise ValueError("Potential not initialized.")
 
+        if self.first : self.pre_scf(rho)
         controller.update_electrons(rho, True)
         calculator.calc_potential(update, self.potential, lgather=True)
 
@@ -152,7 +161,7 @@ class EngineEnviron(Engine):
         force = np.zeros((3, self.nat), dtype=float, order='F')
         calculator.calc_force(force)
 
-        return force.T  # * self.units['energy']
+        return force.T * self.units['energy']
 
     def get_potential(self, **kwargs):
         """
@@ -163,7 +172,7 @@ class EngineEnviron(Engine):
 
         :raises ValueError: if missing potential (not initialized)
         """
-        return self.potential  # * self.units['energy']
+        return self.potential * self.units['energy']
 
     def get_nnt(self) -> int:
         """
@@ -174,16 +183,18 @@ class EngineEnviron(Engine):
         """
         return self.nnt
 
-    def get_grid(self, nr, **kwargs):
+    def get_grid(self, nr = None, **kwargs):
         """
         Returns Environ's grid dimensions.
 
         :return: the dimensions of Environ's FFT grid
         :rtype : ndarray[int]
         """
-        nr[0] = calculator.get_nr1x()
-        nr[1] = calculator.get_nr2x()
-        nr[2] = calculator.get_nr3x()
+        if nr is None :
+            nr = np.zeros(3, dtype = 'int32')
+        nr[0] = controller.get_nr1x()
+        nr[1] = controller.get_nr2x()
+        nr[2] = controller.get_nr3x()
         return nr
 
     def get_threshold(self) -> float:
@@ -214,7 +225,7 @@ class EngineEnviron(Engine):
         :rtype : float
         """
         energy = calculator.calc_energy()
-        return energy  # * self.units['energy']
+        return energy  * self.units['energy']
 
     def print_energies(self) -> None:
         """Prints Environ's contribution to the energy."""
@@ -235,7 +246,11 @@ class EngineEnviron(Engine):
     def write_input(self, subcell = None, **kwargs):
         defaults = {
                 'ecutrho' : 300,
+                'use_internal_pbc_corr': False,
                 }
+        defaults.update(kwargs)
+        if subcell is None : return defaults
+        # Update base on the subcell
         nat = subcell.ions.nat
         ntyp = len(subcell.ions.Zval)
         alat = subcell.grid.latparas[0]
@@ -243,7 +258,6 @@ class EngineEnviron(Engine):
         tau = subcell.ions.pos.to_cart().T / subcell.grid.latparas[0]
         labels = subcell.ions.labels
         zv = np.zeros(ntyp)
-        # atom_label = np.ones((3, ntyp), dtype = 'int32')*32
         atom_label = np.zeros((3, ntyp), dtype = 'c')
         atom_label[:] = ' '
         ityp = np.ones(nat, dtype = 'int32')
@@ -267,6 +281,35 @@ class EngineEnviron(Engine):
                 'ityp' : ityp,
                 'nelec' : nelec,
                 }
-        defaults.update(kwargs)
         defaults.update(subs)
         return defaults
+
+    @staticmethod
+    def get_kwargs_from_qepy(qepy = None):
+        if qepy is None : import qepy
+        nat = qepy.ions_base.get_nat()                        # number of atoms
+        ntyp = qepy.ions_base.get_nsp()                       # number of species
+        nelec = qepy.klist.get_nelec()                        # number of electrons
+        atom_label = qepy.ions_base.get_array_atm().view('c') # atom labels
+        atom_label = atom_label[:, :ntyp]                     # discard placeholders
+        alat = qepy.cell_base.get_alat()                      # lattice parameter
+        at = qepy.cell_base.get_array_at()                    # 3 x 3 lattice in atomic units
+        gcutm = qepy.gvect.get_gcutm()                        # G-vector cutoff
+        ityp = qepy.ions_base.get_array_ityp()                # species indices
+        zv = qepy.ions_base.get_array_zv()                    # ionic charges
+        tau = qepy.ions_base.get_array_tau()                  # ion positions
+
+        kwargs = {
+            'nat': nat,
+            'ntyp': ntyp,
+            'nelec': nelec,
+            'atom_label': atom_label,
+            'ityp': ityp,
+            'alat': alat,
+            'at': at,
+            'gcutm': gcutm,
+            'zv': zv,
+            'tau': tau,
+            'use_internal_pbc_corr': False,
+        }
+        return kwargs
