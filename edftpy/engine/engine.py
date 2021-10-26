@@ -160,10 +160,6 @@ class Engine(ABC):
         force = None
         return force
 
-    def calc_energy(self, **kwargs):
-        energy = None
-        return energy
-
     def clean_saved(self, *args, **kwargs):
         pass
 
@@ -171,8 +167,14 @@ class Engine(ABC):
         pass
 
     @abstractmethod
-    def get_grid(self, nr = None, **kwargs):
-        pass
+    def get_grid(self, **kwargs):
+        nr = np.ones(3, dtype = 'int32')
+        return nr
+
+    @abstractmethod
+    def get_energy(self, olevel = 0, **kwargs):
+        energy = 0.0
+        return energy
 
     def get_rho(self, rho = None, **kwargs):
         pass

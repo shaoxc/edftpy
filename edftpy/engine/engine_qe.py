@@ -52,11 +52,18 @@ class EngineQE(Engine):
         energy = self.embed.etotal * self.units['energy']
         return energy
 
+    def get_energy(self, olevel = 0, **kwargs):
+        if olevel == 0 :
+            qepy.qepy_calc_energies(self.embed)
+        energy = self.embed.etotal * self.units['energy']
+        return energy
+
     def clean_saved(self, *args, **kwargs):
         qepy.qepy_clean_saved()
 
-    def get_grid(self, nr, **kwargs):
-        qepy.qepy_mod.qepy_get_grid(nr)
+    def get_grid(self, **kwargs):
+        nr = qepy.qepy_mod.qepy_get_grid()
+        return nr
 
     def get_rho(self, rho, **kwargs):
         qepy.qepy_mod.qepy_get_rho(rho)

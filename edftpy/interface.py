@@ -46,6 +46,7 @@ def import_drivers(calcs = {}):
         if 'castep' in calcs :
             raise AttributeError(e+"\nPlease install 'caspytep' firstly.")
     try:
+        # Because Environ use same parallel technique as QE, need import after QEpy.
         from edftpy.engine import engine_environ
         if 'environ' in calcs :
             info += fs.format('Environ', engine_environ.__version__)
