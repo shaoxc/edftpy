@@ -312,7 +312,7 @@ class DriverKS(Driver):
             else :
                 extpot = self.get_extpot()
             self.engine.set_extpot(extpot)
-            energy = self.engine.calc_energy()
+            energy = self.engine.get_energy(olevel = olevel)
         else :
             energy = 0.0
         return energy
@@ -447,7 +447,7 @@ class DriverEX(DriverKS):
 
     def get_energy(self, olevel = 0, **kwargs):
         if olevel == 0 :
-            energy = self.engine.calc_energy()
+            energy = self.engine.get_energy(olevel = olevel)
         else :
             energy = 0.0
         return energy
