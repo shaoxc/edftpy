@@ -67,9 +67,11 @@ def gen_list_table(dicts, parent = None, top = False, add = False, ncol = 4):
         keys = []
         for k, v in dicts.items():
             if k == 'comment' : continue
+            if hasattr(v, 'level') and v.level == 'devel' : continue
             if isinstance(v, dict):
                 for k2 in v :
                     if k2 == 'comment' : continue
+                    if v[k2].level == 'devel' : continue
                     keys.append(k + '-' + k2)
             else :
                 keys.append(k)
@@ -121,10 +123,12 @@ def gen_config_sub(item):
     else :
         fstr = ""
     fstr += '\n'
-    fstr += "\t\t*Options* : {0}\n\n".format(item.options)
-    fstr += "\t\t*Default* : {0}\n\n".format(item.default)
+    fstr += "\t- *Options* : {0}\n\n".format(item.options)
+    fstr += "\t- *Default* : {0}\n\n".format(item.default)
+    if item.unit :
+        fstr += "\t- *Unit* : {0}\n\n".format(item.unit)
     if item.example :
-        fstr += "\t\t*e.g.* : \n\n\t\t\t{0}\n".format(item.example)
+        fstr += "\t- *e.g.* : \n\n\t\t\t{0}\n".format(item.example)
     if item.note:
         fstr += ".. note::\n {0}\n".format(item.note)
     if item.warning:
@@ -181,6 +185,7 @@ def gen_config_rst():
 
                     for key2, item2 in item.items():
                         if key2 == 'comment' : continue
+                        if item2.level == 'devel' : continue
                         parent = key.lower()
                         fstr = "\n.. _{0}-{1}:\n\n".format(parent, key2)
                         fstr += "**{0}**\n".format(key + '-' + key2)
@@ -188,6 +193,7 @@ def gen_config_rst():
                         f.write(fstr)
 
                 else :
+                    if item.level == 'devel' : continue
                     fstr = "\n.. _{0}--{1}:\n\n".format(section, key)
                     fstr += "**{0}**\n".format(key)
                     fstr += gen_config_sub(item)

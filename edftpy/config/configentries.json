@@ -113,6 +113,7 @@
 			"type": "str",
 			"options": "sdft, pdft",
 			"comment": "Subsystem DFT or Partition DFT.",
+			"level": "devel",
 			"default": "sdft"
 		},
 		"maxtime": {
@@ -142,6 +143,7 @@
 			"type": "str",
 			"options": "sdft, pdft",
 			"comment": "Subsystem DFT or Partition DFT.",
+			"level": "devel",
 			"default": "sdft"
 		},
 		"restart": {
@@ -161,6 +163,7 @@
 			"options": "",
 			"comment": "The time step for TDDFT (as).",
 			"unit": "attosecond",
+			"level": "devel",
 			"default": "1"
 		},
 		"maxtime": {
@@ -202,6 +205,7 @@
 				"comment": "non/spin-polarized calculation.",
 				"options": "1, 2",
 				"type": "int",
+				"level": "devel",
 				"default": 1
 			},
 			"ncharge": {
@@ -212,6 +216,7 @@
 			"magmom": {
 				"type": "float",
 				"comment": "Total electronic magnetization.",
+				"level": "devel",
 				"default": 0
 			},
 			"file": {
@@ -364,6 +369,7 @@
 				"comment": "non/spin-polarized calculation.",
 				"options": "1, 2",
 				"type": "int",
+				"level": "devel",
 				"default": 1
 			},
 			"ncharge": {
@@ -374,6 +380,7 @@
 			"magmom": {
 				"type": "float",
 				"comment": "Total electronic magnetization.",
+				"level": "devel",
 				"default": 0
 			},
 			"file": {
@@ -513,6 +520,7 @@
 				"type": "float",
 				"comment": "The preconditioning energy cutoff.",
 				"options": "",
+				"unit": "eV",
 				"default": null
 			},
 			"maxm": {
@@ -609,6 +617,7 @@
 		"subs": {
 			"type": "strlist",
 			"default": null,
+			"level": "devel",
 			"comment": "The name of all subsystems in this subsystem."
 		},
 		"calculator": {
