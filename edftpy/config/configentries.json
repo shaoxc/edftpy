@@ -386,7 +386,7 @@
 			"file": {
 				"type": "str",
 				"options": "",
-				"comment": "The input density file for initial density.",
+				"comment": "The input density file for initial density. If set, the :ref:`density-initial<density-initial>` will automatically set to 'file'.",
 				"default": null
 			},
 			"output": {
@@ -398,8 +398,8 @@
 			"initial": {
 				"type": "lstr",
 				"default": null,
-				"options": "None, heg, temp, atomic",
-				"comment": "Default is None, which means engines determine the initial density by themself. 'temp' means initial density from engine temporary output. 'atomic' means base on the atomic density files or pseudopotentials initialize the density."
+				"options": "None, heg, temp, atomic, file",
+				"comment": "Default is None, which means engines determine the initial density by themself. 'temp' means initial density from engine temporary output. 'atomic' means base on the atomic density files or pseudopotentials initialize the density. 'file' means use input density file :ref:`density-file<density-file>` to initialize the density."
 			},
 			"atomic": {
 				"comment": "If :ref:`density-initial<density-initial>` set the Atomic, here can set each elements atomic density.",

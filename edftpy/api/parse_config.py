@@ -464,6 +464,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
     exttype = config[keysys]["exttype"]
     opt_options = config[keysys]["opt"].copy()
     density_initial = config[keysys]["density"]["initial"]
+    density_file = config[keysys]["density"]["file"]
     tddft = config['TD']
     #-----------------------------------------------------------------------
     if ecut :
@@ -510,6 +511,10 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
             task = config[keysys]["task"] or task
         if restart :
             restart = opt_options.get('update_sleep', 0) < 1
+    #-----------------------------------------------------------------------
+    if density_file :
+        density_initial = 'file'
+    #-----------------------------------------------------------------------
 
     margs = {
             'evaluator' : embed_evaluator,
