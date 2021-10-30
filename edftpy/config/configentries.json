@@ -68,6 +68,11 @@
 			"default": false,
 			"options": "True, False",
 			"comment": "Output all the temporary files of subsystems."
+		},
+		"append": {
+			"type": "bool",
+			"default": false,
+			"comment": "Append the output of all the subsystems."
 		}
 	},
 	"OPT": {

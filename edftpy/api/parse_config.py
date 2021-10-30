@@ -129,6 +129,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         config = config2nsub(config, ions)
     #-----------------------------------------------------------------------
     config = config_correct(config)
+    append = append or config["OUTPUT"]["append"]
     #-----------------------------------------------------------------------
     if optimizer is not None and cell_change != 'position' :
         # except PSEUDO, clean everything
