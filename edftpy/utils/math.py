@@ -82,12 +82,33 @@ def union_mlist_u(arrs, keys = None, array = False):
             arrs.append(comp[0])
     return arrs
 
-def union_mlist(arrs, keys = None, array = False):
-    sub_inds = [[] for _ in arrs]
-    for i, item in enumerate(arrs):
-        for j in item :
-            sub_inds[j].append(i)
+def union_mlist_slow(arrs, keys = None, array = False):
+    if keys is None :
+        keys = set(itertools.chain.from_iterable(arrs))
     for key in keys:
+        comp = [(i, item) for i, item in enumerate(arrs) if key in item]
+        ind, comp = zip(*comp)
+        ind = set(ind)
+        if len(comp) > 0 :
+            arrs = [arrs[i] for i, item in enumerate(arrs) if i not in ind]
+            if len(comp) > 1 :
+                if array :
+                    arrs.append(reduce(np.union1d, comp))
+                else :
+                    arrs.append(set(itertools.chain.from_iterable(comp)))
+            else :
+                arrs.append(comp[0])
+    return arrs
+
+def union_mlist(arrs, keys = None, array = False):
+    if keys is None :
+        keys = set(itertools.chain.from_iterable(arrs))
+    # sub_inds = [[] for _ in arrs]
+    # for i, item in enumerate(arrs):
+    #     for j in item :
+    #         sub_inds[j].append(i)
+    sub_inds = arrs.copy()
+    for ik, key in enumerate(keys):
         comp = []
         for i in sub_inds[key] :
             comp.append(arrs[i])
@@ -99,11 +120,24 @@ def union_mlist(arrs, keys = None, array = False):
                 v = set(itertools.chain.from_iterable(comp))
         for i in sub_inds[key] :
             arrs[i] = v
+
+        if ik + 1 < len(keys) :
+            key = keys[ik + 1]
+            if array :
+                v_new = reduce(np.union1d, [v, sub_inds[key]])
+            else :
+                v_new = set(itertools.chain.from_iterable([v, sub_inds[key]]))
+            if len(v_new) < len(sub_inds[key]) + len(v):
+                sub_inds[key] = v_new
+
     used = []
     values = []
     for i, item in enumerate(arrs):
         if i in used : continue
-        values.append(item)
+        if array :
+            values.append(item)
+        else :
+            values.append(np.asarray(list(item)))
         used.extend(item)
     return values
 
