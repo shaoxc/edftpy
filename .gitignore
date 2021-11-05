@@ -12,3 +12,4 @@ doc/build/
 bak/
 .buildconfig
 doc/source/tutorials/config.rst
+.eggs

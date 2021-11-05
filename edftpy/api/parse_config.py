@@ -129,6 +129,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         config = config2nsub(config, ions)
     #-----------------------------------------------------------------------
     config = config_correct(config)
+    append = append or config["OUTPUT"]["append"]
     #-----------------------------------------------------------------------
     if optimizer is not None and cell_change != 'position' :
         # except PSEUDO, clean everything
@@ -464,6 +465,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
     exttype = config[keysys]["exttype"]
     opt_options = config[keysys]["opt"].copy()
     density_initial = config[keysys]["density"]["initial"]
+    density_file = config[keysys]["density"]["file"]
     tddft = config['TD']
     #-----------------------------------------------------------------------
     if ecut :
@@ -510,6 +512,10 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
             task = config[keysys]["task"] or task
         if restart :
             restart = opt_options.get('update_sleep', 0) < 1
+    #-----------------------------------------------------------------------
+    if density_file :
+        density_initial = 'file'
+    #-----------------------------------------------------------------------
 
     margs = {
             'evaluator' : embed_evaluator,
@@ -843,6 +849,15 @@ def config_from_index(config, keysys, indices):
     if subs is not None :
         for key in subs : del config[key]
 
+    # allocate resources according to the the number of atoms
+    nprocs = []
+    natoms = sum([len(ind) for ind in indices])
+    for ind in indices :
+        n = config[keysys]["nprocs"]*len(ind)/natoms
+        nprocs.append(n)
+    nprocs = np.asarray(nprocs)
+    if nprocs.min() < 1 : nprocs /= nprocs.min()
+
     prefix = config[keysys]["prefix"]
     if not prefix : prefix = keysys[1:].lower()
     subs = []
@@ -852,7 +867,8 @@ def config_from_index(config, keysys, indices):
         config[key]["prefix"] = prefix + '_' + str(i)
         config[key]['decompose']['method'] = 'manual'
         config[key]['cell']['index'] = ind
-        config[key]["nprocs"] = max(1, config[keysys]["nprocs"] / len(indices))
+        # config[key]["nprocs"] = max(1, config[keysys]["nprocs"]*len(ind)/natoms)
+        config[key]["nprocs"] = nprocs[i]
         config[key]['subs'] = None
         subs.append(key)
     config[keysys]['subs'] = subs

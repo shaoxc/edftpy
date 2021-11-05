@@ -8,7 +8,6 @@ def from_distance_to_sub(ions, cutoff = 3, max_nbins=1e6, **kwargs):
     atoms = ions2ase(ions)
     nat = atoms.get_global_number_of_atoms()
     inda, indb, dists = neighbor_list('ijd', atoms, cutoff, self_interaction=True, max_nbins=max_nbins)
-    # maskr = np.zeros(nat, dtype = 'bool')
     subcells = []
     index = []
     for i in range(nat):
@@ -17,7 +16,7 @@ def from_distance_to_sub(ions, cutoff = 3, max_nbins=1e6, **kwargs):
         neibors = indb[firsts]
         subcells.append(neibors)
     keys = np.arange(nat)
-    subcells = union_mlist(subcells, keys = keys, array = True)
+    subcells = union_mlist(subcells, keys = keys, array = False)
     return subcells
 
 def decompose_sub(ions, decompose = {'method' : 'distance', 'rcut' : 3}):
