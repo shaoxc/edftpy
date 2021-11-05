@@ -1,40 +1,88 @@
 import mbx
 
 import numpy as np
-# from dftpy.constants import LEN_CONV
+from dftpy.constants import LEN_CONV
+
 from edftpy.engine.engine import Engine
+from edftpy.io import print2file
 
 try:
     __version__ = mbx.__version__
 except Exception :
     __version__ = '0.0.1'
 
-class EngineMBX(Engine):
-    """Engine for Environ
+MBX_MONOMERS = {
+        "li"   : ["Li"],
+        "na"   : ["Na"],
+        "k"    : ["K"],
+        "rb"   : ["Rb"],
+        "cs"   : ["Cs"],
+        "f"    : ["F"],
+        "cl"   : ["Cl"],
+        "br"   : ["Br"],
+        "i"    : ["I"],
+        "ar"   : ["Ar"],
+        "he"   : ["He"],
+        "h2"   : ["H", "H"],
+        "h2o"  : ["O", "H", "H"],
+        "co2"  : ["C", "O", "O"],
+        "nh3"  : ["N", "H", "H", "H"],
+        "nh4+" : ["N", "H", "H", "H", "H"],
+        "ch4"  : ["C", "H", "H", "H", "H"],
+        "pf6-" : ["P", "F", "F", "F", "F", "F", "F"],
+        "n2o5" : ["O", "N", "N", "O", "O", "O", "O"],
+        }
 
-    For now, just inherit the Engine, since the Environ driver
-    is reliant on the qepy module
+class EngineMBX(Engine):
+    """Engine for MBX
+    units :
+        Length : Angstrom
+        Energy : ??
     """
     def __init__(self, **kwargs):
-        """
-        this mirrors QE unit conversion, Environ has atomic internal units
-        """
-        unit_len = kwargs.get('length', 1.0)
-        unit_vol = unit_len ** 3
         units = kwargs.get('units', {})
+        unit_len = LEN_CONV["Angstrom"]["Bohr"]
+        # units['length'] = units.get('length', mbx.MBXLENGTH2AU)
+        # units['energy'] = units.get('energy', mbx.MBXENERGY2AU)
+        units['length'] = units.get('length', unit_len)
+        units['energy'] = units.get('energy', 1.0)
+        units['order'] = 'C'
         kwargs['units'] = units
-        kwargs['units']['volume'] = unit_vol
         super().__init__(**kwargs)
+
+        self.inputs = {}
 
     def get_force(self, **kwargs):
         force = None
-        return force
+        return force.T * self.units['energy']/self.units['length']
 
-    def calc_energy(self, *args, **kwargs):
-        energy = 0.0
-        return energy
+    def get_energy(self, olevel = 0, **kwargs) -> float:
+        energy = mbx.get_energy_pbc_nograd(self.positions, len(self.labels), self.box)
+        return energy * self.units['energy']
 
-    def initial(self, filename = None, comm = None, subcell = None, grid = None, **kwargs):
+    @print2file()
+    def initial(self, inputfile = 'mbx.json', comm=None, **kwargs):
+        inputs = self.write_input(**kwargs)
+        self.positions = inputs['positions']
+        self.monomer_natoms = inputs['monomer_natoms']
+        self.labels = inputs['labels']
+        self.monomer_names = inputs['monomer_names']
+        self.inputfile = inputfile
+        self.box = inputs['box']
+        mbx.initialize_system(self.positions, self.monomer_natoms, self.labels, self.monomer_names, self.inputfile)
+        # mbx.initialize_system(xyz,number_of_atoms_per_monomer,atom_names,monomer_names,json_file)
+        #-----------------------------------------------------------------------
+        # self.npoints = len(self.labels) + len(self.monomer_names) # ?? #atoms+#monomers ??
+        self.npoints = len(self.monomer_names)*4 # ?? #monomers ??
+        # #-----------------------------------------------------------------------
+        self.points_mm = mbx.get_xyz(self.npoints)
+        self.points_mm = np.array(self.points_mm).reshape((-1, 3))
+        # ?? crystal coordinates or just scaled
+        self.points_mm[:, 0] /= self.box[0]
+        self.points_mm[:, 1] /= self.box[3]
+        self.points_mm[:, 2] /= self.box[6]
+
+    def initial_old(self, inputfile = 'mbx.json', comm = None, subcell = None, grid = None, **kwargs):
         """
         Note :
             The atoms should always be 'O H H O H H...'
@@ -45,8 +93,7 @@ class EngineMBX(Engine):
         number_of_atoms_per_monomer = [3,]*nmol
         atom_names = ["O","H","H"]* nmol
         monomer_names = ["h2o",] * nmol
-        # json_file = "./mbx.json"
-        json_file = filename
+        json_file = inputfile
         xyz = subcell.ions.pos.ravel()
         box = subcell.ions.pos.cell.lattice.ravel()
         #-----------------------------------------------------------------------
@@ -60,6 +107,12 @@ class EngineMBX(Engine):
         self.points_mm = mbx.get_xyz(self.npoints)
         self.points_mm = np.array(self.points_mm).reshape((-1, 3))/subcell.grid.latparas
 
+    @print2file()
+    def update_ions(self, subcell=None, **kwargs) :
+        # Can we use this update ions?
+        mbx.set_coordinates(self.positions, len(self.labels))
+        mbx.set_box(self.box)
+
     def scf(self, **kwargs):
         pass
 
@@ -67,7 +120,6 @@ class EngineMBX(Engine):
         grid_points = grid.r.reshape((3, -1)).T
         grid_points = grid_points.ravel()
         pot, potfield = mbx.get_potential_and_electric_field_on_points(grid_points, grid_points.size//3)
-        pot = np.asarray(pot)
         return pot.reshape(self.nr)
 
     def set_extpot(self, extpot = None, **kwargs):
@@ -96,3 +148,43 @@ class EngineMBX(Engine):
     def get_charge(self, charge, **kwargs):
         raise AttributeError("Will do")
         return charge
+
+    def write_input(self, subcell = None, monomers = {}, **kwargs):
+        """
+        Note :
+            The order of atoms should be same as atoms in the monomers
+        TODO :
+            add a list contains the indices of the atoms in the monomers
+        """
+        if subcell is None : return kwargs
+
+        if len(monomers) < 1 :
+            monomers = MBX_MONOMERS
+        monomers = sorted(monomers.items(), key=lambda d : len(d[1]), reverse=True)
+
+        labels = subcell.ions.labels.tolist()
+        natoms = len(labels)
+
+        monomer_names = []
+        monomer_natoms = []
+        index = 0
+        for i in range(natoms):
+            for key, mon in monomers :
+                nat = len(mon)
+                symbols = labels[index:index + nat]
+                if mon == symbols :
+                    monomer_names.append(key)
+                    monomer_natoms.append(nat)
+                    index += nat
+                    break
+            if index==natoms : break
+        if index < natoms: raise AttributeError("Please check the monomers and input atoms")
+
+        inputs = kwargs
+        inputs['labels'] = labels
+        inputs['positions'] = subcell.ions.pos.to_cart().ravel()/self.units['length']
+        inputs['monomer_names'] = monomer_names
+        inputs['monomer_natoms'] = monomer_natoms
+        if inputs.get('box', None) is None :
+            inputs['box'] = subcell.ions.pos.cell.lattice.ravel()/self.units['length']
+        return inputs
