@@ -19,21 +19,19 @@ except Exception :
 
 class EngineQE(Engine):
     def __init__(self, **kwargs):
-        unit_len = LEN_CONV["Bohr"]["Angstrom"] / qepy.constants.BOHR_RADIUS_SI / 1E10
-        unit_vol = unit_len ** 3
+        unit_len = LEN_CONV["Angstrom"]["Bohr"] / qepy.constants.ANGSTROM_AU
         units = kwargs.get('units', {})
+        units['length'] = kwargs.get('length', unit_len)
+        units['energy'] = kwargs.get('energy', 0.5)
+        units['order'] = 'F'
         kwargs['units'] = units
-        kwargs['units']['length'] = unit_len
-        kwargs['units']['volume'] = unit_vol
-        kwargs['units']['energy'] = 0.5
-        kwargs['units']['order'] = 'F'
         super().__init__(**kwargs)
         self.embed = None
         self.comm = SerialComm()
 
     def get_force(self, icalc = 3, **kwargs):
         qepy.qepy_forces(icalc)
-        forces = qepy.force_mod.get_array_force().T * self.units['energy']
+        forces = qepy.force_mod.get_array_force().T * self.units['energy']/self.units['length']
         return forces
 
     def embed_base(self, exttype = 0, diag_conv = 1E-1, lewald = False, iterative = True, **kwargs):

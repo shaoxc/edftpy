@@ -143,7 +143,9 @@ class Engine(ABC):
     """
     Note:
         embed : The object contains the embedding information.
-        units : The engine/driver to eDFTpy. (e.g. energy : Ry -> Hartree is 0.5)
+        units : The engine/driver to eDFTpy.
+            energy : Ry -> Hartree is 0.5
+            volume : used as 1/V (i.e. A^{-3})
     """
     def __init__(self, units = {}, comm = None, **kwargs):
         self.units = {
@@ -153,6 +155,7 @@ class Engine(ABC):
                 'order' : 'F',
                 }
         self.units.update(units)
+        self.units['volume'] = 1.0 / self.units['length']**3
         self.fileobj = None
         self.comm = SerialComm()
 
