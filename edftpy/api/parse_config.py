@@ -14,6 +14,7 @@ from edftpy.optimizer import Optimization, MixOptimization
 from edftpy.tddft import TDDFT
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
 from edftpy.density.init_density import AtomicDensity
+from edftpy.density import file2density
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import LinearMixer, PulayMixer
 from edftpy.mpi import GraphTopo, MP, sprint
@@ -138,11 +139,11 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     #-----------------------------------------------------------------------
     if optimizer is not None and adaptive :
         for key, driver in reuse_drivers.items() :
-            infile = config[key]["prefix"] + '_last.snpy'
-            config[key]["density"]["file"] = infile
+            density_file = config[key]["prefix"] + '_last.snpy'
+            config[key]["density"]["file"] = density_file
             if driver is None : continue
             if driver.comm.rank == 0 :
-                io.write(infile, driver.density, driver.subcell.ions)
+                io.write(density_file, driver.density, driver.subcell.ions)
         graphtopo.comm.Barrier()
         graphtopo.free_comm()
     #-----------------------------------------------------------------------
@@ -172,9 +173,6 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         total_evaluator = None
     total_evaluator = config2total_evaluator(config, ions, grid, pplist = pplist, total_evaluator=total_evaluator, cell_change = cell_change, pseudo = pseudo)
     gsystem.total_evaluator = total_evaluator
-    infile = config[keysys]["density"]["file"]
-    if infile :
-        gsystem.density[:] = io.read_density(infile)
     ############################## Subsytem ##############################
     subkeys = [key for key in config if key.startswith('SUB')]
     drivers = []
@@ -284,6 +282,7 @@ def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell
     max_prime = config[keysys]["grid"]["maxprime"]
     grid_scale = config[keysys]["grid"]["scale"]
     optfft = config[keysys]["grid"]["optfft"]
+    density_file = config[keysys]["density"]["file"]
 
     if cell_change == 'position' :
         gsystem = optimizer.gsystem
@@ -292,6 +291,8 @@ def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell
     else :
         mp_global = MP(comm = graphtopo.comm, parallel = graphtopo.is_mpi, decomposition = graphtopo.decomposition)
         gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo)
+
+    if density_file : file2density(density_file, gsystem.density)
     return gsystem
 
 def config2graphtopo(config, graphtopo = None, scale = None):
@@ -319,6 +320,7 @@ def config2graphtopo(config, graphtopo = None, scale = None):
             else :
                 n = config[key]["nprocs"]
             nprocs.append(n)
+        if not nprocs : nprocs = [0]
         graphtopo.distribute_procs(nprocs, scale = scale)
         sprint('Communicators recreated : ', graphtopo.comm.size, comm = graphtopo.comm)
     else :
@@ -618,7 +620,7 @@ def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = 
     technique = config[keysys]["technique"]
     optfft = config[keysys]["grid"]["optfft"]
     initial = config[keysys]["density"]["initial"]
-    infile = config[keysys]["density"]["file"]
+    density_file = config[keysys]["density"]["file"]
     atomicfiles = config[keysys]["density"]["atomic"].copy()
     if atomicfiles :
         for k, v in atomicfiles.copy().items():
@@ -675,18 +677,8 @@ def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = 
         if subcell.density.shape == driver.density.shape :
             subcell.density[:] = driver.density
     else :
-        if infile : # initial='read'
-            ext = os.path.splitext(infile)[1].lower()
-            if ext != ".snpy":
-                fstr = f'!WARN : snpy format for density initialization will better, but this file is "{infile}".'
-                sprint(fstr, comm=subcell.grid.mp.comm, level=2)
-                if subcell.grid.mp.comm.rank == 0 :
-                    density = io.read_density(infile)
-                else :
-                    density = np.zeros(1)
-                subcell.grid.scatter(density, out = subcell.density)
-            else :
-                subcell.density[:] = io.read_density(infile, grid=subcell.grid)
+        if density_file : # initial='read'
+            file2density(density_file, subcell.density)
         elif initial == 'atomic' :
             atomicd = AtomicDensity(files = atomicfiles, pseudo = pseudo, comm = subcell.grid.mp.comm)
             subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)

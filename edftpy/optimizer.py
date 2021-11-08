@@ -16,7 +16,7 @@ from edftpy.engine.driver import DriverConstraint
 
 class Optimization(object):
 
-    def __init__(self, drivers=None, gsystem = None, options=None):
+    def __init__(self, drivers=[], gsystem = None, options=None):
         if drivers is None:
             raise AttributeError("Must provide optimization driver (list)")
         if gsystem is None :
@@ -39,6 +39,20 @@ class Optimization(object):
         self.options = default_options
         if isinstance(options, dict):
             self.options.update(options)
+        self.energy = 0
+        self.iter = 0
+        self.density = None
+        self.density_prev = None
+        self.converged = False
+        self.observers = []
+
+    @property
+    def drivers(self):
+        return self._drivers
+
+    @drivers.setter
+    def drivers(self, value):
+        self._drivers = value
         self.nsub = len(self.drivers)
         self.of_drivers = []
         self.of_ids = []
@@ -46,13 +60,7 @@ class Optimization(object):
             if driver is not None and driver.technique== 'OF' :
                     self.of_drivers.append(driver)
                     self.of_ids.append(i)
-        self.energy = 0
-        self.iter = 0
-        self.density = None
-        self.density_prev = None
-        self.converged = False
         self.update = [True for _ in range(self.nsub)]
-        self.observers = []
 
     def guess_pconv(self):
         if self.options['pconv'] is None:
@@ -183,9 +191,10 @@ class Optimization(object):
 
         self.guess_pconv()
 
-        self.gsystem.gaussian_density[:] = 0.0
-        self.gsystem.density[:] = 0.0
-        self.gsystem.core_density[:] = 0.0
+        if self.nsub > 0 :
+            self.gsystem.gaussian_density[:] = 0.0
+            self.gsystem.density[:] = 0.0
+            self.gsystem.core_density[:] = 0.0
         for i, driver in enumerate(self.drivers):
             if driver is None :
                 density = None
@@ -203,10 +212,19 @@ class Optimization(object):
                 self.gsystem.update_density(gaussian_density, isub = i, fake = True)
                 self.gsystem.update_density(core_density, isub = i, core = True)
         sprint('Update density :', self.gsystem.density.integral())
-        self.density = self.gsystem.density.copy()
         #-----------------------------------------------------------------------
         self.add_xc_correction()
         #-----------------------------------------------------------------------
+        self.converged = False
+        yield self.converged
+        self.call_observers(self.iter)
+
+        if self.nsub == 0 :
+            self.converged = True
+            self.end_scf()
+            return self.converged
+
+        self.density = self.gsystem.density.copy()
         energy_history = [0.0]
         fmt = "{:10s}{:8s}{:24s}{:16s}{:10s}{:10s}{:16s}".format(" ", "Step", "Energy(a.u.)", "dE", "dP", "dC", "Time(s)")
         sprint(fmt)
@@ -215,10 +233,6 @@ class Optimization(object):
         timecost = time.time()
         res_norm = np.ones(self.nsub)
         olevel = self.options['olevel']
-
-        self.converged = False
-        yield self.converged
-        self.call_observers(self.iter)
 
         for it in range(self.options['maxiter']):
             #-----------------------------------------------------------------------

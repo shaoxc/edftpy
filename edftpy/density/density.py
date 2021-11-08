@@ -1,10 +1,10 @@
 import numpy as np
+import os
+from edftpy import io
 from dftpy.ewald import CBspline
 from edftpy.utils.common import Field, RadialGrid
 from edftpy.utils.math import fermi_dirac
-from edftpy.functional import ReadPseudo
 from edftpy.mpi import sprint
-
 
 def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=0.0, direct=True, pme=True, order=10, **kwargs):
     """
@@ -99,3 +99,18 @@ def filter_density(grid, density, mu = 0.7, kt = 0.05):
     den *= ncharge/np.sum(den)
     den[den < 0] = 1E-300
     return den
+
+def file2density(filename, density, grid = None):
+    if grid is None :
+        grid = density.grid
+    ext = os.path.splitext(filename)[1].lower()
+    if ext == ".snpy":
+        density[:] = io.read_density(filename, grid=grid)
+    else :
+        fstr = f'!WARN : snpy format for density initialization will better, but this file is "{filename}".'
+        sprint(fstr, comm=grid.mp.comm, level=2)
+        if grid.mp.comm.rank == 0 :
+            density = io.read_density(filename)
+        else :
+            density = np.zeros(1)
+        grid.scatter(density, out = density)
