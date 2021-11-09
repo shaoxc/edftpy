@@ -37,15 +37,18 @@ class EngineMBX(Engine):
     """Engine for MBX
     units :
         Length : Angstrom
-        Energy : ??
+        Energy : kcal/mol
+
+    Note :
+        Only works for serial.
     """
     def __init__(self, **kwargs):
         units = kwargs.get('units', {})
         unit_len = LEN_CONV["Angstrom"]["Bohr"]
         # units['length'] = units.get('length', mbx.MBXLENGTH2AU)
-        # units['energy'] = units.get('energy', mbx.MBXENERGY2AU)
+        # units['energy'] = units.get('energy',mbx.MBXENERGY2AU)
         units['length'] = units.get('length', unit_len)
-        units['energy'] = units.get('energy', 1.0)
+        units['energy'] = units.get('energy', mbx.MBXENERGY2AU)
         units['order'] = 'C'
         kwargs['units'] = units
         super().__init__(**kwargs)
@@ -53,8 +56,9 @@ class EngineMBX(Engine):
         self.inputs = {}
 
     def get_force(self, **kwargs):
-        force = None
-        return force.T * self.units['energy']/self.units['length']
+        grad = mbx.get_energy_pbc_grad(self.positions, len(self.labels), self.box)[1]
+        force = np.asarray(grad).reshape((-1, 3))*-1
+        return force * self.units['energy']/self.units['length']
 
     def get_energy(self, olevel = 0, **kwargs) -> float:
         energy = mbx.get_energy_pbc_nograd(self.positions, len(self.labels), self.box)
@@ -70,17 +74,13 @@ class EngineMBX(Engine):
         self.inputfile = inputfile
         self.box = inputs['box']
         mbx.initialize_system(self.positions, self.monomer_natoms, self.labels, self.monomer_names, self.inputfile)
-        # mbx.initialize_system(xyz,number_of_atoms_per_monomer,atom_names,monomer_names,json_file)
         #-----------------------------------------------------------------------
-        # self.npoints = len(self.labels) + len(self.monomer_names) # ?? #atoms+#monomers ??
-        self.npoints = len(self.monomer_names)*4 # ?? #monomers ??
+        self.npoints = len(self.labels)
+        for name in self.monomer_names :
+            if name == 'h2o' : self.npoints += 1
         # #-----------------------------------------------------------------------
         self.points_mm = mbx.get_xyz(self.npoints)
         self.points_mm = np.array(self.points_mm).reshape((-1, 3))
-        # ?? crystal coordinates or just scaled
-        self.points_mm[:, 0] /= self.box[0]
-        self.points_mm[:, 1] /= self.box[3]
-        self.points_mm[:, 2] /= self.box[6]
 
     def initial_old(self, inputfile = 'mbx.json', comm = None, subcell = None, grid = None, **kwargs):
         """
@@ -109,7 +109,6 @@ class EngineMBX(Engine):
 
     @print2file()
     def update_ions(self, subcell=None, **kwargs) :
-        # Can we use this update ions?
         mbx.set_coordinates(self.positions, len(self.labels))
         mbx.set_box(self.box)
 
@@ -120,10 +119,9 @@ class EngineMBX(Engine):
         grid_points = grid.r.reshape((3, -1)).T
         grid_points = grid_points.ravel()
         pot, potfield = mbx.get_potential_and_electric_field_on_points(grid_points, grid_points.size//3)
-        return pot.reshape(self.nr)
+        return pot.reshape(grid.nrR)
 
     def set_extpot(self, extpot = None, **kwargs):
-        # pot = extpot.get_value_at_points(self.points_mm).ravel()
         pot = self.get_value_at_points(extpot, self.points_mm).ravel()
         extfield = extpot.gradient()
         potfield = []
@@ -136,7 +134,7 @@ class EngineMBX(Engine):
     def get_value_at_points(self, data, points):
         values = np.empty(points.shape[0])
         for i, p in enumerate(points):
-            ip = (np.rint(p*data.grid.nrR)).astype('int32')
+            ip = (np.rint(p*data.grid.nrR/data.grid.latparas[0:3])).astype('int32')
             values[i] = data[ip[0], ip[1], ip[2]]
         return values
 
@@ -187,4 +185,6 @@ class EngineMBX(Engine):
         inputs['monomer_natoms'] = monomer_natoms
         if inputs.get('box', None) is None :
             inputs['box'] = subcell.ions.pos.cell.lattice.ravel()/self.units['length']
+
+        self.subcell = subcell
         return inputs
