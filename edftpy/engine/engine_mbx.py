@@ -128,7 +128,7 @@ class EngineMBX(Engine):
         for i in range(3):
             p = self.get_value_at_points(extfield[i], self.points_mm)
             potfield.append(p)
-        potfield= np.asarray(potfield).ravel()
+        potfield= np.asarray(potfield).T.ravel()
         mbx.set_potential_and_electric_field_on_sites(pot, potfield)
 
     def get_value_at_points(self, data, points):
