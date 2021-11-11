@@ -9,15 +9,9 @@
 
 ## Run
 
-### Test the engine with QEpy
-
- ```
- mpirun -n 1 python test_engine_environ.py
- ```
-
 ### Test Environ with sDFT
-   The number of processors should be large than the number of subsystems. This example has two KS subsystems and one Environ subsystem.
+   The number of processors should be large than the number of subsystems. This example has one KS subsystem and one Environ subsystem.
 
  ```
- mpirun -n 3 python -m edftpy optim.ini
+ mpirun -n 2 python test_relax_environ.py
  ```
