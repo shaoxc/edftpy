@@ -1,8 +1,7 @@
-import copy
 import numpy as np
 from functools import partial
 import dftpy
-from dftpy.constants import LEN_CONV, ENERGY_CONV
+from dftpy.constants import ENERGY_CONV
 from dftpy.optimization import Optimization
 from dftpy.constants import environ
 
@@ -50,8 +49,6 @@ class EngineDFTpy(Driver):
         #-----------------------------------------------------------------------
         if self.mixer is None :
             self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = 0.2, predecut = 0, delay = 1)
-        # elif isinstance(self.mixer, float):
-        #     self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = self.mixer, predecut = 0, delay = 1)
         if not isinstance(self.mixer, AbstractMixer):
             self.mixer = LinearMixer(predtype = None, coef = 1.0, predecut = None, delay = 1)
         #-----------------------------------------------------------------------
@@ -87,8 +84,10 @@ class EngineDFTpy(Driver):
         self._iter = 0
         self.energy = 0.0
         self.phi = None
-        self.residual_norm = 1
-        self.dp_norm = 1
+        self.residual_norm = 1.0
+        self.dp_norm = 1.0
+        self.dp_norm_prev = 0.0
+        self.residual_norm_prev = 0.0
         self.core_density = None
         if isinstance(self.mixer, AbstractMixer):
             self.mixer.restart()
@@ -193,16 +192,16 @@ class EngineDFTpy(Driver):
         self._iter += 1
         #-----------------------------------------------------------------------
         if res_max is None :
-            res_max = self.residual_norm
-
-        if self.comm.size > 1 :
-            #only rank0 has the correct residual_norm
-            res_max = self.comm.bcast(res_max, root = 0)
+            res_max = self.residual_norm_prev
 
         if self._iter == 1 :
             self.options['econv0'] = self.options['econv'] * 1E4
             self.options['econv'] = self.options['econv0']
             res_max = 1.0
+
+        if self.comm.size > 1 :
+            #only rank0 has the correct residual_norm
+            res_max = self.comm.bcast(res_max, root = 0)
 
         norm = res_max
         if self._iter < 3 :
@@ -211,7 +210,7 @@ class EngineDFTpy(Driver):
         econv = self.options['econv0'] * norm
         if econv < self.options['econv'] :
             self.options['econv'] = econv
-        if norm < 1E-7 :
+        if norm < 1E-7 and self._iter>3 :
             self.options['maxiter'] = 4
         sprint('econv', self._iter, self.options['econv'], comm=self.comm)
         #-----------------------------------------------------------------------
@@ -350,6 +349,11 @@ class EngineDFTpy(Driver):
         r = self.charge - self.prev_charge
         self.dp_norm = hartree_energy(r)
         self.residual_norm = np.sqrt(self.grid.mp.asum(r * r)/self.grid.nnrR)
+        self.dp_norm, self.dp_norm_prev = self.dp_norm_prev, self.dp_norm
+        self.residual_norm, self.residual_norm_prev = self.residual_norm_prev, self.residual_norm
+        if self._iter > 1 : # Sometime the density not fully converged.
+            self.dp_norm = (self.dp_norm + self.dp_norm_prev)/2
+            self.residual_norm = (self.residual_norm + self.residual_norm_prev)/2
         rmax = r.amax()
         fstr = f'res_norm({self.prefix}): {self._iter}  {rmax}  {self.residual_norm}'
         sprint(fstr, comm=self.comm)
