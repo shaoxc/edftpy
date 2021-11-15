@@ -349,9 +349,12 @@ class EngineDFTpy(Driver):
         r = self.charge - self.prev_charge
         self.dp_norm = hartree_energy(r)
         self.residual_norm = np.sqrt(self.grid.mp.asum(r * r)/self.grid.nnrR)
-        self.dp_norm, self.dp_norm_prev = self.dp_norm_prev, self.dp_norm
-        self.residual_norm, self.residual_norm_prev = self.residual_norm_prev, self.residual_norm
-        if self._iter > 1 : # Sometime the density not fully converged.
+        if self._iter == 1 :
+            self.dp_norm_prev = self.dp_norm
+            self.residual_norm_prev = self.residual_norm
+        else : # Sometime the density not fully converged.
+            self.dp_norm, self.dp_norm_prev = self.dp_norm_prev, self.dp_norm
+            self.residual_norm, self.residual_norm_prev = self.residual_norm_prev, self.residual_norm
             self.dp_norm = (self.dp_norm + self.dp_norm_prev)/2
             self.residual_norm = (self.residual_norm + self.residual_norm_prev)/2
         rmax = r.amax()
