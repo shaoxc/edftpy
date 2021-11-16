@@ -82,7 +82,9 @@ def union_mlist_u(arrs, keys = None, array = False):
             arrs.append(comp[0])
     return arrs
 
-def union_mlist_slow(arrs, keys = None, array = False):
+def union_mlist(arrs, keys = None, array = False, number = True):
+    if number :
+        return union_mlist_number(arrs, keys=keys, array=array)
     if keys is None :
         keys = set(itertools.chain.from_iterable(arrs))
     for key in keys:
@@ -100,7 +102,7 @@ def union_mlist_slow(arrs, keys = None, array = False):
                 arrs.append(comp[0])
     return arrs
 
-def union_mlist(arrs, keys = None, array = False):
+def union_mlist_number(arrs, keys = None, array = False):
     if keys is None :
         keys = set(itertools.chain.from_iterable(arrs))
     # sub_inds = [[] for _ in arrs]
@@ -118,6 +120,8 @@ def union_mlist(arrs, keys = None, array = False):
                 v = reduce(np.union1d, comp)
             else :
                 v = set(itertools.chain.from_iterable(comp))
+        else :
+            v = comp[0]
         for i in sub_inds[key] :
             arrs[i] = v
 
@@ -132,8 +136,9 @@ def union_mlist(arrs, keys = None, array = False):
 
     used = []
     values = []
-    for i, item in enumerate(arrs):
-        if i in used : continue
+    for item in arrs:
+        for x in item : break
+        if x in used : continue
         if array :
             values.append(item)
         else :
