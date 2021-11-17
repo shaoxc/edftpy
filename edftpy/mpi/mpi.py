@@ -257,7 +257,7 @@ class GraphTopo:
                     nprocs[:] = nprocs * av
                 else :
                     nprocs[:] = nprocs * self.size / nprocs.sum()
-                self.nprocs = np.rint(nprocs).astype(dtype = 'int')
+                self.nprocs = np.ceil(nprocs).astype(dtype = 'int')
             else : # set as maximum of processors
                 pass
         if self.nprocs.sum() != self.size :
@@ -279,7 +279,7 @@ class GraphTopo:
                 self.isub = i
                 break
         self.comm_sub = self.comm.Split(self.isub, self.rank)
-        # print('isub', self.isub, self.rank, self.comm_sub, self.comm)
+        # print('isub', self.isub, self.rank, self.comm_sub, self.comm, flush = True)
 
     def build_region(self, grid = None, drivers = None, **kwargs):
         self.free_comm_region()
@@ -323,15 +323,15 @@ class GraphTopo:
     def free_comm_sub(self):
         if self.is_mpi :
             if self.comm_sub != self.comm :
-                self.comm_sub.Free()
+                if self.comm_sub is not None : self.comm_sub.Free()
                 self.comm_sub = self.comm
         return
 
     def free_comm_region(self):
         for i, comm in enumerate(self.comm_region):
             if comm is not None :
-                comm.Free()
-                self.comm_region[i] = None
+                if comm != self.comm : comm.Free()
+            self.comm_region[i] = None
             # self.comm.Barrier()
         return
 
