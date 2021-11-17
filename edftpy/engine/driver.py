@@ -68,7 +68,7 @@ class DriverKS(Driver):
             self.mix_coef = self.mixer
 
         fstr = f'Subcell grid({self.prefix}): {self.subcell.grid.nrR}  {self.subcell.grid.nr}\n'
-        fstr += f'Subcell shift({self.prefix}): {self.subcell.grid.shift}\n'
+        # fstr += f'Subcell shift({self.prefix}): {self.subcell.grid.shift}\n'
         if self.grid_driver is not None :
             fstr += f'{self.__class__.__name__} has two grids :{self.grid.nrR} and {self.grid_driver.nrR}'
         sprint(fstr, comm=self.comm, level=1)

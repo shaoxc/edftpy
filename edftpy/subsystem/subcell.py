@@ -260,6 +260,10 @@ class SubCell(object):
         nc = self._gaussian_density.integral()
         sprint('fake01', nc, comm=self.comm)
 
+    def free(self):
+        self.grid.free()
+
+
 class GlobalCell(object):
     def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, graphtopo = None, **kwargs):
         self.grid_kwargs = {

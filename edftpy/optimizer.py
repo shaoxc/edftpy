@@ -721,6 +721,7 @@ class Optimization(object):
         for i, driver in enumerate(self.drivers):
             if driver is not None :
                 driver.stop_run(save = save, **kwargs)
+                driver.subcell.free()
         return
 
     def add_xc_correction(self):

@@ -33,10 +33,10 @@ def import_drivers(calcs = {}):
     #
     try:
         from edftpy.engine import engine_qe
-        if 'pwscf' in calcs or 'qe' in calcs :
+        if 'pwscf' in calcs or 'qe' in calcs or 'qepy' in calcs :
             info += fs.format('QEpy', engine_qe.__version__)
     except Exception as e:
-        if 'pwscf' in calcs or 'qe' in calcs :
+        if 'pwscf' in calcs or 'qe' in calcs or 'qepy' in calcs :
             raise AttributeError(e+"\nPlease install 'QEpy' firstly.")
     try:
         from edftpy.engine import engine_castep

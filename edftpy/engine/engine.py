@@ -61,6 +61,10 @@ class Driver(ABC):
         self.mix_coef = None
         self.outfile = self.prefix + '.out'
 
+    @property
+    def grid(self):
+        return self.subcell.grid
+
     def get_density(self, **kwargs):
         pass
 
@@ -169,12 +173,10 @@ class Engine(ABC):
     def forces(self, icalc = 0, **kwargs):
         pass
 
-    @abstractmethod
     def get_grid(self, **kwargs):
         nr = np.ones(3, dtype = 'int32')
         return nr
 
-    @abstractmethod
     def get_energy(self, olevel = 0, **kwargs):
         energy = 0.0
         return energy

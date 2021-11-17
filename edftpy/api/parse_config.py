@@ -40,7 +40,7 @@ def import_drivers_conf(config):
         if key.startswith('SUB'):
             calc = config[key]['calculator']
             calcs.append(calc)
-    if 'pwscf' in calcs or 'qe' in calcs :
+    if 'pwscf' in calcs or 'qe' in calcs or 'qepy' in calcs :
         import qepy
     if 'castep' in calcs :
         import caspytep
@@ -57,7 +57,14 @@ def config_correct(config):
     Notes:
         Only correct some missing variables
     """
-    tech_keys = {'dftpy' : 'OF', 'pwscf' : 'KS', 'qe' : 'KS', 'environ'  : 'EX', 'mbx' : 'MM'}
+    tech_keys = {
+            'dftpy' : 'OF',
+            'pwscf' : 'KS',
+            'qe' : 'KS',
+            'qepy' : 'KS',
+            'environ' : 'EX',
+            'mbx' : 'MM'
+            }
     subkeys = [key for key in config if key.startswith('SUB')]
     for key in subkeys :
         config[key]['technique'] = tech_keys.get(config[key]['calculator'], 'KS')
@@ -549,7 +556,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
     else :
         if calculator == 'dftpy' :
             driver = get_dftpy_driver(config, keysys, ions, grid, pplist = pplist, optimizer = optimizer, cell_change = cell_change, margs = margs)
-        elif calculator == 'pwscf' or calculator == 'qe' :
+        elif calculator == 'pwscf' or calculator == 'qe' or calculator == 'qepy' :
             driver = get_pwscf_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
         elif calculator == 'castep' :
             driver = get_castep_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
@@ -557,7 +564,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
             driver = get_mbx_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
         elif calculator == 'environ' :
             driver = get_environ_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
-
+        else :
+            raise AttributeError(f"Not supported engine : {calculator}")
     return driver
 
 def get_dftpy_driver(config, keysys, ions, grid, pplist = None, optimizer = None, cell_change = None, margs = {}):
