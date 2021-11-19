@@ -1,14 +1,10 @@
 import numpy as np
-from scipy import signal
-from abc import ABC, abstractmethod
-import os
 
 from dftpy.constants import ENERGY_CONV
 
 from edftpy.mixer import PulayMixer, AbstractMixer
 from edftpy.utils.common import Grid, Field, Functional
 from edftpy.utils.math import grid_map_data
-from edftpy.utils import clean_variables
 from edftpy.functional import hartree_energy
 from edftpy.mpi import sprint, MP
 from edftpy.engine.engine import Driver
@@ -68,7 +64,7 @@ class DriverKS(Driver):
             self.mix_coef = self.mixer
 
         fstr = f'Subcell grid({self.prefix}): {self.subcell.grid.nrR}  {self.subcell.grid.nr}\n'
-        # fstr += f'Subcell shift({self.prefix}): {self.subcell.grid.shift}\n'
+        fstr += f'Subcell shift({self.prefix}): {self.subcell.grid.shift}\n'
         if self.grid_driver is not None :
             fstr += f'{self.__class__.__name__} has two grids :{self.grid.nrR} and {self.grid_driver.nrR}'
         sprint(fstr, comm=self.comm, level=1)
@@ -128,8 +124,6 @@ class DriverKS(Driver):
 
         self.core_density_sub = Field(grid = self.grid_sub)
         self.grid_sub.scatter(self.core_density, out = self.core_density_sub)
-        if self.comm.rank == 0 :
-            clean_variables(core_charge)
         return
 
     @property

@@ -12,6 +12,7 @@ from edftpy.functional import hartree_energy
 from edftpy.utils.common import Grid, Field, Functional
 from edftpy.io import write
 from edftpy.engine.driver import DriverConstraint
+from edftpy.utils import get_mem_info, clean_variables
 
 
 class Optimization(object):
@@ -237,6 +238,8 @@ class Optimization(object):
         for it in range(self.options['maxiter']):
             #-----------------------------------------------------------------------
             self.step()
+            clean_variables()
+            sprint(get_mem_info, level = 0)
             yield self.converged
             self.call_observers(self.iter)
             #-----------------------------------------------------------------------
