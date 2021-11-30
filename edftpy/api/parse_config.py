@@ -93,15 +93,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         config = read_conf(config)
     ############################## Gsystem ##############################
     keysys = "GSYSTEM"
-    if ions is None :
-        try :
-            ions = io.read(
-                config["PATH"]["cell"] +os.sep+ config[keysys]["cell"]["file"],
-                format=config[keysys]["cell"]["format"],
-                names=config[keysys]["cell"]["elename"])
-        except Exception:
-            ions = io.ase_read(config["PATH"]["cell"] +os.sep+ config[keysys]["cell"]["file"],
-                    format=config[keysys]["cell"]["format"])
+    ions = config2ions(config, ions = ions)
 
     if optimizer is None :
         cell_change = None
@@ -158,7 +150,9 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     if graphtopo.rank == 0 :
         # import pprint
         # pprint.pprint(config)
+        config = ions2config(config, ions)
         write_conf('edftpy_running.json', config)
+        io.ase_write('edftpy_gsystem.xyz', ions, format = 'extxyz', parallel = False)
         if optimizer is None :
             for key in config :
                 if key.startswith('SUB') :
@@ -213,8 +207,6 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         if (driver.technique == 'OF' and graphtopo.is_root) or (graphtopo.isub == i and graphtopo.comm_sub.rank == 0) or graphtopo.isub is None:
             outfile = driver.prefix + '.xyz'
             io.ase_write(outfile, driver.subcell.ions, format = 'extxyz', parallel = False)
-    if graphtopo.is_root :
-        io.ase_write('edftpy_gsystem.xyz', ions, format = 'extxyz', parallel = False)
     #-----------------------------------------------------------------------
     optimization_options = config["OPT"].copy()
     optimization_options["econv"] *= ions.nat
@@ -243,6 +235,42 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     if optmix :
         opt = MixOptimization(optimizer = opt)
     return opt
+
+def config2ions(config, ions = None, keysys = 'GSYSTEM', **kwargs):
+    if ions is not None : return ions
+    if config[keysys]["cell"]["file"] :
+        filename = config["PATH"]["cell"] +os.sep+ config[keysys]["cell"]["file"]
+        try :
+            ions = io.read(filename,
+                format=config[keysys]["cell"]["format"],
+                names=config[keysys]["cell"]["elename"])
+        except Exception:
+            ions = io.ase_read(filename,
+                    format=config[keysys]["cell"]["format"])
+    else :
+        from ase import Atoms
+        lattice = config[keysys]['cell']['lattice']
+        symbols = config[keysys]['cell']['symbols']
+        positions = config[keysys]['cell']['positions']
+        scaled_positions = config[keysys]['cell']['scaled_positions']
+        numbers = config[keysys]['cell']['numbers']
+        if len(lattice) == 9 :
+            lattice = np.asarray(lattice).reshape((3, 3))
+        if positions is not None :
+            positions = np.asarray(positions).reshape((-1, 3))
+        if scaled_positions is not None :
+            scaled_positions = np.asarray(scaled_positions).reshape((-1, 3))
+        atoms = Atoms(symbols = symbols, positions = positions, cell = lattice,
+                numbers = numbers, scaled_positions = scaled_positions)
+        ions = io.ase2ions(atoms)
+    return ions
+
+def ions2config(config, ions, keysys = 'GSYSTEM', **kwargs):
+    lattice = ions.pos.cell.lattice.ravel(order = 'F')
+    config[keysys]['cell']['lattice'] = (lattice*LEN_CONV["Bohr"]["Angstrom"]).tolist()
+    config[keysys]['cell']['symbols'] = ions.labels.tolist()
+    config[keysys]['cell']['positions'] = (ions.pos.to_cart().ravel()*LEN_CONV["Bohr"]["Angstrom"]).tolist()
+    return config
 
 def config2total_embed(config, driver = None, optimizer = None, **kwargs):
     """

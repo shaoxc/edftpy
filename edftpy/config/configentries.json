@@ -187,7 +187,38 @@
 			},
 			"file": {
 				"type": "str",
-				"default": "POSCAR"
+				"default": null
+			},
+			"lattice": {
+				"type": "floatlist",
+				"default": null,
+				"comment": "Three numbers means three lengths of orthogonal cell; Six numbers means three vector lengths and three angles; Nine numbers means unit vector[a, b, c]. Only works for :ref:`GSYSTEM<GSYSTEM>` and when :ref:`cell-file<cell-file>` is not given.",
+				"options": ""
+			},
+			"symbols": {
+				"type": "cstrlist",
+				"default": null,
+				"comment": "A list of symbols for all atoms. Only works for :ref:`GSYSTEM<GSYSTEM>` and when :ref:`cell-file<cell-file>` is not given.",
+				"options": ""
+			},
+			"positions": {
+				"type": "floatlist",
+				"default": null,
+				"comment": "Atomic positions in Cartesian coordinate. Only works for :ref:`GSYSTEM<GSYSTEM>` and when :ref:`cell-file<cell-file>` is not given.",
+				"unit": "Angstrom",
+				"options": ""
+			},
+			"scaled_positions": {
+				"type": "floatlist",
+				"default": null,
+				"comment": "Atomic positions in crystal coordinate. Only works for :ref:`GSYSTEM<GSYSTEM>` and when :ref:`cell-file<cell-file>` is not given.",
+				"options": ""
+			},
+			"numbers": {
+				"type": "intlist",
+				"default": null,
+				"comment": "Atomic number for all atoms. Only works for :ref:`GSYSTEM<GSYSTEM>` and when :ref:`cell-file<cell-file>` is not given.",
+				"options": ""
 			}
 		},
 		"grid": {
@@ -326,7 +357,7 @@
 			},
 			"file": {
 				"type": "str",
-				"comment": "The file name of input structure. Many file formats are available. We use `ASE's I/O <https://wiki.fysik.dtu.dk/ase/ase/io/io.html#module-ase.io>`_.",
+				"comment": "The file name of input structure. Many file formats are available. We use `ASE's I/O <https://wiki.fysik.dtu.dk/ase/ase/io/io.html#module-ase.io>`_ for some formats.",
 				"default": null
 			},
 			"split": {

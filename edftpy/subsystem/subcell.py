@@ -215,7 +215,7 @@ class SubCell(object):
                 ncharge += scale
 
         nc = self._gaussian_density.integral()
-        sprint('fake : ', nc, ' error : ', nc - ncharge, comm=self.comm)
+        sprint(f'fake : {nc : >16.8E} deviation : {nc - ncharge: >16.8E}', comm=self.comm)
 
         # if ncharge > 1E-3 :
             # factor = ncharge / (self._gaussian_density.integral())

@@ -69,9 +69,9 @@ def gen_list_table(dicts, parent = None, top = False, add = False, ncol = 4):
             if k == 'comment' : continue
             if hasattr(v, 'level') and v.level == 'devel' : continue
             if isinstance(v, dict):
-                for k2 in v :
+                for k2, v2 in v.items() :
                     if k2 == 'comment' : continue
-                    if v[k2].level == 'devel' : continue
+                    if hasattr(v2, 'level') and v2.level == 'devel' : continue
                     keys.append(k + '-' + k2)
             else :
                 keys.append(k)
@@ -139,9 +139,11 @@ def gen_config_rst():
     configentries = default_option()['CONFDICT']
     with open('./source/tutorials/config.rst', 'w') as f:
         f.write(header)
+        gsystem = configentries['GSYSTEM']
         for section in configentries:
             #-----------------------------------------------------------------------
-            fstr = '\n{0}\n'.format(section)
+            fstr = "\n.. _{0}:\n\n".format(section)
+            fstr += '\n{0}\n'.format(section)
             fstr += '-'*20 + '\n\n'.format(section)
             item = None
 
@@ -180,6 +182,12 @@ def gen_config_rst():
                         lines = lines.replace('\\\\n', '\n')
                         lines = lines.replace('\\\\t', '\t')
                         fstr += "\t{0}\n\n".format(lines)
+
+                    #add GSYSTEM
+                    if section== 'SUB' and key in gsystem :
+                        for k2, v2 in gsystem[key].items() :
+                            if k2 not in item : item[k2] = v2
+
                     fstr += gen_list_table(item, key, add = True)
                     f.write(fstr)
 
