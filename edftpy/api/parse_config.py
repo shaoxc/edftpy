@@ -92,7 +92,6 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     elif isinstance(config, str):
         config = read_conf(config)
     ############################## Gsystem ##############################
-    keysys = "GSYSTEM"
     ions = config2ions(config, ions = ions)
 
     if optimizer is None :
@@ -148,15 +147,12 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     #-----------------------------------------------------------------------
     graphtopo = config2graphtopo(config, graphtopo = graphtopo)
     if graphtopo.rank == 0 :
-        # import pprint
-        # pprint.pprint(config)
         config = ions2config(config, ions)
         write_conf('edftpy_running.json', config)
-        io.ase_write('edftpy_gsystem.xyz', ions, format = 'extxyz', parallel = False)
+        io.write('edftpy_gsystem.xyz', ions)
         if optimizer is None :
             for key in config :
                 if key.startswith('SUB') :
-                    # print('Subsytem : ', key, config[key]['technique'], config[key]['cell']['index'])
                     f_str = 'Subsytem : {} {} {}'.format(key, config[key]['technique'], config[key]['cell']['index'])
                     f_str = "\n".join(textwrap.wrap(f_str, width = 80))
                     print(f_str)
@@ -206,7 +202,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         if driver is None : continue
         if (driver.technique == 'OF' and graphtopo.is_root) or (graphtopo.isub == i and graphtopo.comm_sub.rank == 0) or graphtopo.isub is None:
             outfile = driver.prefix + '.xyz'
-            io.ase_write(outfile, driver.subcell.ions, format = 'extxyz', parallel = False)
+            io.write(outfile, driver.subcell.ions)
     #-----------------------------------------------------------------------
     optimization_options = config["OPT"].copy()
     optimization_options["econv"] *= ions.nat
@@ -301,14 +297,8 @@ def config2total_embed(config, driver = None, optimizer = None, **kwargs):
 def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell_change = None, **kwargs):
     ############################## Gsystem ##############################
     keysys = "GSYSTEM"
-    if ions is None :
-        try :
-            ions = io.read(
-                config["PATH"]["cell"] +os.sep+ config[keysys]["cell"]["file"],
-                format=config[keysys]["cell"]["format"],
-                names=config[keysys]["cell"]["elename"])
-        except Exception:
-            ions = io.ase_read(config["PATH"]["cell"] +os.sep+ config[keysys]["cell"]["file"])
+
+    ions = config2ions(config, ions = ions)
 
     nr = config[keysys]["grid"]["nr"]
     spacing = config[keysys]["grid"]["spacing"] * LEN_CONV["Angstrom"]["Bohr"]
