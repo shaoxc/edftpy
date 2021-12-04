@@ -179,7 +179,10 @@ class Optimization(object):
             if call: function(*args, **kwargs)
 
     def optimize(self, **kwargs):
-        self.run(**kwargs)
+        converged = self.run(**kwargs)
+        if not converged :
+            sprint("!!!ERROR : Optimization is not converged ###")
+            exit()
 
     def run(self, **kwargs):
         for item in self.irun(**kwargs):
