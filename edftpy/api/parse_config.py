@@ -136,13 +136,6 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         pseudo = optimizer.gsystem.total_evaluator.funcdicts['PSEUDO']
     #-----------------------------------------------------------------------
     if optimizer is not None and adaptive :
-        for key, driver in reuse_drivers.items() :
-            density_file = config[key]["prefix"] + '_last.snpy'
-            config[key]["density"]["file"] = density_file
-            if driver is None : continue
-            if driver.comm.rank == 0 :
-                io.write(density_file, driver.density, driver.subcell.ions)
-        graphtopo.comm.Barrier()
         graphtopo.free_comm()
     #-----------------------------------------------------------------------
     graphtopo = config2graphtopo(config, graphtopo = graphtopo)
