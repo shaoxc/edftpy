@@ -11,7 +11,6 @@ import numpy as np
 from dftpy.constants import LEN_CONV
 
 from edftpy.engine.engine import Engine
-from edftpy.io import print2file
 
 try:
     __version__ = pyec.__version__
@@ -43,7 +42,6 @@ class EngineEnviron(Engine):
         # temporariliy storing and then cleaning this up
         self.potential = None
 
-    @print2file()
     def get_force(self, **kwargs):
         """get Environ force contribution
         """
@@ -51,7 +49,6 @@ class EngineEnviron(Engine):
         environ_calc.calc_force(force)
         return force.T * self.units['energy']
 
-    @print2file()
     def calc_energy(self, **kwargs):
         """get Environ energy contribution
         """
@@ -59,7 +56,6 @@ class EngineEnviron(Engine):
         energy = environ_calc.calc_energy()
         return energy * self.units['energy']
 
-    @print2file()
     def initial(self, inputfile= None, comm = None, **kwargs):
         """initialize the Environ module
 
@@ -170,7 +166,6 @@ class EngineEnviron(Engine):
         defaults.update(subs)
         return defaults
 
-    @print2file()
     def scf(self, rho, update = True, **kwargs):
         """A single electronic step for Environ
 
@@ -187,7 +182,6 @@ class EngineEnviron(Engine):
         """
         return self.potential * self.units['energy']
 
-    @print2file()
     def set_mbx_charges(self, rho):
         """Supply Environ with MBX charges
         """
@@ -199,7 +193,6 @@ class EngineEnviron(Engine):
         nr[2] = environ_calc.get_nr3x()
         return nr
 
-    @print2file()
     def update_ions(self, subcell = None, update = 0, **kwargs):
         environ_setup.clean_environ()
         self.write_input(subcell = subcell, **kwargs)
@@ -208,7 +201,6 @@ class EngineEnviron(Engine):
     def end_scf(self, **kwargs):
         pass
 
-    @print2file()
     def stop_run(self, **kwargs):
         environ_setup.clean_environ()
 

@@ -1,6 +1,6 @@
 import numpy as np
 import os
-from collections import OrderedDict, ChainMap
+from collections import OrderedDict
 from functools import reduce
 import copy
 import textwrap
@@ -148,7 +148,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
                 if key.startswith('SUB') :
                     f_str = 'Subsytem : {} {} {}'.format(key, config[key]['technique'], config[key]['cell']['index'])
                     f_str = "\n".join(textwrap.wrap(f_str, width = 80))
-                    print(f_str)
+                    sprint(f_str, lprint = True)
     #-----------------------------------------------------------------------
     labels = set(ions.labels)
     pplist = {}
@@ -166,6 +166,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     ############################## Subsytem ##############################
     subkeys = [key for key in config if key.startswith('SUB')]
     drivers = []
+    nr_all = np.zeros((len(subkeys), 3), dtype = np.int64)
     for i, keysys in enumerate(subkeys):
         if cell_change == 'position' :
             driver = optimizer.drivers[i]
@@ -180,6 +181,8 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
             else :
                 mp = MP(comm = graphtopo.comm_sub, decomposition = graphtopo.decomposition)
             driver = config2driver(config, keysys, ions, grid, pplist, total_evaluator = total_evaluator, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp, append = append)
+            if mp.rank == 0 and driver.grid_driver is not None :
+                nr_all[i] = driver.grid_driver.nrR
             #-----------------------------------------------------------------------
             #PSEUDO was evaluated on all processors, so directly remove from embedding
             # if 'PSEUDO' in driver.evaluator.funcdicts :
@@ -190,6 +193,18 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     #-----------------------------------------------------------------------
     if len(drivers) > 0 :
         graphtopo.build_region(grid=gsystem.grid, drivers=drivers)
+        nr_all = grid.mp.vsum(nr_all)
+        if graphtopo.is_root :
+            fstr = ''
+            for i, keysys in enumerate(subkeys):
+                nr_shift = graphtopo.graph.sub_shift[i]
+                nrs = graphtopo.graph.sub_shape[i]
+                if nr_all[i][0] == 0 :
+                    nrs2 = graphtopo.graph.sub_shape[i]
+                else :
+                    nrs2 = nr_all[i]
+                fstr += f'Grid : {keysys} {nr_shift} {nrs} {nrs2}\n'
+            sprint(fstr, lprint = True)
     #-----------------------------------------------------------------------
     for i, driver in enumerate(drivers):
         if driver is None : continue

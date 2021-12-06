@@ -54,19 +54,11 @@ class EngineDFTpy(Driver):
         #-----------------------------------------------------------------------
         self.density = self.subcell.density
         self.init_density()
-        self.outfile = self.prefix + '.out'
-        if self.comm.rank == 0 :
-            if self.append :
-                self.fileobj = open(self.outfile, 'a', buffering = 1)
-            else :
-                self.fileobj = open(self.outfile, 'w', buffering = 1)
-        else :
-            self.fileobj = None
+        if self.comm.rank != 0 : self.fileobj = None
 
         fstr = f'Subcell grid({self.prefix}): {self.subcell.grid.nrR}  {self.subcell.grid.nr}\n'
         fstr += f'Subcell shift({self.prefix}): {self.subcell.grid.shift}\n'
         if self.fileobj : self.fileobj.write(fstr)
-        sprint(fstr, comm=self.comm)
 
         self.update_workspace(first = True)
 
@@ -240,8 +232,6 @@ class EngineDFTpy(Driver):
 
         self.prev_charge[:] = self.charge
         #-----------------------------------------------------------------------
-        # stdout = environ['STDOUT']
-        # environ['STDOUT'] = self.fileobj
         if self.options['opt_method'] == 'full' :
             self.get_density_full_opt(**kwargs)
         elif self.options['opt_method'] == 'part' :
@@ -250,7 +240,6 @@ class EngineDFTpy(Driver):
             if self.comm.size > 1 :
                 raise AttributeError("Not support parallel")
             self.get_density_hamiltonian(**kwargs)
-        # environ['STDOUT'] = stdout
         #-----------------------------------------------------------------------
         self._format_density_invert(self.charge, self.grid)
         return self.density

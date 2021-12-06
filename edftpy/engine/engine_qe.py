@@ -123,9 +123,6 @@ class EngineQE(Engine):
     def set_rho(self, rho, **kwargs):
         qepy.qepy_mod.qepy_set_rho(rho)
 
-    def set_stdout(self, outfile, append = False, **kwargs):
-        qepy.qepy_mod.qepy_set_stdout(outfile, append = append)
-
     def stop_scf(self, status = 0, save = ['D'], **kwargs):
         if 'W' in save :
             what = 'all'
@@ -167,9 +164,6 @@ class EngineQE(Engine):
 
     def wfc2rho(self, *args, **kwargs):
         qepy.qepy_tddft_mod.qepy_cetddft_wfc2rho()
-
-    def write_stdout(self, line, **kwargs):
-        qepy.qepy_mod.qepy_write_stdout(line)
 
     def get_dnorm(self, **kwargs):
         return self.embed.dnorm
@@ -371,3 +365,9 @@ class EngineQE(Engine):
             density = np.zeros(1)
 
         return density
+
+    def set_stdout(self, outfile, append = False, **kwargs):
+        qepy.qepy_mod.qepy_set_stdout(outfile, append = append)
+
+    def write_stdout(self, line, **kwargs):
+        qepy.qepy_mod.qepy_write_stdout(line)

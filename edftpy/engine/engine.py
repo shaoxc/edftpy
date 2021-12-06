@@ -60,6 +60,7 @@ class Driver(ABC):
         self.atmp2 = np.zeros((1, self.nspin), order='F')
         self.mix_coef = None
         self.outfile = self.prefix + '.out'
+        self.set_stdout(self.outfile, append = append)
 
     @property
     def grid(self):
@@ -143,6 +144,16 @@ class Driver(ABC):
             self._filter = self._windows_function(self.grid)
         return self._filter
 
+    def set_stdout(self, outfile, append = False, **kwargs):
+        if append :
+            self.fileobj = open(outfile, 'a', buffering = 1)
+        else :
+            self.fileobj = open(outfile, 'w', buffering = 1)
+
+    def write_stdout(self, line, **kwargs):
+        sprint(line, comm = self.comm, fileobj = self.fileobj, **kwargs)
+
+
 class Engine(ABC):
     """
     Note:
@@ -208,12 +219,6 @@ class Engine(ABC):
     def set_rho(self, rho, **kwargs):
         pass
 
-    def set_stdout(self, outfile, append = False, **kwargs):
-        if append :
-            self.fileobj = open(outfile, 'a', buffering = 1)
-        else :
-            self.fileobj = open(outfile, 'w', buffering = 1)
-
     def stop_scf(self, status = 0, save = ['D'], **kwargs):
         pass
 
@@ -242,9 +247,6 @@ class Engine(ABC):
 
     def wfc2rho(self, *args, **kwargs):
         pass
-
-    def write_stdout(self, line, **kwargs):
-        sprint(line, comm = self.comm, fileobj = self.fileobj, **kwargs)
 
     def get_potential(self, **kwargs):
         return None
