@@ -170,7 +170,8 @@ class EngineQE(Engine):
 
     def write_input(self, filename = 'sub_driver.in', subcell = None, params = {}, cell_params = {}, base_in_file = None, **kwargs):
         prefix = os.path.splitext(filename)[0]
-        in_params, cards, ase_atoms = self._build_ase_atoms(params, base_in_file, ions = subcell.ions, prefix = prefix)
+        in_params, cell_params, cards, ase_atoms = self._build_ase_atoms(params = params,
+                base_in_file = base_in_file, cell_params = cell_params, ions = getattr(subcell, 'ions', None), prefix = prefix)
         self._write_params(filename, ase_atoms, params = in_params, cell_params = cell_params, cards = cards, **kwargs)
 
     def _fix_params(self, params = None, prefix = 'sub_'):
@@ -208,41 +209,58 @@ class EngineQE(Engine):
                 params[k1][k2] = v2
         return params
 
-    def _build_ase_atoms(self, params = None, base_in_file = None, ions = None, prefix = 'sub_'):
-        ase_atoms = ions2ase(ions)
+    def _build_ase_atoms(self, params = {}, cell_params = {}, base_in_file = None, ions = None, prefix = 'sub_'):
+        in_params = {}
+        card_lines = []
+        if base_in_file :
+            if isinstance(base_in_file, (list, tuple)):
+                in_params, in_cell_params = self.merge_inputs(*base_in_file, pseudopotentials = cell_params.get('pseudopotentials', None))
+                if cell_params : in_cell_params.update(cell_params)
+                cell_params = in_cell_params
+            else :
+                fileobj = open(base_in_file, 'r')
+                in_params, card_lines = ase_io_driver.read_fortran_namelist(fileobj)
+                fileobj.close()
+
+        if ions is not None :
+            ase_atoms = ions2ase(ions)
+        else :
+            if not isinstance(base_in_file, (list, tuple)): base_in_file = [base_in_file]
+            ase_atoms = None
+            for fname in base_in_file :
+                fileobj = open(fname, 'r')
+                if ase_atoms is None :
+                    ase_atoms = ase_io_driver.read_espresso_in(fileobj)
+                else :
+                    ase_atoms = ase_atoms + ase_io_driver.read_espresso_in(fileobj)
+                fileobj.close()
+
         ase_atoms.set_calculator(ase_calc_driver())
 
-        if base_in_file :
-            fileobj = open(base_in_file, 'r')
-            in_params, card_lines = ase_io_driver.read_fortran_namelist(fileobj)
-            fileobj.close()
-        else :
-            in_params = {}
-            card_lines = []
+        if params :
+            in_params = self._fix_params(in_params, prefix = prefix)
+            for k1, v1 in params.items() :
+                if k1 not in in_params :
+                    in_params[k1] = {}
+                for k2, v2 in v1.items() :
+                    in_params[k1][k2] = v2
 
-        in_params = self._fix_params(in_params, prefix = prefix)
-
-        for k1, v1 in params.items() :
-            if k1 not in in_params :
-                in_params[k1] = {}
-            for k2, v2 in v1.items() :
-                in_params[k1][k2] = v2
-
-        return in_params, card_lines, ase_atoms
+        return in_params, cell_params, card_lines, ase_atoms
 
     def _write_params(self, outfile, ase_atoms, params = None, cell_params = {}, cards = None, density_initial = None, **kwargs):
         cell_params.update(kwargs)
         if 'pseudopotentials' not in cell_params :
             raise AttributeError("!!!ERROR : Must give the pseudopotentials")
-        value = {}
+        value = OrderedDict()
         for k2, v2 in cell_params['pseudopotentials'].items():
             value[k2] = os.path.basename(v2)
         cell_params['pseudopotentials'] = value
         # For QE, all pseudopotentials should at same directory
-        params['control']['pseudo_dir'] = os.path.dirname(v2)
-        fileobj = open(outfile, 'w')
+        params['control']['pseudo_dir'] = os.path.dirname(v2) or './'
         if 'kpts' not in cell_params :
             self._update_kpoints(cell_params, cards)
+        kpts = cell_params.get('kpts', [0])
+        if kpts[0] == 0 : cell_params['kpts'] = None
         pw_items = ['control', 'system', 'electrons', 'ions', 'cell']
         pw_params = params.copy()
         for k in params :
@@ -256,6 +274,7 @@ class EngineQE(Engine):
         if density_initial and density_initial == 'temp' :
             pw_params['electrons']['startingpot'] = 'file'
         #-----------------------------------------------------------------------
+        fileobj = open(outfile, 'w')
         ase_io_driver.write_espresso_in(fileobj, ase_atoms, pw_params, **cell_params)
         self._write_params_cards(fileobj, params, cards)
         prefix = pw_params['control'].get('prefix', None)
@@ -371,3 +390,203 @@ class EngineQE(Engine):
 
     def write_stdout(self, line, **kwargs):
         qepy.qepy_mod.qepy_write_stdout(line)
+
+    @staticmethod
+    def merge_inputs(*args, pseudopotentials = None, **kwargs):
+        """
+        Multiple input files into one file.
+        Note :
+            Please check the results carefully.
+        """
+        import re
+        inputs = OrderedDict({
+                'control' : {
+                    'calculation' : 'scf',
+                    },
+                'system' :
+                {
+                    'ibrav' : 0,
+                    'nosym' : True,
+                    },
+                'electrons' : {},
+                'ions' : {},
+                'cell' : {}
+                })
+        qe_kws_dims = {'system' :[
+                'starting_charge',
+                'starting_magnetization',
+                'hubbard_u',
+                'hubbard_j0',
+                'hubbard_alpha',
+                'hubbard_beta',
+                'angle1',
+                'angle2',
+                'london_c6',
+                'london_rvdw',
+                'starting_ns_eigenvalue',
+                ]}
+        qe_kws_number= {
+                'control' : {
+                    'nstep': [int, max],
+                    'iprint': [int, max],
+                    'dt': [float, max],
+                    'max_seconds': [float, max],
+                    'etot_conv_thr': [float, max],
+                    'forc_conv_thr': [float, max],
+                    'nberrycyc': [int, max],
+                    'gdir': [int, max],
+                    'nppstr': [int, max],
+                    },
+                'system' : {
+                    'ibrav': [int, min],
+                    'nat': [int, sum],
+                    'ntyp': [int, max],
+                    'nbnd': [int, max],
+                    'tot_charge': [float, sum],
+                    'tot_magnetization': [float, sum],
+                    'ecutwfc': [float, max],
+                    'ecutrho': [float, max],
+                    'ecutfock': [float, max],
+                    'degauss': [float, max],
+                    'nspin': [int, max],
+                    'ecfixed': [float, max],
+                    'qcutz': [float, max],
+                    'q2sigma': [float, max],
+                    'exx_fraction': [float, max],
+                    'screening_parameter': [float, max],
+                    'ecutvcut': [float, max],
+                    'localization_thr': [float, max],
+                    'lda_plus_u_kind': [int, max],
+                    'edir': [int, max],
+                    'emaxpos': [float, max],
+                    'eopreg': [float, max],
+                    'eamp': [float, max],
+                    'fixed_magnetization(1)': [float, sum],
+                    'fixed_magnetization(2)': [float, sum],
+                    'fixed_magnetization(3)': [float, sum],
+                    'lambda': [float, max],
+                    'report': [int, max],
+                    'esm_w': [float, max],
+                    'esm_efield': [float, max],
+                    'esm_nfit': [int, max],
+                    'fcp_mu': [float, max],
+                    'london_s6': [float, max],
+                    'london_rcut': [float, max],
+                    'ts_vdw_econv_thr': [float, max],
+                    'xdm_a1': [float, max],
+                    'xdm_a2': [float, max],
+                    'space_group': [int, min],
+                    'origin_choice': [int, max],
+                    'zgate': [float, max],
+                    'block_1': [float, max],
+                    'block_2': [float, max],
+                    'block_height': [float, max],
+                    },
+                'electrons' : {
+                        'electron_maxstep': [int, max],
+                        'conv_thr': [float, max],
+                        'conv_thr_init': [float, max],
+                        'conv_thr_multi': [float, max],
+                        'mixing_beta': [float, min],
+                        'mixing_ndim': [int, max],
+                        'mixing_fixed_ns': [int, max],
+                        'ortho_para': [int, max],
+                        'diago_thr_init': [float, max],
+                        'diago_cg_maxiter': [int, max],
+                        'diago_david_ndim': [int, max],
+                        'efield': [float, max],
+                        'efield_cart(1)': [float, max],
+                        'efield_cart(2)': [float, max],
+                        'efield_cart(3)': [float, max],
+                        }}
+        #-----------------------------------------------------------------------
+        pattern=re.compile(r'(.*?)(\d+)\)')
+        #-----------------------------------------------------------------------
+        in_params_all  = []
+        atomic_species_all = []
+        k_points_all = []
+        pps = {}
+        for i, fname in enumerate(args):
+            fileobj = open(fname, 'r')
+            in_params, card_lines = ase_io_driver.read_fortran_namelist(fileobj)
+            fileobj.close()
+            #-----------------------------------------------------------------------
+            atomic_species = []
+            k_points = {}
+            lines = iter(card_lines)
+            for line in lines :
+                if line.split()[0].upper() == 'K_POINTS' :
+                    ktype = line.split()[1].lower()
+                    if 'gamma' in ktype :
+                        # k_points = {'kpts' : [0]*3, 'koffset' : [0]*3}
+                        k_points = {}
+                    elif 'automatic' in ktype :
+                        line = next(lines)
+                        item = list(map(int, line.split()))
+                        k_points = {'kpts' : item[:3], 'koffset' : item[3:6]}
+                elif line.split()[0].upper() == 'ATOMIC_SPECIES' :
+                    ntyp = int(in_params['system']['ntyp'])
+                    for i in range(ntyp):
+                        line = next(lines)
+                        symbol, _ , pp = line.split()[:3]
+                        atomic_species.append(symbol.capitalize())
+                        pps[atomic_species[-1]] = pp
+            in_params_all.append(in_params)
+            atomic_species_all.append(atomic_species)
+            k_points_all.append(k_points)
+            #-----------------------------------------------------------------------
+            for section in inputs :
+                inputs[section].update(in_params.get(section, {}))
+        #-----------------------------------------------------------------------
+        if not pseudopotentials : pseudopotentials = pps
+        ppkeys = list(pseudopotentials.keys())
+        #-----------------------------------------------------------------------
+        # remove all dimensions keys
+        for section in list(qe_kws_dims.keys()):
+            dims_keys = []
+            keys = list(inputs[section].keys())
+            for key in keys:
+                for pref in qe_kws_dims[section] :
+                    if key.startswith(pref):
+                        # dims_keys.append(pref)
+                        dims_keys.append(key)
+                        inputs[section].pop(key)
+            qe_kws_dims[section] = dims_keys
+
+        # update all dimensions keys
+        for section, item in qe_kws_dims.items() :
+            for i, in_params in enumerate(in_params_all):
+                atomic_species = atomic_species_all[i]
+                if len(atomic_species) == 0 : continue
+                for keyd in item :
+                    if keyd in in_params[section] :
+                        m = pattern.match(keyd)
+                        s = atomic_species[int(m.group(2)) - 1]
+                        ind = ppkeys.index(s) + 1
+                        newkeyd = m.group(1)+str(ind) + ')'
+                        inputs[section][newkeyd] = in_params[section][keyd]
+
+        # update number keys
+        for section, item in qe_kws_number.items() :
+            for key, item2 in item.items():
+                l = []
+                for in_params in in_params_all:
+                    if key in in_params.get(section, {}):
+                        l.append(item2[0](in_params[section][key]))
+                if len(l)>0 : inputs[section][key] = item2[1](l)
+
+        kpts = np.zeros(3, dtype = np.int64)
+        koffset = np.zeros(3, dtype = np.int64)
+        for k_points in k_points_all :
+            if 'kpts' in k_points :
+                kpts = np.maximum(kpts, k_points['kpts'])
+                koffset = k_points.get('koffset', koffset)
+
+        inputs['system']['ntyp'] = len(pseudopotentials)
+
+        cell_params = {
+                'pseudopotentials' : pseudopotentials,
+                'kpts' : kpts,
+                'koffset' : koffset,
+                }
+        return inputs, cell_params
