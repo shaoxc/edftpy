@@ -100,15 +100,12 @@ def union_mlist(arrs, keys = None, array = False, number = True):
                     arrs.append(set(itertools.chain.from_iterable(comp)))
             else :
                 arrs.append(comp[0])
+    for i, item in enumerate(arrs): arrs[i] = list(item)
     return arrs
 
 def union_mlist_number(arrs, keys = None, array = False):
     if keys is None :
         keys = set(itertools.chain.from_iterable(arrs))
-    # sub_inds = [[] for _ in arrs]
-    # for i, item in enumerate(arrs):
-    #     for j in item :
-    #         sub_inds[j].append(i)
     sub_inds = arrs.copy()
     for ik, key in enumerate(keys):
         comp = []
@@ -142,7 +139,7 @@ def union_mlist_number(arrs, keys = None, array = False):
         if array :
             values.append(item)
         else :
-            values.append(np.asarray(list(item)))
+            values.append(np.asarray(sorted(item)))
         used.extend(item)
     return values
 

@@ -850,7 +850,7 @@ def config2nsub(config, ions):
         ions_sub = ions[index]
 
         decompose = config[keysys]["decompose"]
-        indices = decompose_sub(ions_sub, decompose)
+        indices = decompose_sub(ions_sub, **decompose)
 
         if index is None :
             ions_inds_sub = ions_inds
@@ -940,7 +940,7 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
     keysys = "GSYSTEM"
     decompose = config[keysys]["decompose"]
     if decompose['method'] == 'distance' :
-        indices = decompose_sub(ions, decompose)
+        indices = decompose_sub(ions, **decompose)
     else :
         raise AttributeError("{} is not supported".format(decompose['method']))
 
@@ -960,10 +960,7 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
     reuse_drivers = {}
 
     for i, index in enumerate(indices) :
-        hs = OrderedDict()
         ind = set(index)
-        nmax = 0
-        na = 0
         kind = None
         this_hash = get_hash(ind)
         # check saved keys
@@ -972,37 +969,9 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
                 kind = 'saved'
                 this_key = keysys
                 break
-        # check ASUB
-        if kind is None :
-            for keysys in subkeys :
-                base = set(asub[keysys]['cell']['index'])
-                ins = base & ind
-                ns = len(ins)
-                if ns >0 :
-                    hs[keysys] = ns
-                    if ns>nmax :
-                        nmax = ns
-                        this_key = keysys
-                    na += ns
-                    # check the kind
-                    if na == len(ind) :
-                        if na == ns :
-                            if ns < len(base):
-                                kind = 'part'
-                            else :
-                                kind = 'one'
-                        else :
-                            kind = 'more'
-                        break
         if kind == 'saved' :
             #the subsystem is same as last step
-            #-----------------------------------------------------------------------
-            key0 = this_key[1:]
-            key = key0
-            ik = 0
-            while key in config :
-                ik += 1
-                key = key0 + '_' + str(ik)
+            key = this_key[1:]
             config[key] = config.pop(this_key)
             #-----------------------------------------------------------------------
             subkeys_prev.remove(this_key)
@@ -1012,41 +981,78 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
                     if driver is None : continue
                     if driver.prefix == config[key]["prefix"] :
                         reuse_drivers[key] = driver
-            config[key]["prefix"] = key.lower()
+            #-----------------------------------------------------------------------
+            indices[i] = []
+            config[key]["density"]["file"] = None
+            f_str = 'New Subsytem : {} {} {}'.format(key, kind, index)
+            f_str = "\n".join(textwrap.wrap(f_str, width = 80))
+            sprint(f_str)
+
+    # check ASUB
+    for i, index in enumerate(indices) :
+        if len(index) == 0 : continue
+        hs = OrderedDict()
+        ind = set(index)
+        nmax = 0
+        na = 0
+        for keysys in subkeys :
+            base = set(asub[keysys]['cell']['index'])
+            ins = base & ind
+            ns = len(ins)
+            if ns >0 :
+                hs[keysys] = ns
+                if ns>nmax :
+                    nmax = ns
+                    this_key = keysys
+                na += ns
+                # check the kind
+                if na == len(ind) :
+                    if na == ns :
+                        if ns < len(base):
+                            kind = 'part'
+                        else :
+                            kind = 'one'
+                    else :
+                        kind = 'more'
+                    break
+        key0 = asub[this_key]["prefix"].upper()
+        key = key0
+        ik = 0
+        while key in config :
+            ik += 1
+            key = key0 + '_' + str(ik)
+        config[key] = copy.deepcopy(asub[this_key])
+        config[key]["prefix"] = key.lower()
+        if kind == 'one' :
+            #just one subsystem
+            pass
+        elif kind == 'part' :
+            #only a part of one subsystem, still use same setting as whole one
+            config[key]["nprocs"] = max(1, config[key]["nprocs"]*len(index)/len(config[key]["cell"]["index"]))
+            config[key]["cell"]["index"] = index
+        elif kind == 'more' :
+            #more than one subsystem
+            nprocs = 0
+            basefiles = []
+            for item, nc in hs.items() :
+                nprocs += asub[item]["nprocs"]*nc/len(asub[item]["cell"]["index"])
+                basefile = asub[item]["basefile"]
+                if basefile : basefiles.append(basefile)
+            config[key]["basefile"] = basefiles if len(basefiles)>1 else basefiles[0]
+            config[key]["nprocs"] = max(1, nprocs)
+            config[key]["cell"]["index"] = index
+            #-----------------------------------------------------------------------
+            if regions is None :
+                regions = config2asub_region(config, ions, grid)
+            lb = reduce(np.minimum, [regions[k][0] for k in hs])
+            ub = reduce(np.maximum, [regions[k][1] for k in hs])
+            cellsplit = np.minimum((ub - lb)/grid.nrR, 1.0)
+            config[key]["cell"]["split"] = cellsplit.tolist()
+            #-----------------------------------------------------------------------
         else :
-            key0 = asub[this_key]["prefix"].upper()
-            key = key0
-            ik = 0
-            while key in config :
-                ik += 1
-                key = key0 + '_' + str(ik)
-            config[key] = copy.deepcopy(asub[this_key])
-            config[key]["prefix"] = key.lower()
-            if kind == 'one' :
-                #just one subsystem
-                pass
-            elif kind == 'part' :
-                #only a part of one subsystem, still use same setting as whole one
-                config[key]["nprocs"] = max(1, config[key]["nprocs"]*len(index)/len(config[key]["cell"]["index"]))
-                config[key]["cell"]["index"] = index
-            elif kind == 'more' :
-                #more than one subsystem
-                nprocs = 0
-                for item, nc in hs.items() :
-                    nprocs += asub[item]["nprocs"]*nc/len(asub[item]["cell"]["index"])
-                config[key]["nprocs"] = max(1, nprocs)
-                config[key]["cell"]["index"] = index
-                if regions is None :
-                    regions = config2asub_region(config, ions, grid)
-                lb = reduce(np.minimum, [v[0] for k, v in regions.items()])
-                ub = reduce(np.maximum, [v[1] for k, v in regions.items()])
-                cellsplit = np.minimum((ub - lb)/grid.nrR, 1.0)
-                config[key]["cell"]["split"] = cellsplit.tolist()
-            else :
-                raise AttributeError("ERROR : Not support this kind : {}".format(kind))
+            raise AttributeError("ERROR : Not support this kind : {}".format(kind))
         # set the initial density as None
         config[key]["density"]["file"] = None
-        # sprint('New Subsytem : ', key, kind, index)
         f_str = 'New Subsytem : {} {} {}'.format(key, kind, index)
         f_str = "\n".join(textwrap.wrap(f_str, width = 80))
         sprint(f_str)
