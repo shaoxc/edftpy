@@ -212,28 +212,20 @@ class EngineQE(Engine):
     def _build_ase_atoms(self, params = {}, cell_params = {}, base_in_file = None, ions = None, prefix = 'sub_'):
         in_params = {}
         card_lines = []
-        if base_in_file :
-            if isinstance(base_in_file, (list, tuple)):
-                in_params, in_cell_params = self.merge_inputs(*base_in_file, pseudopotentials = cell_params.get('pseudopotentials', None))
-                if cell_params : in_cell_params.update(cell_params)
-                cell_params = in_cell_params
-            else :
-                fileobj = open(base_in_file, 'r')
-                in_params, card_lines = ase_io_driver.read_fortran_namelist(fileobj)
-                fileobj.close()
 
         if ions is not None :
             ase_atoms = ions2ase(ions)
         else :
-            if not isinstance(base_in_file, (list, tuple)): base_in_file = [base_in_file]
             ase_atoms = None
-            for fname in base_in_file :
-                fileobj = open(fname, 'r')
-                if ase_atoms is None :
-                    ase_atoms = ase_io_driver.read_espresso_in(fileobj)
-                else :
-                    ase_atoms = ase_atoms + ase_io_driver.read_espresso_in(fileobj)
-                fileobj.close()
+
+        if base_in_file :
+            if not isinstance(base_in_file, (list, tuple)): base_in_file = [base_in_file]
+            in_params, in_cell_params, ase_atoms = self.merge_inputs(*base_in_file, atoms = ase_atoms,
+                    pseudopotentials = cell_params.get('pseudopotentials', None))
+            if cell_params : in_cell_params.update(cell_params)
+            cell_params = in_cell_params
+            # with open(base_in_file, 'r') as fh:
+            #     in_params, card_lines = ase_io_driver.read_fortran_namelist(fh)
 
         ase_atoms.set_calculator(ase_calc_driver())
 
@@ -392,7 +384,7 @@ class EngineQE(Engine):
         qepy.qepy_mod.qepy_write_stdout(line)
 
     @staticmethod
-    def merge_inputs(*args, pseudopotentials = None, **kwargs):
+    def merge_inputs(*args, atoms = None, pseudopotentials = None, **kwargs):
         """
         Multiple input files into one file.
         Note :
@@ -500,6 +492,13 @@ class EngineQE(Engine):
                         'efield_cart(3)': [float, max],
                         }}
         #-----------------------------------------------------------------------
+        if atoms is None :
+            for fname in args:
+                with open(fname) as fh:
+                    if atoms is None :
+                        atoms = ase_io_driver.read_espresso_in(fh)
+                    else :
+                        atoms = atoms + ase_io_driver.read_espresso_in(fh)
         pattern=re.compile(r'(.*?)(\d+)\)')
         #-----------------------------------------------------------------------
         in_params_all  = []
@@ -538,7 +537,11 @@ class EngineQE(Engine):
             for section in inputs :
                 inputs[section].update(in_params.get(section, {}))
         #-----------------------------------------------------------------------
-        if not pseudopotentials : pseudopotentials = pps
+        if pseudopotentials : pps = pseudopotentials
+        pseudopotentials = {}
+        for symbol in OrderedDict.fromkeys(atoms.get_chemical_symbols()):
+            if symbol not in pseudopotentials :
+                pseudopotentials[symbol] = pps.get(symbol, None)
         ppkeys = list(pseudopotentials.keys())
         #-----------------------------------------------------------------------
         # remove all dimensions keys
@@ -589,4 +592,4 @@ class EngineQE(Engine):
                 'kpts' : kpts,
                 'koffset' : koffset,
                 }
-        return inputs, cell_params
+        return inputs, cell_params, atoms
