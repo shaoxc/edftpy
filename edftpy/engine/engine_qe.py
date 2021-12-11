@@ -224,8 +224,9 @@ class EngineQE(Engine):
                     pseudopotentials = cell_params.get('pseudopotentials', None))
             if cell_params : in_cell_params.update(cell_params)
             cell_params = in_cell_params
-            # with open(base_in_file, 'r') as fh:
-            #     in_params, card_lines = ase_io_driver.read_fortran_namelist(fh)
+            if len(base_in_file) == 1 :
+                with open(base_in_file[0], 'r') as fh:
+                    _, card_lines = ase_io_driver.read_fortran_namelist(fh)
 
         ase_atoms.set_calculator(ase_calc_driver())
 
@@ -534,8 +535,11 @@ class EngineQE(Engine):
             atomic_species_all.append(atomic_species)
             k_points_all.append(k_points)
             #-----------------------------------------------------------------------
-            for section in inputs :
-                inputs[section].update(in_params.get(section, {}))
+            for section in in_params:
+                if section in inputs :
+                    inputs[section].update(in_params[section])
+                else :
+                    inputs[section] = in_params[section].copy()
         #-----------------------------------------------------------------------
         if pseudopotentials : pps = pseudopotentials
         pseudopotentials = {}
