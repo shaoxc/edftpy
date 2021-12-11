@@ -394,6 +394,12 @@
 				"type": "bool",
 				"default": true,
 				"comment": "Optimize the number of grid points."
+			},
+			"shift": {
+				"type": "intlist",
+				"default": null,
+				"comment": "The origin shift of grid to global grid.",
+				"level": "devel"
 			}
 		},
 		"density": {

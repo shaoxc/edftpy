@@ -195,6 +195,8 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         graphtopo.build_region(grid=gsystem.grid, drivers=drivers)
         nr_all = grid.mp.vsum(nr_all)
         if graphtopo.is_root :
+            config_new = copy.deepcopy(config)
+            config_new["GSYSTEM"]["grid"]["nr"] = gsystem.grid.nrR.tolist()
             fstr = ''
             for i, keysys in enumerate(subkeys):
                 nr_shift = graphtopo.graph.sub_shift[i]
@@ -203,8 +205,11 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
                     nrs2 = graphtopo.graph.sub_shape[i]
                 else :
                     nrs2 = nr_all[i]
+                config_new[keysys]["grid"]["nr"] = graphtopo.graph.sub_shape[i].tolist()
+                config_new[keysys]["grid"]["shift"] = graphtopo.graph.sub_shift[i].tolist()
                 fstr += f'Grid : {keysys} {nr_shift} {nrs} {nrs2}\n'
             sprint(fstr, lprint = True)
+            write_conf('edftpy_running.json', config_new)
     #-----------------------------------------------------------------------
     for i, driver in enumerate(drivers):
         if driver is None : continue
