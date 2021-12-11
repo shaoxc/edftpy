@@ -13,3 +13,6 @@ A creation of PRG
 ### Optional (highly recommended):
  - [Libxc](https://gitlab.com/libxc/libxc)
  - [f90wrap](https://github.com/jameskermode/f90wrap) (latest)
+
+## Manual
+[`eDFTpy` manual](http://edftpy.rutgers.edu)
