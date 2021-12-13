@@ -182,6 +182,7 @@ class Optimization(object):
         converged = self.run(**kwargs)
         if not converged :
             sprint("!!!ERROR : Optimization is not converged ###")
+            self.stop_run()
             exit()
 
     def run(self, **kwargs):
