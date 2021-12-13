@@ -95,6 +95,9 @@ def get_atoms(args):
     atoms = None
     for i, fname in enumerate(args.cells) :
         prefix, ext = os.path.splitext(fname)
+        format_in = args.format_in
+        if format_in is None :
+            if ext.lower() == '.in' : format_in = 'espresso-in'
         if args.format_in == 'traj' or ext.lower() == '.traj' :
             from ase.io.trajectory import Trajectory
             struct = Trajectory(fname)
@@ -115,10 +118,10 @@ def get_atoms(args):
             struct = io.ions2ase(ions)
         else :
             try:
-                struct = ase.io.read(fname, format=args.format_in)
+                struct = ase.io.read(fname, format=format_in)
             except Exception :
                 try:
-                    struct = io.read(fname, format=args.format_in)
+                    struct = io.read(fname, format=format_in)
                     struct = io.ions2ase(struct)
                 except Exception as e:
                     raise e
