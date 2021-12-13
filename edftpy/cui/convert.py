@@ -230,15 +230,37 @@ def get_qepy_system(args):
     fname = args.cells[0]
     with open(fname, 'r') as fh:
         params, card_lines = ase_io_qe.read_fortran_namelist(fh)
-    inputobj.prefix = params.get('control', {}).get('prefix', 'pwscf')
-    inputobj.tmp_dir= params.get('control', {}).get('outdir', '.') + '/'
+    prefix = params.get('control', {}).get('prefix', 'pwscf').strip()
+    tmp_dir= params.get('control', {}).get('outdir', '.').strip() + os.sep
+    #-----------------------------------------------------------------------
+    data_dir = tmp_dir + prefix + '.save' + os.sep
+    if os.path.isfile(data_dir + 'data-file-schema.xml') :
+        oldxml = False
+    elif os.path.isfile(data_dir + 'data-file.xml') :
+        oldxml = True
+    else : # try eqe outdir
+        fpref, _ = os.path.splitext(fname)
+        num = fpref.split('_')[-1]
+        tmp_dir0 = tmp_dir
+        if tmp_dir.strip('./') :
+            tmp_dir = tmp_dir.strip('/').strip(os.sep) +'_' + num + os.sep
+        else :
+            tmp_dir = 'tmp_' + num + os.sep
+        data_dir = tmp_dir + prefix + '.save' + os.sep
+        if os.path.isfile(data_dir + 'data-file.xml') :
+            oldxml = True
+        else :
+            raise AttributeError(f"Can not find the 'xml' file in any tmp_dir({tmp_dir0} or {tmp_dir}).")
+    inputobj.prefix = prefix
+    inputobj.tmp_dir= tmp_dir
     #-----------------------------------------------------------------------
     qepy.qepy_initial(inputobj)
-    try:
-        qepy.read_file()
-    except Exception :
+    if oldxml :
+        if not hasattr(qepy, 'oldxml_read_file'):
+            raise AttributeError("Please reinstall the QEpy with 'oldxml=yes'.")
         qepy.oldxml_read_file()
-
+    else :
+        qepy.read_file()
     ions = EngineQE.get_ions_from_pw()
     rho = EngineQE.get_density_from_pw(ions)
 
