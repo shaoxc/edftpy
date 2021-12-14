@@ -543,7 +543,8 @@ class EngineQE(Engine):
         #-----------------------------------------------------------------------
         if pseudopotentials : pps = pseudopotentials
         pseudopotentials = {}
-        for symbol in OrderedDict.fromkeys(atoms.get_chemical_symbols()):
+        symbols = OrderedDict.fromkeys(atoms.get_chemical_symbols())
+        for symbol in symbols :
             if symbol not in pseudopotentials :
                 pseudopotentials[symbol] = pps.get(symbol, None)
         ppkeys = list(pseudopotentials.keys())
@@ -569,6 +570,7 @@ class EngineQE(Engine):
                     if keyd in in_params[section] :
                         m = pattern.match(keyd)
                         s = atomic_species[int(m.group(2)) - 1]
+                        if s not in symbols : continue
                         ind = ppkeys.index(s) + 1
                         newkeyd = m.group(1)+str(ind) + ')'
                         inputs[section][newkeyd] = in_params[section][keyd]
@@ -589,7 +591,16 @@ class EngineQE(Engine):
                 kpts = np.maximum(kpts, k_points['kpts'])
                 koffset = k_points.get('koffset', koffset)
 
+        #-----------------------------------------------------------------------
         inputs['system']['ntyp'] = len(pseudopotentials)
+        if 'lda_plus_u' in inputs['system'] :
+            lda_plus_u = False
+            for key in inputs['system'] :
+                if key.lower().startswith('hubbard'):
+                    lda_plus_u = True
+                    break
+            inputs['system']['lda_plus_u'] = lda_plus_u
+        #-----------------------------------------------------------------------
 
         cell_params = {
                 'pseudopotentials' : pseudopotentials,
