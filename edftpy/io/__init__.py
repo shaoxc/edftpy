@@ -20,11 +20,16 @@ def print2file(fileobj = None):
                 fobj = open(fileobj, 'a')
             else :
                 fobj = fileobj
-            stdout = os.dup(1)
-            if fobj is not None : os.dup2(fobj.fileno(), 1)
+            stdout = None
+            if fobj is not None :
+                if os.fstat(1).st_ino != os.fstat(fobj.fileno()).st_ino :
+                    stdout = os.dup(1)
+                    os.dup2(fobj.fileno(), 1)
             results = function(*args, **kwargs)
-            os.dup2(stdout, 1)
-            if isinstance(fileobj, str): fobj.close()
+            if stdout is not None :
+                os.dup2(stdout, 1)
+                os.close(stdout)
+                if isinstance(fileobj, str): fobj.close()
             return results
         return wrapper
     return decorator

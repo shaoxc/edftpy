@@ -146,6 +146,7 @@ class DriverKS(Driver):
             self._grid_sub = Grid(self.subcell.grid.lattice, self.subcell.grid.nrR, direct = True, mp = mp)
         return self._grid_sub
 
+    @print2file()
     def get_grid_driver(self, grid):
         nr = self.engine.get_grid()
         if not np.all(grid.nrR == nr) and self.comm.rank == 0 :
@@ -164,6 +165,7 @@ class DriverKS(Driver):
         self.grid_driver = self.get_grid_driver(self.grid)
         self.init_density(**kwargs)
 
+    @print2file()
     def init_density(self, rho_ini = None, density_initial = None, **kwargs):
         if self.grid_driver is not None :
             grid = self.grid_driver
