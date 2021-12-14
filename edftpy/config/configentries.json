@@ -279,11 +279,11 @@
 			},
 			"x_str": {
 				"type": "str",
-				"default": "lda_x"
+				"default": "gga_x_pbe"
 			},
 			"c_str": {
 				"type": "str",
-				"default": "lda_c_pz"
+				"default": "gga_c_pbe"
 			}
 		},
 		"kedf": {
