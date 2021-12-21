@@ -362,17 +362,18 @@ class EngineQE(Engine):
     def get_density_from_pw(ions, comm = None):
         nr = np.zeros(3, dtype = 'int32')
         qepy.qepy_mod.qepy_get_grid(nr)
+        nspin = qepy.lsda_mod.get_nspin()
 
         if comm is None or comm.rank == 0 :
-            rho = np.zeros((np.prod(nr), 1), order = 'F')
+            rho = np.zeros((np.prod(nr), nspin), order = 'F')
         else :
-            rho = np.zeros(3)
+            rho = np.zeros((3, nspin), order = 'F')
 
         qepy.qepy_mod.qepy_get_rho(rho)
 
         if comm is None or comm.rank == 0 :
             grid = Grid(ions.pos.cell.lattice, nr)
-            density = Field(grid=grid, direct=True, data = rho, order = 'F')
+            density = Field(grid=grid, direct=True, data = rho, rank = nspin, order = 'F')
         else :
             density = np.zeros(1)
 

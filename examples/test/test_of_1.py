@@ -1,18 +1,15 @@
 import numpy as np
-import copy
 import os
 import unittest
 
-from dftpy.constants import ENERGY_CONV
 from dftpy.formats import io
 
-from edftpy.utils.common import Field, Grid, Atoms
 from edftpy.functional import LocalPP, KEDF, Hartree, XC
 from edftpy.optimizer import Optimization
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
-from edftpy.density.init_density import AtomicDensity
+from edftpy.density import AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
-from edftpy.mixer import PulayMixer, LinearMixer
+from edftpy.mixer import PulayMixer
 from edftpy.mpi import GraphTopo, MP
 
 class Test(unittest.TestCase):

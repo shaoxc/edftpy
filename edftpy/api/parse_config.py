@@ -13,8 +13,7 @@ from edftpy.functional import LocalPP, KEDF, Hartree, XC
 from edftpy.optimizer import Optimization, MixOptimization
 from edftpy.tddft import TDDFT
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
-from edftpy.density.init_density import AtomicDensity
-from edftpy.density import file2density
+from edftpy.density import file2density, AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import LinearMixer, PulayMixer
 from edftpy.mpi import GraphTopo, MP, sprint

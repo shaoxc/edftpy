@@ -1,17 +1,15 @@
 import os
-import copy
 import numpy as np
 import unittest
 from functools import partial
 
-from dftpy.constants import ENERGY_CONV
 from dftpy.formats import io
 from dftpy.ewald import ewald
 from dftpy.optimization import Optimization
 
 from edftpy.functional import LocalPP, KEDF, Hartree, XC
 from edftpy.evaluator import Evaluator
-from edftpy.density.init_density import AtomicDensity
+from edftpy.density import AtomicDensity
 from edftpy.subsystem.subcell import GlobalCell
 
 class Test(unittest.TestCase):

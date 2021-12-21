@@ -287,10 +287,14 @@ def run(args):
     else :
         system = get_system(args)
     if system is not None :
-        io.write(args.output, ions = system[0], data = system[1], format = args.format_out, data_type = args.data_type)
-        nele = system[1].integral()
         lens = max([len(item) for item in args.cells] + [len(args.output)])
-        print(f'Number_of_electrons {args.output:{lens}s} : {nele}')
+        if args.subtract :
+            nele = np.abs(system[1]).integral()*0.5
+            print(f'Differ_of_electrons {args.output:{lens}s} : {nele}')
+        else :
+            nele = system[1].integral()
+            print(f'Number_of_electrons {args.output:{lens}s} : {nele}')
+        io.write(args.output, ions = system[0], data = system[1], format = args.format_out, data_type = args.data_type)
         return
     atoms = get_atoms(args)
     if args.traj : return
