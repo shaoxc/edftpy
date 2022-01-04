@@ -29,7 +29,7 @@ class EngineQE(Engine):
         self.embed = None
         self.comm = SerialComm()
 
-    def get_force(self, icalc = 3, **kwargs):
+    def get_forces(self, icalc = 3, **kwargs):
         qepy.qepy_forces(icalc)
         forces = qepy.force_mod.get_array_force().T * self.units['energy']/self.units['length']
         return forces

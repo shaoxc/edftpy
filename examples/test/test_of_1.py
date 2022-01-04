@@ -4,7 +4,7 @@ import unittest
 
 from dftpy.formats import io
 
-from edftpy.functional import LocalPP, KEDF, Hartree, XC
+from edftpy.functional import LocalPP, KEDF, Hartree, XC, Ewald
 from edftpy.optimizer import Optimization
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
 from edftpy.density import AtomicDensity
@@ -66,7 +66,8 @@ class Test(unittest.TestCase):
             ke_kwargs = {'name' :'TF'}
         else :
             ke_kwargs = None
-        xc_kwargs = {"x_str":'lda_x','c_str':'lda_c_pz', 'libxc' :False}
+        xc_kwargs = {"xc":'lda', 'libxc' :False}
+        # xc_kwargs = {"libxc":['lda_x', 'lda_c_pz']}
         opt = self.get_optimizer(ke_kwargs, xc_kwargs = xc_kwargs, method = method, sdft = sdft)
         energy = self.get_energy(opt)
         ref_energy = self.energy[kedf]
@@ -94,7 +95,8 @@ class Test(unittest.TestCase):
         xc = XC(**xc_kwargs)
         emb_ke_kwargs = {'name' :'TF'}
         ke = KEDF(**emb_ke_kwargs)
-        funcdicts = {'KE' :ke, 'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
+        ewald = Ewald(ions=ions, grid = grid, PME=True)
+        funcdicts = {'KE' :ke, 'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo, 'EWALD' : ewald}
         total_evaluator = TotalEvaluator(**funcdicts)
         #-----------------------------------------------------------------------
         gsystem.total_evaluator = total_evaluator

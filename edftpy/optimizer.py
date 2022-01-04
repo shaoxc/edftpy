@@ -7,7 +7,7 @@ import os
 from dftpy.constants import ENERGY_CONV
 
 from edftpy.mpi import sprint
-from edftpy.properties import get_total_forces, get_total_stress
+from edftpy.properties import get_total_forces, get_total_stress, get_total_energies
 from edftpy.functional import hartree_energy
 from edftpy.utils.common import Grid, Field, Functional
 from edftpy.io import write
@@ -77,31 +77,10 @@ class Optimization(object):
         pretty_dict_str += pprint.pformat(self.options)
         sprint(pretty_dict_str)
 
-    def get_energy(self, totalrho = None, total_energy= None, update = None, olevel = 0, **kwargs):
-        elist = []
-        if total_energy is None :
-            if totalrho is None :
-                totalrho = self.gsystem.density.copy()
-            total_energy = self.gsystem.total_evaluator(totalrho, calcType = ['E'], olevel = olevel).energy
-        elist.append(total_energy)
-        for i, driver in enumerate(self.drivers):
-            if driver is None :
-                ene = 0.0
-            elif olevel < 0 : # use saved energy
-                ene = driver.energy
-            elif update is not None and not update[i]:
-                ene = driver.energy
-            else :
-                self.gsystem.density[:] = totalrho
-                driver(density =driver.density, gsystem = self.gsystem, calcType = ['E'], olevel = olevel, sdft = self.options['sdft'])
-                ene = driver.energy
-            elist.append(ene)
-        elist = np.asarray(elist)
-        etotal = np.sum(elist) + self.gsystem.ewald.energy
-        etotal = self.gsystem.grid.mp.asum(etotal)
-        elist = self.gsystem.grid.mp.vsum(elist)
-        # print('elist', etotal, elist)
-        return (etotal, elist)
+    def get_energy(self, density = None, total_energy= None, update = True, olevel = 0, **kwargs):
+        elist = get_total_energies(gsystem = self.gsystem, drivers = self.drivers, density = density,
+                total_energy= total_energy, update = update, olevel = olevel, **kwargs)
+        return sum(elist)
 
     def update_density(self, update = None, **kwargs):
         # diff_res = self.get_diff_residual()
@@ -259,7 +238,7 @@ class Optimization(object):
                 sprint("#### Subsytem Density Optimization Converged (Potential) In {} Iterations ####".format(it+1))
                 self.converged = True
                 break
-            energy = self.get_energy(self.density, update = self.update, olevel = olevel)[0]
+            energy = self.get_energy(density = self.density, update = self.update, olevel = olevel)
             #-----------------------------------------------------------------------
             energy_history.append(energy)
             timecost = time.time()
@@ -691,12 +670,11 @@ class Optimization(object):
                 # edict['E_GLOBAL'] = total_func
                 # total_energy = total_func.energy.copy()
 
-        etotal, elist = self.get_energy(self.gsystem.density, total_energy, olevel = 0)
+        elist = get_total_energies(gsystem = self.gsystem, drivers = self.drivers, total_energy = total_energy, olevel = 0)
+        etotal = sum(elist)
 
         keys = list(edict.keys())
         values = [item.energy for item in edict.values()]
-        keys.append('II')
-        values.append(self.gsystem.ewald.energy)
         values = self.gsystem.grid.mp.vsum(values)
 
         # etotal = values.sum()

@@ -1,9 +1,8 @@
 import numpy as np
 from numpy import linalg as LA
 from dftpy.math_utils import ecut2nr, bestFFTsize
-from dftpy.ewald import ewald
 
-from edftpy.functional import LocalPP
+from edftpy.functional import LocalPP, Ewald
 from edftpy.utils.common import Field, Grid, Atoms, Coord
 from edftpy.utils.math import gaussian
 from edftpy.density import get_3d_value_recipe
@@ -284,7 +283,6 @@ class GlobalCell(object):
     def restart(self, grid=None, ions=None):
         self._ions = ions
         self._grid = grid
-        self._ewald = None
         if self._grid is None :
             self._grid = self.gen_grid(self.ions.pos.cell.lattice, **self.grid_kwargs)
             sprint('GlobalCell grid', self._grid.nrR, comm=self.comm)
@@ -295,12 +293,6 @@ class GlobalCell(object):
     @property
     def grid(self):
         return self._grid
-
-    @property
-    def ewald(self):
-        if self._ewald is None :
-            self._ewald = ewald(rho=self.density, ions=self.ions, PME=True)
-        return self._ewald
 
     @property
     def ions(self):
@@ -380,7 +372,7 @@ class GlobalCell(object):
     def gaussian_density(self):
         return self._gaussian_density
 
-    def get_forces(self, linearii= True, **kwargs):
+    def get_forces_old(self, linearii= True, **kwargs):
         for k, value in self.total_evaluator.funcdicts.items():
             if isinstance(value, LocalPP):
                 forces_ie = value.force(self.density)
@@ -388,14 +380,27 @@ class GlobalCell(object):
         else :
             sprint('!WARN : There is no `LocalPP` in total_evaluator', comm=self.comm)
             forces_ie = np.zeros((self.ions.nat, 3))
-        ewaldobj = ewald(rho=self.density, ions=self.ions, PME=linearii)
+        ewaldobj = Ewald(rho=self.density, ions=self.ions, PME=linearii)
         forces_ii = ewaldobj.forces
         forces = forces_ie + forces_ii
-        # forces_ii = self.grid.mp.vsum(forces_ii)
-        # forces_ie = self.grid.mp.vsum(forces_ie)
-        # sprint('ewald\n', forces_ii)
-        # sprint('ie\n', forces_ie)
+        return forces
+
+    def get_forces(self, **kwargs):
+        forces = np.zeros((self.ions.nat, 3))
+        for k, value in self.total_evaluator.funcdicts.items():
+            if hasattr(value, 'forces'):
+                f = value.forces
+                if hasattr(f, '__call__'):
+                    f = f(self.density)
+                forces += f
         return forces
 
     def get_stress(self, **kwargs):
-        pass
+        stress = np.zeros((3, 3))
+        for k, value in self.total_evaluator.funcdicts.items():
+            if hasattr(value, 'stress'):
+                f = value.stress
+                if hasattr(f, '__call__'):
+                    f = f(self.density)
+                stress += f
+        return stress

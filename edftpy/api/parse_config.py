@@ -9,7 +9,7 @@ from dftpy.constants import LEN_CONV, ENERGY_CONV
 
 from edftpy import io
 from edftpy.config import read_conf, write_conf
-from edftpy.functional import LocalPP, KEDF, Hartree, XC
+from edftpy.functional import LocalPP, KEDF, Hartree, XC, Ewald
 from edftpy.optimizer import Optimization, MixOptimization
 from edftpy.tddft import TDDFT
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
@@ -371,6 +371,7 @@ def config2graphtopo(config, graphtopo = None, scale = None):
 def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= None, cell_change = None, pseudo = None):
     keysys = "GSYSTEM"
     pme = config["MATH"]["linearie"]
+    linearii = config["MATH"]["linearii"]
     xc_kwargs = config[keysys]["exc"].copy()
     ke_kwargs = config[keysys]["kedf"].copy()
     #---------------------------Functional----------------------------------
@@ -394,6 +395,14 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
             ke = KEDF(**ke_kwargs)
             funcdicts['KE'] = ke
         total_evaluator = TotalEvaluator(**funcdicts)
+    # Only depend on atoms---------------------------------------------------
+    ewald = Ewald(ions=ions, grid = grid, PME=linearii)
+    total_evaluator.funcdicts['EWALD'] = ewald
+    if xc_kwargs.get('dftd4', None):
+        from edftpy.api.dftd4 import VDWDFTD4
+        vdw = VDWDFTD4(ions = ions, mp = grid.mp, **xc_kwargs)
+        total_evaluator.funcdicts['VDW'] = vdw
+    #-----------------------------------------------------------------------
     return total_evaluator
 
 def config2embed_evaluator(config, keysys, ions, grid, pplist = None, cell_change = None):

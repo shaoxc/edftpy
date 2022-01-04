@@ -26,7 +26,7 @@ class EngineMBX(Engine):
         kwargs['units']['volume'] = unit_vol
         super().__init__(**kwargs)
 
-    def get_force(self, **kwargs):
+    def get_forces(self, **kwargs):
         force = None
         return force
 

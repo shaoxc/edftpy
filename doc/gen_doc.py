@@ -58,6 +58,7 @@ eDFTpy is a set of python modules. However,you can run it using the `edftpy` exe
     When *Options* is empty, it can accept any value.
 
 .. _pylibxc: https://tddft.org/programs/libxc/
+.. _dftd4: https://www.chemie.uni-bonn.de/pctc/mulliken-center/software/dftd4
 
 """
 

@@ -407,7 +407,7 @@ class DriverKS(Driver):
             2 : no local                         : 010
             3 : no ewald and local               : 011
         """
-        forces = self.engine.get_force(icalc = icalc, **kwargs)
+        forces = self.engine.get_forces(icalc = icalc, **kwargs)
         return forces
 
     @print2file()

@@ -7,7 +7,7 @@ from dftpy.constants import environ
 
 from edftpy.mixer import LinearMixer, PulayMixer, AbstractMixer
 from edftpy.utils.math import grid_map_data
-from edftpy.functional import hartree_energy, KEDFunctional
+from edftpy.functional import hartree_energy, KEDF
 from edftpy.mpi import sprint
 from edftpy.io import print2file
 from .hamiltonian import Hamiltonian
@@ -219,9 +219,9 @@ class EngineDFTpy(Driver):
             extpot = self.evaluator.embed_potential
             #-----------------------------------------------------------------------
             if self.exttype < 0 and self.gaussian_density_inter is not None:
-                kepot = KEDFunctional(self.gaussian_density_inter, name = 'GGA', calcType = ['V'], k_str = 'REVAPBEK').potential
+                kepot = KEDF(kedf = 'GGA', k_str = 'REVAPBEK').compute(self.gaussian_density_inter, calcType={'V'}).potential
+                # kepot = KEDF().compute(self.gaussian_density_inter, calcType={'V'}, kedf = 'GGA', k_str = 'REVAPBEK').potential
                 extpot += kepot
-                # extpot[self.gaussian_density_inter > 1E-5] = 0.0
             #-----------------------------------------------------------------------
             extpot = self.get_extpot(extpot, mapping = True, with_global = False)
         else :

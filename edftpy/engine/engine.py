@@ -174,7 +174,7 @@ class Engine(ABC):
         self.fileobj = None
         self.comm = SerialComm()
 
-    def get_force(self, icalc = 0, **kwargs):
+    def get_forces(self, icalc = 0, **kwargs):
         force = None
         return force
 

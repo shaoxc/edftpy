@@ -277,13 +277,18 @@
 				"type": "str",
 				"default": null
 			},
-			"x_str": {
+			"dftd4": {
+				"comment": "The method of dftd4_. If use it, the dftd4_ should be installed. See `dftd4's available methods <https://github.com/dftd4/dftd4/blob/main/assets/parameters.toml>`_.",
+				"options": "",
 				"type": "str",
-				"default": "gga_x_pbe"
+				"note": "If dftd4='same', which means dftd4 use same functional as exchange-correlation.",
+				"default": null
 			},
-			"c_str": {
-				"type": "str",
-				"default": "gga_c_pbe"
+			"libxc": {
+				"comment": "The type of exchange-correlation functionals with pylibxc_.",
+				"options": "",
+				"type": "lstrlist",
+				"default": "gga_x_pbe  gga_c_pbe"
 			}
 		},
 		"kedf": {
@@ -484,19 +489,9 @@
 				"default": "exc",
 				"comment": "x_str, c_str"
 			},
-			"xc": {
-				"type": "str",
+			"libxc": {
+				"type": "lstrlist",
 				"default": null
-			},
-			"x_str": {
-				"type": "str",
-				"default": null,
-				"comment": "See `libxc's available exchange functionals <https://www.tddft.org/programs/libxc/functionals/>`_."
-			},
-			"c_str": {
-				"type": "str",
-				"default": null,
-				"comment": "See `libxc's available correlation functionals <https://www.tddft.org/programs/libxc/functionals/>`_."
 			}
 		},
 		"kedf": {

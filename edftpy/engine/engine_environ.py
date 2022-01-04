@@ -42,7 +42,7 @@ class EngineEnviron(Engine):
         # temporariliy storing and then cleaning this up
         self.potential = None
 
-    def get_force(self, **kwargs):
+    def get_forces(self, **kwargs):
         """get Environ force contribution
         """
         force = np.zeros((3, self.nat), dtype=float, order='F')
