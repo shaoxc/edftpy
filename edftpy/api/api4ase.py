@@ -46,7 +46,7 @@ class eDFTpyCalculator(object):
             if olevel == 0 :
                 self.optimizer.energy = self.optimizer.print_energy()['TOTAL']
             else :
-                self.optimizer.energy = self.optimizer.get_energy(self.optimizer.gsystem.density, olevel = olevel)[0]
+                self.optimizer.energy = self.optimizer.get_energy(olevel = olevel)
         self._energy = self.optimizer.energy
         sprint('Total energy :', self._energy * ENERGY_CONV["Hartree"]["eV"], self.graphtopo.size, self.iter)
         return self._energy * ENERGY_CONV["Hartree"]["eV"]
