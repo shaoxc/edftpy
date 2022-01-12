@@ -239,3 +239,13 @@ def get_formal_charge_simple(numbers, data):
     else :
         raise AttributeError("Can not find all the molecules : {}".format(numbers))
     return charge
+
+def copy_array(arr, out = None, add = False, index = None):
+    if index is None : index = slice(None)
+    if out is None :
+        out = arr.copy()
+    elif add :
+        out[index] += arr
+    else :
+        out[index] = arr
+    return out

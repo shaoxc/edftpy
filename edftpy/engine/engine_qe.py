@@ -31,7 +31,7 @@ class EngineQE(Engine):
 
     def get_forces(self, icalc = 3, **kwargs):
         qepy.qepy_forces(icalc)
-        forces = qepy.force_mod.get_array_force().T * self.units['energy']/self.units['length']
+        forces = qepy.force_mod.get_array_force().T
         return forces
 
     def embed_base(self, exttype = 0, diag_conv = 1E-1, lewald = False, iterative = True, **kwargs):
@@ -46,15 +46,12 @@ class EngineQE(Engine):
         return embed
 
     def calc_energy(self, **kwargs):
-        qepy.qepy_calc_energies(self.embed)
-        energy = self.embed.etotal * self.units['energy']
-        return energy
+        return self.get_energy(self, **kwargs)
 
     def get_energy(self, olevel = 0, **kwargs):
         if olevel == 0 :
             qepy.qepy_calc_energies(self.embed)
-        energy = self.embed.etotal * self.units['energy']
-        return energy
+        return self.embed.etotal
 
     def clean_saved(self, *args, **kwargs):
         qepy.qepy_clean_saved()
@@ -117,7 +114,6 @@ class EngineQE(Engine):
         qepy.qepy_electrons_scf(2, 0, self.embed)
 
     def set_extpot(self, extpot, **kwargs):
-        extpot = extpot / self.units['energy']
         qepy.qepy_mod.qepy_set_extpot(self.embed, extpot)
 
     def set_rho(self, rho, **kwargs):
@@ -209,6 +205,15 @@ class EngineQE(Engine):
                 params[k1][k2] = v2
         return params
 
+    def _check_params(self, params = None, cell_params = None, card_lines = None, ase_atoms = None):
+        if params['system'].get('nspin', 1) > 1 :
+            if 'tot_magnetization' not in params['system'] :
+                for key in params['system'].keys():
+                    if key.startswith('starting_magnetization'): break
+                else :
+                    params['system']['tot_magnetization'] = 0
+        return params
+
     def _build_ase_atoms(self, params = {}, cell_params = {}, base_in_file = None, ions = None, prefix = 'sub_'):
         in_params = {}
         card_lines = []
@@ -238,6 +243,7 @@ class EngineQE(Engine):
                 for k2, v2 in v1.items() :
                     in_params[k1][k2] = v2
 
+        self._check_params(params=in_params, cell_params=cell_params, card_lines=card_lines, ase_atoms=ase_atoms)
         return in_params, cell_params, card_lines, ase_atoms
 
     def _write_params(self, outfile, ase_atoms, params = None, cell_params = {}, cards = None, density_initial = None, **kwargs):

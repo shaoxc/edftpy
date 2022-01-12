@@ -122,7 +122,7 @@ class DriverKS(Driver):
         if self.comm.rank == 0 :
             core_charge = np.empty(grid.nnr, order = self.engine.units['order'])
         else :
-            core_charge = self.atmp
+            core_charge = self.atmp2
         self.engine.get_rho_core(core_charge)
         self.core_density= self._format_field_invert(core_charge)
 
@@ -173,17 +173,17 @@ class DriverKS(Driver):
             grid = self.grid
 
         if self.comm.rank == 0 :
-            self.density = Field(grid=self.grid)
-            self.prev_density = Field(grid=self.grid)
+            self.density = Field(grid=self.grid, rank=self.nspin)
+            self.prev_density = Field(grid=self.grid, rank=self.nspin)
             self.charge = np.empty((grid.nnr, self.nspin), order = self.engine.units['order'])
             self.prev_charge = np.empty((grid.nnr, self.nspin), order = self.engine.units['order'])
         else :
-            self.density = self.atmp
-            self.prev_density = self.atmp
+            self.density = self.atmp2
+            self.prev_density = self.atmp2
             self.charge = self.atmp2
             self.prev_charge = self.atmp2
 
-        self.density_sub = Field(grid = self.grid_sub)
+        self.density_sub = Field(grid = self.grid_sub, rank=self.nspin)
         self.gaussian_density_sub = Field(grid = self.grid_sub)
 
         if rho_ini is None :
@@ -199,32 +199,40 @@ class DriverKS(Driver):
             self.density[:] = self._format_field_invert()
 
     def _format_field(self, density = None, grid = None, **kwargs):
-        if density is None :
-            density = self.density
+        if density is None : density = self.density
 
-        if grid is None :
-            grid = self.grid_driver
+        if grid is None and self.comm.rank == 0 :
+            grid = self.grid_driver if self.grid_driver is not None else density.grid
 
-        if self.grid_driver is not None and self.comm.rank == 0:
+        if self.comm.rank == 0 and np.any(density.grid.nrR != grid.nrR):
             charge = grid_map_data(density, grid = grid)
         else :
             charge = density
-        charge = charge.reshape((-1, self.nspin), order = self.engine.units['order']) / self.engine.units['volume']
-        return charge
+
+        if self.comm.rank == 0 :
+            nspin = density.shape[0] if density.ndim == 4 else 1
+            if nspin > 1 :
+                value = np.empty((grid.nnrR, nspin), order = self.engine.units['order'])
+                for i in range(nspin):
+                    value[:, i] = charge[i].ravel(order = self.engine.units['order']) / self.engine.units['volume']
+            else :
+                value = charge.reshape((-1, nspin), order = self.engine.units['order']) / self.engine.units['volume']
+        else :
+            value = self.atmp2
+        return value
 
     def _format_field_invert(self, charge = None, grid = None, **kwargs):
-        if self.comm.rank > 0 : return self.atmp
-        if charge is None :
-            charge = self.charge
+        if charge is None : charge = self.charge
+        if self.comm.rank > 0 : return charge
 
-        if grid is None :
-            grid = self.grid
+        if grid is None : grid = self.grid
 
+        nspin = charge.shape[-1] if charge.ndim == 2 else 1
         if self.grid_driver is not None and np.any(self.grid_driver.nrR != grid.nrR):
-            density = Field(grid=self.grid_driver, direct=True, data = charge, order = self.engine.units['order'])
+            density = Field(grid=self.grid_driver, direct=True, data = charge.ravel(order='C'), order = self.engine.units['order'], rank=nspin)
             rho = grid_map_data(density, grid = grid)
         else :
-            rho = Field(grid=grid, rank=1, direct=True, data = charge, order = self.engine.units['order'])
+            rho = Field(grid=grid, direct=True, data = charge.ravel(order='C'), order = self.engine.units['order'], rank=nspin)
         rho *= self.engine.units['volume']
         return rho
 
@@ -234,7 +242,7 @@ class DriverKS(Driver):
             self.evaluator.get_embed_potential(self.density, gaussian_density = self.gaussian_density, with_global = with_global)
             extpot = self.evaluator.embed_potential
         else :
-            extpot = self.atmp
+            extpot = self.atmp2
         return extpot
 
     @print2file()
@@ -252,9 +260,7 @@ class DriverKS(Driver):
             # extpot = self._get_extpot_serial(**kwargs)
             extpot = self._get_extpot_mpi(**kwargs)
         if mapping :
-            if self.grid_driver is not None and self.comm.rank == 0:
-                extpot = grid_map_data(extpot, grid = self.grid_driver)
-            extpot = extpot.ravel(order = self.engine.units['order'])
+            extpot = self._format_field(extpot) / self.engine.units['energy']
         return extpot
 
     @print2file()
@@ -306,6 +312,9 @@ class DriverKS(Driver):
         self.energy = 0.0
         self.dp_norm = 1.0
         self.density[:] = self._format_field_invert()
+        # from edftpy.io import print2file, write
+        # if self.comm.rank == 0 :
+            # write('a.xsf', self.density, ions = self.subcell.ions)
         return self.density
 
     @print2file()
@@ -318,7 +327,7 @@ class DriverKS(Driver):
             else :
                 extpot = self.get_extpot()
             self.engine.set_extpot(extpot)
-            energy = self.engine.get_energy(olevel = olevel)
+            energy = self.engine.get_energy(olevel = olevel) * self.engine.units['energy']
         else :
             energy = 0.0
         return energy
@@ -408,6 +417,7 @@ class DriverKS(Driver):
             3 : no ewald and local               : 011
         """
         forces = self.engine.get_forces(icalc = icalc, **kwargs)
+        forces *= self.engine.units['energy']/self.engine.units['length']
         return forces
 
     @print2file()
@@ -464,7 +474,7 @@ class DriverEX(DriverKS):
     @print2file()
     def get_energy(self, olevel = 0, **kwargs):
         if olevel == 0 :
-            energy = self.engine.get_energy(olevel = olevel)
+            energy = self.engine.get_energy(olevel = olevel) * self.units['energy']
         else :
             energy = 0.0
         return energy
@@ -481,10 +491,10 @@ class DriverEX(DriverKS):
             self._iter += 1
             rho = self._format_field(density)
             self.engine.scf(rho, **kwargs)
-            pot = self.engine.get_potential(**kwargs)
+            pot = self.engine.get_potential(**kwargs) * self.engine.units['energy']
             func.potential = self._format_field_invert(pot)
         if 'E' in calcType :
-            energy = self.get_energy(olevel = olevel)
+            energy = self.get_energy(olevel = olevel) * self.engine.units['energy']
             func.energy = energy
             if self.comm.rank > 0 : func.energy = 0.0
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
@@ -510,10 +520,10 @@ class DriverMM(DriverEX):
         func = Functional(name = 'ZERO', energy=0.0, potential=None)
         self.engine.set_extpot(self.evaluator.global_potential, **kwargs)
         if 'V' in calcType :
-            pot = self.engine.get_potential(grid = self.grid_driver, **kwargs)
+            pot = self.engine.get_potential(grid = self.grid_driver, **kwargs) * self.engine.units['energy']
             func.potential = self._format_field_invert(pot)
         if 'E' in calcType :
-            energy = self.get_energy(olevel = olevel)
+            energy = self.get_energy(olevel = olevel) * self.engine.units['energy']
             func.energy = energy
             if self.comm.rank > 0 : func.energy = 0.0
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'

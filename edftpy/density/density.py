@@ -64,7 +64,32 @@ class AtomicDensity(object):
         v = data[:, 1]
         return r, v
 
-    def guess_rho(self, ions, grid, ncharge = None, rho = None, dtol=1E-30, **kwargs):
+    def guess_rho(self, ions, grid = None, ncharge = None, rho = None, dtol=1E-30, nspin = 1, **kwargs):
+        ncharge = ncharge or self.ncharge
+        rho_s = rho
+        if rho_s is not None :
+            nspin = rho.rank
+            if nspin > 1 : rho = rho_s[0]
+
+        if grid is None :
+            if rho_s is not None :
+                grid = rho_s.grid
+            else :
+                raise AttributeError("Please give one grid.")
+
+        rho_unspin = self.guess_rho_unspin(ions, grid = grid, ncharge=ncharge, rho=rho, dtol=dtol, **kwargs)
+
+        if rho_s is not None :
+            rho_s[:] = rho_unspin/nspin
+        else :
+            if nspin > 1 :
+                rho_s = Field(grid, rank = nspin)
+                rho_s[:] = rho_unspin / nspin
+            else :
+                rho_s = rho_unspin
+        return rho_s
+
+    def guess_rho_unspin(self, ions, grid = None, ncharge = None, rho = None, dtol=1E-30, **kwargs):
         ncharge = ncharge or self.ncharge
         if len(self._r) == 0 :
             new_rho = self.guess_rho_heg(ions, grid, ncharge, rho, dtol = dtol, **kwargs)
@@ -188,7 +213,10 @@ def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=0.
                     rho_g += vlines[key] * strf
 
     if direct :
-        rho = rho_g.ifft()
+        if rho is None :
+            rho = rho_g.ifft()
+        else :
+            rho[:] = rho_g.ifft()
         rho[rho < dtol] = dtol
         nc = rho.integral()
         sprint('Guess density (Real): ', nc, comm=grid.mp.comm)
@@ -199,6 +227,11 @@ def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=0.
         if ncharge > 1E-6 :
             rho[:] *= ncharge / nc
             sprint('Guess density (Scale): ', rho.integral(), comm=grid.mp.comm)
+    else :
+        if rho is None :
+            rho = rho_g
+        else :
+            rho[:] = rho_g
     return rho
 
 def normalization_density(density, ncharge = None, grid = None, tol = 1E-300, method = 'shift'):
@@ -245,8 +278,7 @@ def filter_density(grid, density, mu = 0.7, kt = 0.05):
     return den
 
 def file2density(filename, density, grid = None):
-    if grid is None :
-        grid = density.grid
+    if grid is None : grid = density.grid
     ext = os.path.splitext(filename)[1].lower()
     if ext == ".snpy":
         density[:] = io.read_density(filename, grid=grid)
@@ -254,7 +286,7 @@ def file2density(filename, density, grid = None):
         fstr = f'!WARN : snpy format for density initialization will better, but this file is "{filename}".'
         sprint(fstr, comm=grid.mp.comm, level=2)
         if grid.mp.comm.rank == 0 :
-            density = io.read_density(filename)
+            density_gather = io.read_density(filename)
         else :
-            density = np.zeros(1)
-        grid.scatter(density, out = density)
+            density_gather = np.zeros(1)
+        grid.scatter(density_gather, out = density)

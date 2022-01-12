@@ -400,12 +400,12 @@ class EngineDFTpy(Driver):
         evaluator_of = Evaluator(**funcdicts)
         evaluator = partial(evaluator_of.compute, gather = True)
         atomicd = AtomicDensity()
-        rho_ini = atomicd.guess_rho(ions, rho.grid)
+        rho = atomicd.guess_rho(ions, rho = rho)
         #-----------------------------------------------------------------------
         optimization_options = {'econv' : 1e-6 * ions.nat, 'maxfun' : 50, 'maxiter' : 100}
         optimization_options["econv"] *= ions.nat
         optimization_options.update(options)
         opt = Optimization(EnergyEvaluator= evaluator, optimization_options = optimization_options, optimization_method = 'CG-HS')
-        new_rho = opt.optimize_rho(guess_rho=rho_ini)
+        new_rho = opt.optimize_rho(guess_rho=rho)
         environ['STDOUT'] = save
         return new_rho

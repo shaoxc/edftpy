@@ -98,8 +98,10 @@ class EmbedEvaluator(Evaluator):
         if gather :
             self.embed_potential = self.embed_potential.gather()
 
-        if self.global_potential is not None and with_global:
-            self.embed_potential += self.global_potential
+        if with_global:
+            if self.global_potential is not None and \
+                    self.embed_potential.shape[-3:] == self.global_potential.shape[-3:] :
+                self.embed_potential += self.global_potential
 
     @property
     def ke_evaluator(self):

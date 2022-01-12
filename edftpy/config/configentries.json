@@ -247,6 +247,7 @@
 			"ncharge": {
 				"type": "float",
 				"comment": "Total charge of the system.",
+				"level": "devel",
 				"default": null
 			},
 			"magmom": {
@@ -602,6 +603,7 @@
 			},
 			"opt_method": {
 				"type": "str",
+				"level": "devel",
 				"default": "full"
 			},
 			"maxiter": {
@@ -690,6 +692,7 @@
 			"type": "int",
 			"options": "0, 1,..., 7",
 			"comment": "The embeded potential type, which is same as `embed`.",
+			"level": "devel",
 			"default": null
 		},
 		"basefile": {

@@ -9,14 +9,15 @@ from edftpy.density import get_3d_value_recipe
 from edftpy.mpi import sprint
 
 class SubCell(object):
-    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, full = False, gaussian_options = None, nr = None, **kwargs):
+    def __init__(self, ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], optfft = False, full = False, gaussian_options = None, nr = None, nspin = 1, **kwargs):
         self._grid = None
         self._ions = None
         self._density = None
         self._ions_index = None
+        self.nspin = nspin
 
         self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, full = full, nr = nr, **kwargs)
-        self._density = Field(grid=self.grid, rank=1, direct=True)
+        self._density = Field(grid=self.grid, rank=self.nspin, direct=True)
         if gaussian_options is None or len(gaussian_options)==0:
             self._gaussian_density = None
         else :
@@ -264,7 +265,7 @@ class SubCell(object):
 
 
 class GlobalCell(object):
-    def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, graphtopo = None, **kwargs):
+    def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, graphtopo = None, nspin = 1, **kwargs):
         self.grid_kwargs = {
                 'ecut' : ecut,
                 'spacing' : spacing,
@@ -277,6 +278,7 @@ class GlobalCell(object):
             from edftpy.mpi import graphtopo
         self.graphtopo = graphtopo
         self.comm = self.graphtopo.comm
+        self.nspin = nspin
 
         self.restart(grid=grid, ions=ions)
 
@@ -286,7 +288,7 @@ class GlobalCell(object):
         if self._grid is None :
             self._grid = self.gen_grid(self.ions.pos.cell.lattice, **self.grid_kwargs)
             sprint('GlobalCell grid', self._grid.nrR, comm=self.comm)
-        self._density = Field(grid=self.grid, rank=1, direct=True)
+        self._density = Field(grid=self.grid, rank=self.nspin, direct=True)
         self._gaussian_density = Field(grid=self.grid, rank=1, direct=True)
         self._core_density = Field(grid=self.grid, rank=1, direct=True)
 

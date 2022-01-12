@@ -179,7 +179,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
                 mp = gsystem.grid.mp
             else :
                 mp = MP(comm = graphtopo.comm_sub, decomposition = graphtopo.decomposition)
-            driver = config2driver(config, keysys, ions, grid, pplist, total_evaluator = total_evaluator, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp, append = append)
+            driver = config2driver(config, keysys, ions, grid, pplist, total_evaluator = total_evaluator, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp, append = append, nspin = gsystem.density.rank)
             if mp.rank == 0 and driver.grid_driver is not None :
                 nr_all[i] = driver.grid_driver.nrR
             #-----------------------------------------------------------------------
@@ -320,6 +320,7 @@ def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell
     grid_scale = config[keysys]["grid"]["scale"]
     optfft = config[keysys]["grid"]["optfft"]
     density_file = config[keysys]["density"]["file"]
+    nspin = config[keysys]["density"]["nspin"]
 
     if cell_change == 'position' :
         gsystem = optimizer.gsystem
@@ -327,7 +328,7 @@ def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell
         mp_global = gsystem.grid.mp
     else :
         mp_global = MP(comm = graphtopo.comm, parallel = graphtopo.is_mpi, decomposition = graphtopo.decomposition)
-        gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo)
+        gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo, nspin = nspin)
 
     if density_file : file2density(density_file, gsystem.density)
     return gsystem
@@ -502,7 +503,7 @@ def config2evaluator_of(config, keysys, ions=None, grid=None, pplist = None, gsy
 
     return evaluator_of
 
-def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = None, optimizer = None, cell_change = None, driver = None, subcell = None, mp = None, comm = None, append = False):
+def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = None, optimizer = None, cell_change = None, driver = None, subcell = None, mp = None, comm = None, append = False, nspin = 1):
     gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
     ecut = config[keysys]["grid"]["ecut"]
     calculator = config[keysys]["calculator"]
@@ -520,7 +521,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
         ecut *= ENERGY_CONV["eV"]["Hartree"]
     #-----------------------------------------------------------------------
     if subcell is None :
-        subcell = config2subcell(config, keysys, ions, grid, pplist = pplist, total_evaluator = total_evaluator, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp, comm = comm)
+        subcell = config2subcell(config, keysys, ions, grid, pplist = pplist, total_evaluator = total_evaluator, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp, comm = comm, nspin = nspin)
     #-----------------------------------------------------------------------
     if mix_kwargs['predecut'] : mix_kwargs['predecut'] *= ENERGY_CONV["eV"]["Hartree"]
     if mix_kwargs['scheme'] == 'Pulay' :
@@ -648,7 +649,7 @@ def get_dftpy_driver(config, keysys, ions, grid, pplist = None, optimizer = None
     driver = DriverOF(**margs)
     return driver
 
-def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = None, optimizer = None, cell_change = None, driver = None, mp = None, comm = None):
+def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = None, optimizer = None, cell_change = None, driver = None, mp = None, comm = None, nspin = 1):
     gsystem_ecut = config['GSYSTEM']["grid"]["ecut"] * ENERGY_CONV["eV"]["Hartree"]
     pp_path = config["PATH"]["pp"]
 
@@ -710,7 +711,8 @@ def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = 
             'max_prime' : max_prime,
             'scale' : grid_scale,
             'nr' : nr,
-            'mp' : mp
+            'mp' : mp,
+            'nspin' : nspin,
             }
 
     subcell = SubCell(ions, grid, **kwargs)
@@ -728,10 +730,10 @@ def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = 
             file2density(density_file, subcell.density)
         elif initial == 'atomic' :
             atomicd = AtomicDensity(files = atomicfiles, pseudo = pseudo, comm = subcell.grid.mp.comm)
-            subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
+            atomicd.guess_rho(subcell.ions, subcell.grid, rho = subcell.density)
         elif initial == 'heg' :
             atomicd = AtomicDensity()
-            subcell.density[:] = atomicd.guess_rho(subcell.ions, subcell.grid)
+            atomicd.guess_rho(subcell.ions, subcell.grid, rho = subcell.density)
         elif technique == 'OF' : # ofdft
             from edftpy.engine.engine_dftpy import EngineDFTpy
             subcell.density[:] = EngineDFTpy.dftpy_opt(subcell.ions, subcell.density, pplist, pseudo = pseudo)
@@ -802,13 +804,14 @@ def get_pwscf_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, mar
         cell_params['koffset'] = kpoints['grid']
 
     params = {'system' : {}}
+    subcell = margs['subcell']
     if ecut :
-        subcell = margs['subcell']
         params['system']['ecutwfc'] = ecut / 4.0 * 2.0 # 4*ecutwfc to Ry
         if abs(ecut - gsystem_ecut) < 5.0 :
             params['system']['nr1'] = subcell.grid.nrR[0]
             params['system']['nr2'] = subcell.grid.nrR[1]
             params['system']['nr3'] = subcell.grid.nrR[2]
+    params['system']['nspin'] = subcell.density.rank
 
     ncharge = margs.get('ncharge')
     if ncharge :

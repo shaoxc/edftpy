@@ -59,8 +59,8 @@ class Optimization(object):
         self.of_ids = []
         for i, driver in enumerate(self.drivers):
             if driver is not None and driver.technique== 'OF' :
-                    self.of_drivers.append(driver)
-                    self.of_ids.append(i)
+                self.of_drivers.append(driver)
+                self.of_ids.append(i)
         self.update = [True for _ in range(self.nsub)]
 
     def guess_pconv(self):
@@ -108,13 +108,10 @@ class Optimization(object):
                 extpots = self.gsystem.total_evaluator.external_potential
                 pot = extpots.get(technique, None)
                 if pot is None :
-                    pot = Field(grid=self.gsystem.grid)
+                    pot = np.zeros_like(self.gsystem.density)
                     extpots[technique] = pot
                 if potential is None and driver is not None:
-                    if driver.comm.rank == 0 :
-                        potential = Field(grid=driver.grid)*0.0
-                    else :
-                        potential = driver.atmp
+                    potential = np.zeros_like(driver.density)
                 self.gsystem.grid.scatter(potential, out = pot, root = root)
             else :
                 self.gsystem.update_density(density, isub = i)
@@ -289,51 +286,42 @@ class Optimization(object):
                 continue
             else :
                 if driver.evaluator.global_potential is None :
-                    if driver.comm.rank == 0 :
-                        driver.evaluator.global_potential = Field(grid=driver.grid)
-                    else :
-                        driver.evaluator.global_potential = driver.atmp
+                    driver.evaluator.global_potential = np.zeros_like(driver.density)
                 global_potential = driver.evaluator.global_potential
 
                 if approximate != 'same' :
                     if driver.evaluator.embed_potential is None :
-                        if driver.comm.rank == 0 :
-                            driver.evaluator.embed_potential = Field(grid=driver.grid)
-                        else :
-                            driver.evaluator.embed_potential = driver.atmp
+                        driver.evaluator.embed_potential = np.zeros_like(driver.density)
                     global_density = driver.evaluator.embed_potential
             self.gsystem.sub_value(self.gsystem.total_evaluator.embed_potential, global_potential, isub = isub)
 
-            if approximate == 'density' or approximate == 'density4' :
+            if approximate.startswith('density') :
                 self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
-                if driver is not None and driver.comm.rank == 0 :
-                    factor = np.minimum(np.abs(driver.density/global_density), 1.0)
-                    if approximate == 'density4' :
-                        alpha = 1E-2
-                        factor = factor ** alpha
-                    global_potential *= factor
-            elif approximate == 'density2' :
-                self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
-                if driver is not None and driver.comm.rank == 0 :
-                    factor = np.minimum(np.abs(driver.density/global_density), 1.0)
-                    factor = 2.0 - factor
-                    global_potential *= factor
-            elif approximate == 'density3' :
-                self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
-                if driver is not None :
-                    if driver.comm.rank == 0 :
-                        energydensity = Field(grid=driver.grid)
+                global_density[global_density == 0] = 1E-30
+                if approximate == 'density' or approximate == 'density4' :
+                    if driver is not None :
+                        factor = np.minimum(np.abs(driver.density/global_density), 1.0)
+                        if approximate == 'density4' :
+                            alpha = 1E-2
+                            factor = factor ** alpha
+                        global_potential *= factor
+                elif approximate == 'density2' :
+                    if driver is not None :
+                        factor = np.minimum(np.abs(driver.density/global_density), 1.0)
+                        factor = 2.0 - factor
+                        global_potential *= factor
+                elif approximate == 'density3' :
+                    if driver is not None :
+                        energydensity = np.zeros_like(driver.density)
                     else :
-                        energydensity = driver.atmp
-                else :
-                    energydensity = None
+                        energydensity = None
 
-                self.gsystem.sub_value(self.gsystem.total_evaluator.embed_energydensity, energydensity, isub = isub)
+                    self.gsystem.sub_value(self.gsystem.total_evaluator.embed_energydensity, energydensity, isub = isub)
 
-                if driver is not None and driver.comm.rank == 0 :
-                    factor = np.maximum((global_density - driver.density)/global_density ** 2, 0.0)
-                    factor = np.minimum(factor, 1E6)
-                    global_potential += factor * energydensity
+                    if driver is not None :
+                        factor = np.maximum((global_density - driver.density)/global_density ** 2, 0.0)
+                        factor = np.minimum(factor, 1E6)
+                        global_potential += factor * energydensity
         return
 
     def set_global_potential_pdft(self, approximate = 'same', **kwargs):
@@ -349,8 +337,7 @@ class Optimization(object):
         # approximate = 'density4'
 
         if approximate == 'density4' :
-            total_factor = Field(self.gsystem.grid)
-            total_factor[:] = 0.0
+            total_factor = np.zeros_like(self.gsystem.density)
 
         self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = True)
 
@@ -372,20 +359,14 @@ class Optimization(object):
                 isub = self.of_ids[isub - self.nsub]
 
             if driver is None :
-                global_potential = None
+                global_density = None
                 extpot = None
             else :
                 if driver.evaluator.global_potential is None :
-                    if driver.technique == 'OF' :
-                        driver.evaluator.global_potential = Field(grid=driver.grid)
-                    else :
-                        if driver.comm.rank == 0 :
-                            driver.evaluator.global_potential = Field(grid=driver.grid)
-                        else :
-                            driver.evaluator.global_potential = driver.atmp
+                    driver.evaluator.global_potential = np.zeros_like(driver.density)
 
-                global_potential = driver.evaluator.global_potential
-                global_potential[:] = 0.0
+                global_density = driver.evaluator.global_potential
+                global_density[:] = 0.0
 
             if approximate != 'density4' :
                 if driver is not None :
@@ -393,22 +374,19 @@ class Optimization(object):
 
             if approximate == 'density' :
                 if driver is not None :
-                    if driver.technique == 'OF' or driver.comm.rank == 0 :
-                        extpot *= driver.density
+                    extpot *= driver.density
             elif approximate == 'density2' or approximate == 'density3' :
-                self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
+                self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
                 if driver is not None :
-                    if driver.technique == 'OF' or driver.comm.rank == 0 :
-                        factor = np.minimum(np.abs(driver.density/global_potential), 1.0)
-                        extpot *= factor
+                    global_density[global_density == 0] = 1E-30
+                    factor = np.minimum(np.abs(driver.density/global_density), 1.0)
+                    extpot *= factor
             elif approximate == 'density4' :
                 alpha = 6.0
-                self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
+                self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
                 if driver is not None :
-                    if driver.technique == 'OF' or driver.comm.rank == 0 :
-                        factor = np.minimum((np.abs(driver.density/global_potential)) ** alpha, 1.0)
-                    else :
-                        factor = None
+                    global_density[global_density == 0] = 1E-30
+                    factor = np.minimum((np.abs(driver.density/global_density)) ** alpha, 1.0)
                     driver.pdft_factor = factor
                 else :
                     factor = None
@@ -431,12 +409,10 @@ class Optimization(object):
                 else :
                     extpot = driver.get_extpot(mapping = False, with_global = False)
                     global_potential = driver.evaluator.global_potential
-                    global_potential[:] = 0.0
                 self.gsystem.sub_value(total_factor, global_potential, isub = isub)
                 if driver is not None :
-                    if driver.technique == 'OF' or driver.comm.rank == 0 :
-                        factor = global_potential * driver.pdft_factor
-                        extpot *= factor
+                    factor = global_potential * driver.pdft_factor
+                    extpot *= factor
 
                 self.gsystem.add_to_global(extpot, self.gsystem.total_evaluator.embed_potential, isub = isub)
 
@@ -456,9 +432,8 @@ class Optimization(object):
                 self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
             if driver is not None :
                 if approximate == 'density3' :
-                    if driver.technique == 'OF' or driver.comm.rank == 0 :
-                        factor = np.minimum(np.abs(driver.density/global_potential), 1.0)
-                        driver.evaluator.global_potential = potential * factor
+                    factor = np.minimum(np.abs(driver.density/global_potential), 1.0)
+                    driver.evaluator.global_potential = potential * factor
                 driver.evaluator.embed_potential = driver.evaluator.global_potential
         return
 
@@ -476,13 +451,7 @@ class Optimization(object):
                 global_density = None
             else :
                 if driver.evaluator.global_potential is None :
-                    if driver.technique == 'OF' :
-                        driver.evaluator.global_potential = Field(grid=driver.grid)
-                    else :
-                        if driver.comm.rank == 0 :
-                            driver.evaluator.global_potential = Field(grid=driver.grid)
-                        else :
-                            driver.evaluator.global_potential = driver.atmp
+                    driver.evaluator.global_potential = np.zeros_like(driver.density)
                 global_potential = driver.evaluator.global_potential
                 if driver.comm.rank == 0 : root = self.gsystem.comm.rank
             root = self.gsystem.grid.mp.amax(root)
@@ -495,10 +464,7 @@ class Optimization(object):
                     pot.gather(out = global_potential, root = root)
                 if driver is not None :
                     if driver.density is None :
-                        if driver.comm.rank == 0 :
-                            driver.density = Field(grid=driver.grid)
-                        else :
-                            driver.density = driver.atmp
+                        driver.density = np.zeros_like(driver.density)
                     global_density = driver.density
                 self.gsystem.density.gather(out = global_density, root = root)
             elif technique == 'MM' :
@@ -762,13 +728,7 @@ class Optimization(object):
                     global_potential = None
                 else :
                     if driver.evaluator.global_potential is None :
-                        if driver.technique == 'OF' :
-                            driver.evaluator.global_potential = Field(grid=driver.grid)
-                        else :
-                            if driver.comm.rank == 0 :
-                                driver.evaluator.global_potential = Field(grid=driver.grid)
-                            else :
-                                driver.evaluator.global_potential = driver.atmp
+                        driver.evaluator.global_potential = np.zeros_like(driver.density)
 
                     global_potential = driver.evaluator.global_potential
                     global_potential[:] = 0.0
@@ -776,14 +736,13 @@ class Optimization(object):
                 self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
                 rhomax = 0.0
                 if driver is not None :
-                    if driver.technique == 'OF' or driver.comm.rank == 0 :
-                        mask = np.abs(driver.density/global_potential - 0.5) < thr_ratio
-                        ns = np.count_nonzero(mask)
-                        if ns > 0 :
-                            rho_w = global_potential[mask]
-                            rho_s = driver.density[mask]
-                            rhomax = rho_w.max() + rho_s.max() + (rho_w - rho_s).max()
-                            rhomax *= 3.0/4.0
+                    mask = np.abs(driver.density/global_potential - 0.5) < thr_ratio
+                    ns = np.count_nonzero(mask)
+                    if ns > 0 :
+                        rho_w = global_potential[mask]
+                        rho_s = driver.density[mask]
+                        rhomax = rho_w.max() + rho_s.max() + (rho_w - rho_s).max()
+                        rhomax *= 3.0/4.0
                     if driver.technique == 'OF' :
                         rhomax = driver.grid.mp.amax(rhomax)
                     else :

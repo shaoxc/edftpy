@@ -47,14 +47,14 @@ class EngineEnviron(Engine):
         """
         force = np.zeros((3, self.nat), dtype=float, order='F')
         environ_calc.calc_force(force)
-        return force.T * self.units['energy']
+        return force.T
 
     def calc_energy(self, **kwargs):
         """get Environ energy contribution
         """
         # move these array options to pyec maybe
         energy = environ_calc.calc_energy()
-        return energy * self.units['energy']
+        return energy
 
     def initial(self, inputfile= None, comm = None, **kwargs):
         """initialize the Environ module
@@ -180,7 +180,7 @@ class EngineEnviron(Engine):
     def get_potential(self, **kwargs):
         """Returns the potential from Environ
         """
-        return self.potential * self.units['energy']
+        return self.potential
 
     def set_mbx_charges(self, rho):
         """Supply Environ with MBX charges

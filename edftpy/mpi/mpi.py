@@ -1,6 +1,7 @@
 import numpy as np
 from dftpy.mpi import SerialComm
 from dftpy.time_data import TimeObj, TimeData
+from edftpy.utils.math import copy_array
 
 class Graph :
     def __init__(self, nsub = 1, grid = None, **kwargs):
@@ -233,12 +234,12 @@ class GraphTopo:
         zero = 1E-8 # nonzero
         if not self.is_mpi :
             self.comm_sub = SerialComm()
-            self.nprocs = np.ones(1, dtype = 'int')
+            self.nprocs = np.zeros(1, dtype = 'int')
             return
         elif nprocs is None :
             raise AttributeError("Must give the 'nprocs' in parallel version")
         elif len(nprocs) == 1 and nprocs[0] == 0 :
-            self.nprocs = np.ones(1, dtype = 'int')
+            self.nprocs = np.zeros(1, dtype = 'int')
             return
         nprocs = np.asarray(nprocs, dtype = 'float')
         self.nprocs = np.rint(nprocs).astype(dtype = 'int')
@@ -415,17 +416,19 @@ class GraphTopo:
             #-----------------------------------------------------------------------
 
             if self.rank_region[i] == self.rank_sub[i] == self.rank:
-                sub_data[:] = self.region_data[i][index]
+                copy_array(self.region_data[i][index], out = sub_data)
             else :
                 if self.rank == self.rank_region[i] :
                     buf = np.empty(self.graph.sub_shape[i])
                     buf[:] = self.region_data[i][index]
                     self.comm.Send(buf, dest = self.rank_sub[i], tag = i)
                 elif self.rank == self.rank_sub[i] :
+                    if sub_data is None : sub_data = np.empty(self.graph.sub_shape[i])
                     self.comm.Recv(sub_data, source=self.rank_region[i], tag = i)
             self.comm.Barrier()
         else :
-            sub_data[:] = self.region_data[i][index]
+            copy_array(self.region_data[i][index], out = sub_data)
+        return sub_data
 
     def sub_to_region(self, i, sub_data):
         self.creat_tmp_data(i)
@@ -489,54 +492,61 @@ class GraphTopo:
             total[index] += sub_data
 
     def sub_to_global(self, sub_data, total, isub = None, grid = None, overwrite = False):
-        lflag = 1
-        if sub_data is None :
-            lflag = 0
+        lflag = 0 if sub_data is None else 1
         if self.is_mpi :
             lflag = self.comm.allreduce(lflag, op=self.MPI.MAX)
         if not lflag : return
         #-----------------------------------------------------------------------
         i = self.data_to_isub(sub_data, isub = isub, grid = grid)
-        if not self.is_mpi :
-            self._sub_to_global_serial(i, sub_data, total, overwrite = overwrite)
-            return
-        elif self.drivers[i] is not None and self.drivers[i].technique == 'OF' :
-            index = slice(None)
-            self._sub_to_global_serial(i, sub_data, total, overwrite = overwrite, index = index)
-            return
+        nspin = total.shape[0] if total.ndim == 4 else 1
+        if nspin == 1 :
+            sub_data_spin, total_spin = [sub_data], [total]
         else :
-            value = self.sub_to_region(i, sub_data)
-            if self.comm_region[i] is not None :
-                if overwrite :
-                    total[:] = value
-                else :
-                    total[:] += value
+            sub_data_spin, total_spin = sub_data, total
+            if sub_data_spin is None : sub_data_spin = [None, ]*nspin
+        for sub_data, total in zip(sub_data_spin, total_spin) :
+            if not self.is_mpi :
+                self._sub_to_global_serial(i, sub_data, total, overwrite = overwrite)
+            elif self.drivers[i] is not None and self.drivers[i].technique == 'OF' :
+                index = slice(None)
+                self._sub_to_global_serial(i, sub_data, total, overwrite = overwrite, index = index)
+            else :
+                value = self.sub_to_region(i, sub_data)
+                if self.comm_region[i] is not None :
+                    if overwrite :
+                        total[:] = value
+                    else :
+                        total[:] += value
 
     def _global_to_sub_serial(self, i, total, sub_data = None, add = False, index = None):
         if index is None :
             index = self.graph.sub_index(i)
-        if sub_data is None :
-            sub_data = total[index]
-        elif add :
-            sub_data[:] += total[index]
-        else :
-            sub_data[:] = total[index]
+        copy_array(total[index], out = sub_data, add = add)
         return sub_data
 
     def global_to_sub(self, total, sub_data = None, isub = None, grid = None, add = False):
         i = self.data_to_isub(sub_data, isub = isub, grid = grid)
-        if not self.is_mpi :
-            return self._global_to_sub_serial(i, total, sub_data, add=add)
-        elif self.drivers[i] is not None and self.drivers[i].technique == 'OF' :
-            index = slice(None)
-            return self._global_to_sub_serial(i, total, sub_data, add=add, index=index)
+        nspin = total.shape[0] if total.ndim == 4 else 1
+        if nspin == 1 :
+            sub_data_spin, total_spin = [sub_data], [total]
         else :
-            if add and self.isub == i :
-                saved = sub_data.copy()
-            self.region_to_sub(i, total, sub_data)
-            if add and self.isub == i :
-                sub_data[:] += saved
-        return sub_data
+            sub_data_spin, total_spin = sub_data, total
+            if sub_data_spin is None : sub_data_spin = [None, ]*nspin
+        for spin, (sub_data, total) in enumerate(zip(sub_data_spin, total_spin)) :
+            if not self.is_mpi :
+                sub_data_spin[spin] = self._global_to_sub_serial(i, total, sub_data, add=add)
+            elif self.drivers[i] is not None and self.drivers[i].technique == 'OF' :
+                index = slice(None)
+                sub_data_spin[spin] = self._global_to_sub_serial(i, total, sub_data, add=add, index=index)
+            else :
+                if add and self.isub == i : saved = sub_data.copy()
+                self.region_to_sub(i, total, sub_data)
+                if add and self.isub == i : sub_data[:] += saved
+        if nspin == 1 :
+            sub_data_spin = sub_data_spin[0]
+        elif self.isub == i and isinstance(sub_data_spin, list):
+            sub_data_spin = np.array(sub_data_spin)
+        return sub_data_spin
 
     def data_to_isub(self, sub_data = None, isub = None, grid = None):
         if isub is None :

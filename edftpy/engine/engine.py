@@ -6,7 +6,7 @@ from edftpy.mpi import sprint, SerialComm
 class Driver(ABC):
     def __init__(self, technique = 'OF', key = None,
             evaluator = None, subcell = None, prefix = 'sub_of', options = None, exttype = 3,
-            mixer = None, ncharge = None, task = 'scf', append = False, nspin = 1,
+            mixer = None, ncharge = None, task = 'scf', append = False,
             restart = False, base_in_file = None, **kwargs):
         '''
         Here, prefix is the name of the input file of the driver
@@ -29,7 +29,6 @@ class Driver(ABC):
         self.ncharge = ncharge
         self.task = task
         self.append = append
-        self.nspin = nspin
         self.restart = restart
         self.base_in_file = base_in_file
         self.filename = base_in_file
@@ -42,6 +41,7 @@ class Driver(ABC):
         if options is not None :
             self.options.update(options)
         self.comm = self.subcell.grid.mp.comm
+        self.nspin = self.subcell.density.rank
         #-----------------------------------------------------------------------
         self.density = None
         self.prev_density = None
@@ -56,8 +56,8 @@ class Driver(ABC):
         self.energy = None
         self._grid = None
         self._grid_sub = None
-        self.atmp = np.zeros(1)
-        self.atmp2 = np.zeros((1, self.nspin), order='F')
+        self.atmp = np.zeros(self.nspin)
+        self.atmp2 = np.zeros(self.nspin*2)
         self.mix_coef = None
         self.outfile = self.prefix + '.out'
         self.set_stdout(self.outfile, append = append)
