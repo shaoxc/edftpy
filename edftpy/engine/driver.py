@@ -395,12 +395,21 @@ class DriverKS(Driver):
             self.dp_norm = self.engine.get_dnorm()
             self.engine.get_rho(self.charge)
             self.density[:] = self._format_field_invert()
+        else :
+            if self.comm.size > 1 : self.dp_norm = self.comm.bcast(self.dp_norm, root=0)
+            self.set_dnorm(self.dp_norm)
 
         if self.comm.rank > 0 :
             self.residual_norm = 0.0
             self.dp_norm = 0.0
         # if self.comm.size > 1 : self.residual_norm = self.comm.bcast(self.residual_norm, root=0)
         return self.density
+
+    def set_dnorm(self, dnorm, **kwargs):
+        self.dp_norm = dnorm
+        self.engine.set_dnorm(self.dp_norm)
+        if self.comm.rank > 0 :
+            self.dp_norm = 0.0
 
     @print2file()
     def get_fermi_level(self, **kwargs):

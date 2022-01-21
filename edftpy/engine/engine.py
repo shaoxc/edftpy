@@ -153,6 +153,11 @@ class Driver(ABC):
     def write_stdout(self, line, **kwargs):
         sprint(line, comm = self.comm, fileobj = self.fileobj, **kwargs)
 
+    def set_dnorm(self, dnorm, **kwargs):
+        self.dp_norm = dnorm
+        if self.comm.rank > 0 :
+            self.dp_norm = 0.0
+
 
 class Engine(ABC):
     """
@@ -172,7 +177,7 @@ class Engine(ABC):
         self.units.update(units)
         self.units['volume'] = 1.0 / self.units['length']**3
         self.fileobj = None
-        self.comm = SerialComm()
+        self.comm = comm or SerialComm()
 
     def get_forces(self, icalc = 0, **kwargs):
         force = None
@@ -253,3 +258,6 @@ class Engine(ABC):
 
     def get_dnorm(self, **kwargs):
         return 0.0
+
+    def set_dnorm(self, dnorm, **kwargs):
+        pass

@@ -15,7 +15,7 @@ from edftpy.tddft import TDDFT
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
 from edftpy.density import file2density, AtomicDensity
 from edftpy.subsystem.subcell import SubCell, GlobalCell
-from edftpy.mixer import LinearMixer, PulayMixer
+from edftpy.mixer import Mixer
 from edftpy.mpi import GraphTopo, MP, sprint
 from edftpy.utils.math import get_hash, get_formal_charge
 from edftpy.subsystem.decompose import decompose_sub
@@ -220,7 +220,10 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     optimization_options["econv"] *= ions.nat
     task = config["JOB"]['task']
     tddft_options = config["TD"]
-    opt = Optimization(drivers = drivers, options = optimization_options, gsystem = gsystem)
+    mix_kwargs = config["GSYSTEM"]["mix"].copy()
+    if mix_kwargs['predecut'] : mix_kwargs['predecut'] *= ENERGY_CONV["eV"]["Hartree"]
+    mixer = Mixer(**mix_kwargs)
+    opt = Optimization(drivers = drivers, options = optimization_options, gsystem = gsystem, mixer = mixer)
     #-----------------------------------------------------------------------
     if task == 'Optmix' :
         optmix = True
@@ -524,14 +527,8 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
         subcell = config2subcell(config, keysys, ions, grid, pplist = pplist, total_evaluator = total_evaluator, optimizer = optimizer, cell_change = cell_change, driver = driver, mp = mp, comm = comm, nspin = nspin)
     #-----------------------------------------------------------------------
     if mix_kwargs['predecut'] : mix_kwargs['predecut'] *= ENERGY_CONV["eV"]["Hartree"]
-    if mix_kwargs['scheme'] == 'Pulay' :
-        mixer = PulayMixer(**mix_kwargs)
-    elif mix_kwargs['scheme'] == 'Linear' :
-        mixer = LinearMixer(**mix_kwargs)
-    elif mix_kwargs['scheme'] is None or mix_kwargs['scheme'].lower().startswith('no'):
-        mixer = mix_kwargs['coef']
-    else :
-        raise AttributeError("!!!ERROR : NOT support ", mix_kwargs['scheme'])
+    mixer = Mixer(**mix_kwargs)
+    if mixer is None : mixer = mix_kwargs.get('coef', 0.7)
     #-----------------------------------------------------------------------
     embed_evaluator, exttype = config2embed_evaluator(config, keysys, subcell.ions, subcell.grid, pplist = pplist, cell_change = cell_change)
     ncharge = config[keysys]["density"]["ncharge"]

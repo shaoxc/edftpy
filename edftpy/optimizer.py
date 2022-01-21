@@ -17,7 +17,7 @@ from edftpy.utils import get_mem_info, clean_variables
 
 class Optimization(object):
 
-    def __init__(self, drivers=[], gsystem = None, options=None):
+    def __init__(self, drivers=[], gsystem = None, options=None, mixer = None):
         if drivers is None:
             raise AttributeError("Must provide optimization driver (list)")
         if gsystem is None :
@@ -25,6 +25,7 @@ class Optimization(object):
 
         self.drivers = drivers
         self.gsystem = gsystem
+        self.mixer = mixer
 
         default_options = {
             "maxiter": 80,
@@ -83,6 +84,7 @@ class Optimization(object):
         return sum(elist)
 
     def update_density(self, update = None, **kwargs):
+        if self.mixer is not None : update = None
         # diff_res = self.get_diff_residual()
         for i, driver in enumerate(self.drivers):
             if driver is None : continue
@@ -117,6 +119,18 @@ class Optimization(object):
                 self.gsystem.update_density(density, isub = i)
         self.density, self.density_prev = self.density_prev, self.density
         self.density = self.gsystem.density.copy()
+        # mix the density
+        if self.mixer is not None :
+            self.density = self.mixer(self.density_prev, self.density)
+            r = self.density-self.density_prev
+            # add some information to drivers
+            dp_norm = hartree_energy(r)
+            residual_norm = np.sqrt(self.gsystem.grid.mp.asum(r * r)/self.gsystem.grid.nnrR)
+            for i, driver in enumerate(self.drivers):
+                if driver is not None :
+                    factor = driver.subcell.ions.nat/self.gsystem.ions.nat
+                    driver.set_dnorm(dp_norm*factor)
+                    driver.residual_norm = residual_norm*factor
         return
 
     def step(self, **kwargs):
@@ -235,7 +249,11 @@ class Optimization(object):
                 sprint("#### Subsytem Density Optimization Converged (Potential) In {} Iterations ####".format(it+1))
                 self.converged = True
                 break
-            energy = self.get_energy(density = self.density, update = self.update, olevel = olevel)
+            if self.mixer :
+                # The update will change the system.density which will used in the nonadditive potential
+                energy = self.get_energy(density = self.density, update = False, olevel = olevel)
+            else :
+                energy = self.get_energy(density = self.density, update = self.update, olevel = olevel)
             #-----------------------------------------------------------------------
             energy_history.append(energy)
             timecost = time.time()
@@ -267,7 +285,6 @@ class Optimization(object):
 
     def set_global_potential_sdft(self, approximate = 'same', **kwargs):
         # approximate = 'density4'
-
         calcType = ['V']
         if approximate == 'density3' :
             calcType.append('D')
@@ -275,8 +292,19 @@ class Optimization(object):
             pass
         else :
             # initial the global_potential
-            self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = calcType)
-            # static_potential = self.gsystem.total_evaluator.static_potential.copy()
+            if self.mixer :
+                # Asuuming all drivers have same embedding type
+                for i, driver in enumerate(self.drivers):
+                    if driver is None : continue
+                    embed_keys = driver.evaluator.funcdicts.keys()
+                    break
+                self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = calcType, embed_keys = embed_keys)
+                # self.gsystem.total_evaluator.get_embed_potential(self.density, gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = calcType, embed_keys = embed_keys)
+                obj = self.gsystem.total_evaluator.get_total_functional(self.density, calcType = calcType, embed_keys = embed_keys)
+                self.gsystem.total_evaluator.embed_potential += obj.potential
+                if 'D' in calcType : self.gsystem.total_evaluator.embed_energydensity += obj.energydensity
+            else :
+                self.gsystem.total_evaluator.get_embed_potential(self.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = calcType)
         for isub in range(self.nsub):
             driver = self.drivers[isub]
             if driver is None :

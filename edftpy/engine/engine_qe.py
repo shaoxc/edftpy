@@ -10,7 +10,6 @@ from dftpy.constants import LEN_CONV
 from edftpy.io import ions2ase
 from edftpy.engine.engine import Engine
 from edftpy.utils.common import Grid, Field, Atoms
-from edftpy.mpi import SerialComm
 
 try:
     __version__ = qepy.__version__
@@ -18,7 +17,7 @@ except Exception :
     __version__ = '0.0.1'
 
 class EngineQE(Engine):
-    def __init__(self, **kwargs):
+    def __init__(self, nscf = False, **kwargs):
         unit_len = LEN_CONV["Angstrom"]["Bohr"] / qepy.constants.ANGSTROM_AU
         units = kwargs.get('units', {})
         units['length'] = kwargs.get('length', unit_len)
@@ -27,7 +26,7 @@ class EngineQE(Engine):
         kwargs['units'] = units
         super().__init__(**kwargs)
         self.embed = None
-        self.comm = SerialComm()
+        self.nscf = nscf
 
     def get_forces(self, icalc = 3, **kwargs):
         qepy.qepy_forces(icalc)
@@ -105,9 +104,25 @@ class EngineQE(Engine):
         qepy.punch(what)
         qepy.close_files(False)
 
-    def scf(self, **kwargs):
+    def scf(self, sum_band = True, **kwargs):
         self.embed.mix_coef = -1.0
-        qepy.qepy_electrons_scf(0, 0, self.embed)
+        if self.nscf :
+            qepy.qepy_electrons_nscf(0, 0, self.embed)
+            if sum_band : self.sum_band()
+        else :
+            qepy.qepy_electrons_scf(0, 0, self.embed)
+
+    def sum_band(self, weights = None, **kwargs):
+        if weights is not None :
+            wg = qepy.wvfct.get_array_wg()
+            wg[:] = 0.0
+            lens = min(len(wg), len(weights))
+            wg[:lens] = weights[:lens]
+            qepy.wvfct.set_array_wg(wg)
+        qepy.sum_band()
+
+    def get_band_energies(self, **kwargs):
+        return qepy.wvfct.get_array_et()
 
     def scf_mix(self, coef = 0.7, **kwargs):
         self.embed.mix_coef = coef
@@ -136,7 +151,10 @@ class EngineQE(Engine):
     def end_scf(self, **kwargs):
         if self.embed.iterative :
             self.embed.finish = True
-            qepy.qepy_electrons_scf(0, 0, self.embed)
+            if self.nscf :
+                qepy.qepy_electrons_nscf(0, 0, self.embed)
+            else :
+                qepy.qepy_electrons_scf(0, 0, self.embed)
 
     def end_tddft(self, **kwargs):
         if self.embed.tddft.iterative :
@@ -163,6 +181,9 @@ class EngineQE(Engine):
 
     def get_dnorm(self, **kwargs):
         return self.embed.dnorm
+
+    def set_dnorm(self, dnorm, **kwargs):
+        self.embed.dnorm = dnorm
 
     def write_input(self, filename = 'sub_driver.in', subcell = None, params = {}, cell_params = {}, base_in_file = None, **kwargs):
         prefix = os.path.splitext(filename)[0]

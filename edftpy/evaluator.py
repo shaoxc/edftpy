@@ -247,8 +247,7 @@ class TotalEvaluator(Evaluator):
 
     def get_embed_potential(self, rho, gaussian_density = None, embed_keys = [], with_global = True, calcType = ['V'], **kwargs):
         self.embed_potential = None
-        if embed_keys :
-            embed_keys = self.embed_keys
+        if not embed_keys : embed_keys = self.embed_keys
         key = 'KE' if hasattr(self, 'KE') else None
         remove_global = {}
         if key is not None :
@@ -296,6 +295,17 @@ class TotalEvaluator(Evaluator):
                 self.embed_energydensity += obj_global.energydensity
 
         # self.static_potential = obj_global.potential
+
+    def get_total_functional(self, rho, embed_keys = [], calcType = ['V'], **kwargs):
+        if not embed_keys : embed_keys = self.embed_keys
+        remove_global = {}
+        for key in self.funcdicts:
+            if key in embed_keys:
+                remove_global[key] = self.funcdicts[key]
+        self.update_functional(remove = remove_global)
+        obj = self.compute(rho, calcType = calcType, **kwargs)
+        self.update_functional(add = remove_global)
+        return obj
 
     def __call__(self, rho, calcType=["E","V"], **kwargs):
         return self.compute(rho, calcType, **kwargs)
