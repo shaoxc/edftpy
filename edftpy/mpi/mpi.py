@@ -559,3 +559,46 @@ class GraphTopo:
             if self.is_mpi :
                 isub=self.comm.allreduce(isub, op=self.MPI.MAX)
         return isub
+
+    def sgather(self, data):
+        if self.is_mpi :
+            for i, driver in enumerate(self.drivers):
+                if self.rank_sub[i] == self.rank :
+                    # if self.rank_sub[i] == 0 : continue
+                    self.comm.isend(data[i], dest = 0, tag = i)
+
+            if self.is_root :
+                reqs = [None, ] * self.nsub
+                for i, driver in enumerate(self.drivers):
+                    # if self.rank_sub[i] == 0 : continue
+                    reqs[i]=self.comm.irecv(source = self.rank_sub[i], tag = i)
+
+                for i, req in enumerate(reqs):
+                    if req is not None :
+                        data[i] = reqs[i].wait()
+            self.comm.Barrier()
+        return data
+
+    def sscatter(self, data = None):
+        if self.is_mpi :
+            if self.is_root :
+                for i, driver in enumerate(self.drivers):
+                    self.comm.isend(data[i], dest = self.rank_sub[i], tag = i)
+
+            reqs = [None, ] * self.nsub
+            for i, driver in enumerate(self.drivers):
+                if self.rank_sub[i] == self.rank :
+                    reqs[i]=self.comm.irecv(source = 0, tag = i)
+
+            if data is None : data = [None, ] * self.nsub
+            # for i, req in enumerate(reqs):
+                # if req is not None :
+                    # data[i] = reqs[i].wait()
+            for i, driver in enumerate(self.drivers):
+                if driver is None : continue
+                if self.rank_sub[i] == self.rank :
+                    data[i] = reqs[i].wait()
+                data[i] = self.drivers[i].comm.bcast(data[i])
+
+            self.comm.Barrier()
+        return data

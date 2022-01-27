@@ -50,6 +50,8 @@ class Driver(ABC):
         self.charge = None
         self.prev_charge = None
         self.potential = None
+        self.band_energies = None
+        self.band_weights = None
         #-----------------------------------------------------------------------
         self.residual_norm = 0.0
         self.dp_norm = 0.0
@@ -98,14 +100,12 @@ class Driver(ABC):
 
     def compute(self, density = None, gsystem = None, calcType = ['O', 'E'], **kwargs):
         if 'O' in calcType :
-
             if gsystem is None and self.evaluator.gsystem is None :
                 raise AttributeError("Must provide global system")
             else:
                 self.evaluator.gsystem = gsystem
 
             self.get_density(**kwargs)
-            self.mu = self.get_fermi_level()
 
         if 'E' in calcType or 'V' in calcType :
             func = self.get_energy_potential(self.density, calcType, **kwargs)

@@ -2,7 +2,7 @@ import numpy as np
 
 from dftpy.constants import ENERGY_CONV
 
-from edftpy.mixer import PulayMixer, AbstractMixer
+from edftpy.mixer import Mixer
 from edftpy.utils.common import Grid, Field, Functional
 from edftpy.utils.math import grid_map_data
 from edftpy.functional import hartree_energy
@@ -60,8 +60,8 @@ class DriverKS(Driver):
         self._driver_initialise(**kwargs)
 
         if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = 0.5, predecut = 0, delay = 1)
-        elif isinstance(self.mixer, float):
+            self.mixer = Mixer(scheme = 'pulay', predtype = 'kerker', predcoef = [1.0, 0.6, 1.0], maxm = 7, coef = 0.5, predecut = 0, delay = 1)
+        elif isinstance(self.mixer, (int, float)):
             self.mix_coef = self.mixer
 
         fstr = f'Subcell grid({self.prefix}): {self.subcell.grid.nrR}  {self.subcell.grid.nr}\n'
@@ -92,10 +92,8 @@ class DriverKS(Driver):
         self.phi = None
         self.residual_norm = 1.0
         self.dp_norm = 1.0
-        if isinstance(self.mixer, AbstractMixer):
-            self.mixer.restart()
-        if subcell is not None :
-            self.subcell = subcell
+        if hasattr(self.mixer, 'restart') : self.mixer.restart()
+        if subcell is not None : self.subcell = subcell
 
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
 
@@ -128,6 +126,9 @@ class DriverKS(Driver):
 
         self.core_density_sub = Field(grid = self.grid_sub)
         self.grid_sub.scatter(self.core_density, out = self.core_density_sub)
+        if self.comm.rank == 0 :
+            fstr = f'ncharge({self.prefix}): {self._iter} {self.density.integral()}'
+            sprint(fstr, comm = self.comm)
         return
 
     @property
@@ -285,7 +286,7 @@ class DriverKS(Driver):
         return self.charge
 
     @print2file()
-    def get_density(self, vext = None, sdft = 'sdft', **kwargs):
+    def _get_density_prep(self, sdft = 'sdft', **kwargs):
         self._iter += 1
 
         self.prev_density[:] = self.density
@@ -306,16 +307,34 @@ class DriverKS(Driver):
         self.prev_charge[:] = self.charge
 
         self.engine.set_extpot(extpot)
-        #
-        self._get_charge()
-        #
+
+    @print2file()
+    def get_density(self, sdft = 'sdft', occupations = None, sum_band = False, **kwargs):
+        if sum_band or occupations is not None :
+            self.engine.sum_band(occupations=occupations, **kwargs)
+            self.engine.get_rho(self.charge)
+        elif sdft == 'scdft' :
+            return self.get_bands(sdft=sdft, **kwargs)
+        else :
+            self._get_density_prep(sdft=sdft, **kwargs)
+            self._get_charge()
         self.energy = 0.0
         self.dp_norm = 1.0
         self.density[:] = self._format_field_invert()
-        # from edftpy.io import print2file, write
-        # if self.comm.rank == 0 :
-            # write('a.xsf', self.density, ions = self.subcell.ions)
+        if self.comm.rank == 0 :
+            fstr = f'ncharge({self.prefix}): {self._iter} {self.density.integral()}'
+            sprint(fstr, comm = self.comm)
+            # from edftpy.io import write
+            # write(self.prefix+'.xsf', self.density, ions = self.subcell.ions)
         return self.density
+
+    @print2file()
+    def get_bands(self, sdft = 'sdft', sum_band = False, **kwargs):
+        self._get_density_prep(sdft=sdft, **kwargs)
+        self.engine.scf(sum_band = sum_band, **kwargs)
+        self.band_energies = self.engine.get_band_energies(**kwargs).ravel()
+        self.band_weights = self.engine.get_band_weights(**kwargs).ravel()
+        return self.band_energies, self.band_weights
 
     @print2file()
     def get_energy(self, olevel = 0, sdft = 'sdft', **kwargs):

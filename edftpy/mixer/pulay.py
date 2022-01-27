@@ -40,18 +40,6 @@ class PulayMixer(AbstractMixer):
         self._iter += 1
 
         sprint('mixing parameters : ', coef, comm=self.comm, level = 1)
-        # rho0 = np.mean(nin)
-        # kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
-        # sprint('kf', kf, self.pred.predcoef[1], comm=self.comm)
-        # if self._iter == 20 :
-        # if abs(kf - self.pred.predcoef[1]) > 0.1 :
-            # self.pred.predcoef[1] = kf
-            # self.pred._matrix = None
-            # sprint('Embed restart pulay coef', comm=self.comm)
-            # self.dr_mat = None
-            # self.dn_mat = None
-            # sprint('Restart history of the mixer', comm=self.comm)
-
         r = nout - nin
         #-----------------------------------------------------------------------
         if self._iter == 1 and self._delay < 1 :
@@ -62,7 +50,7 @@ class PulayMixer(AbstractMixer):
             if self.restarted and (self._iter-self._delay) %(self.maxm+1)==0 :
                 self.dr_mat = None
                 self.dn_mat = None
-                sprint('Restart history of the mixer', comm=self.comm, level = 1)
+                sprint('Restart history of the mixer', comm=self.comm, level = 3)
             dn = nin - self.prev_density
             dr = r - self.prev_residual
             if self.dr_mat is None :
@@ -99,7 +87,6 @@ class PulayMixer(AbstractMixer):
                     else :
                         drho += x[i] * self.dn_mat[i]
                         res += x[i] * self.dr_mat[i]
-                # drho *= coef
                 #-----------------------------------------------------------------------
                 # res[:] = filter_density(res)
                 #-----------------------------------------------------------------------
@@ -111,15 +98,24 @@ class PulayMixer(AbstractMixer):
                 sprint('amat', amat, comm=self.comm)
                 results = self.pred(nin, nout, residual=res, coef=coef)
         else :
-            # res = r * 0.8
-            # results = self.pred(nin, nout, residual=res)
-            # sprint('delay : use linear mixer', comm=self.comm)
             results = nout.copy()
             sprint('delay : use output density', comm=self.comm)
         #-----------------------------------------------------------------------
         results = self.format_density(results, nin)
         #-----------------------------------------------------------------------
-        self.prev_density = nin.copy()
-        self.prev_residual = r.copy()
+        self.prev_density = nin + 0.0
+        self.prev_residual = r + 0.0
 
         return results
+
+    def update_predcoef(self, nin, tol=1E-2):
+        rho0 = np.mean(nin)
+        kf = (3.0 * rho0 * np.pi ** 2) ** (1.0 / 3.0)
+        sprint('kf', kf, self.pred.predcoef[1], comm=self.comm)
+        if abs(kf - self.pred.predcoef[1]) > tol :
+            self.pred.predcoef[1] = kf
+            self.pred._matrix = None
+            sprint('Embed restart pulay coef', comm=self.comm)
+            self.dr_mat = None
+            self.dn_mat = None
+            sprint('Restart history of the mixer', comm=self.comm)

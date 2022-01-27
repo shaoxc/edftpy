@@ -13,11 +13,12 @@ from edftpy.utils.common import Grid, Field, Functional
 from edftpy.io import write
 from edftpy.engine.driver import DriverConstraint
 from edftpy.utils import get_mem_info, clean_variables
+from edftpy.utils.occupations import Occupations
 
 
 class Optimization(object):
 
-    def __init__(self, drivers=[], gsystem = None, options=None, mixer = None):
+    def __init__(self, drivers=[], gsystem = None, options=None, mixer = None, occupations = None):
         if drivers is None:
             raise AttributeError("Must provide optimization driver (list)")
         if gsystem is None :
@@ -26,9 +27,10 @@ class Optimization(object):
         self.drivers = drivers
         self.gsystem = gsystem
         self.mixer = mixer
+        self.occupations = occupations
 
         default_options = {
-            "maxiter": 80,
+            "maxiter": 800,
             "econv": 1.0e-5,
             "pconv": None,
             "pconv_sub": None,
@@ -36,6 +38,7 @@ class Optimization(object):
             "olevel": 2,
             "sdft": 'sdft',
             "maxtime" : 0,
+            "delay" : 2,
         }
 
         self.options = default_options
@@ -47,6 +50,17 @@ class Optimization(object):
         self.density_prev = None
         self.converged = False
         self.observers = []
+        #-----------------------------------------------------------------------
+        if self.sdft == 'scdft' :
+            if self.mixer is None :
+                from edftpy.mixer import Mixer
+                self.mixer = Mixer(scheme = 'pulay', predtype = 'kerker', maxm = 7, coef = 0.7, delay = 2)
+            if self.occupations is None :
+                self.occupations = Occupations(degauss = 0.01)
+
+    @property
+    def sdft(self):
+        return self.options['sdft']
 
     @property
     def drivers(self):
@@ -83,16 +97,22 @@ class Optimization(object):
                 total_energy= total_energy, update = update, olevel = olevel, **kwargs)
         return sum(elist)
 
-    def update_density(self, update = None, **kwargs):
+    def update_density(self, update = None, update_coef = False, **kwargs):
         if self.mixer is not None : update = None
-        # diff_res = self.get_diff_residual()
-        for i, driver in enumerate(self.drivers):
-            if driver is None : continue
-            # coef = driver.calculator.mixer.coef.copy()
-            # coef[0] = self.get_frag_coef(coef[0], diff_res[i], diff_res)
-            coef = None
-            if update is not None and update[i]:
-                driver.update_density(coef = coef)
+        if update_coef : diff_res = self.get_diff_residual()
+
+        if self.sdft == 'scdft' :
+            self.update_bands_occupations(**kwargs)
+        elif update is not None :
+            for i, driver in enumerate(self.drivers):
+                if driver is None : continue
+                if update_coef :
+                    coef = getattr(driver.mixer, 'coef', driver.mixer).copy()
+                    coef[0] = self.get_frag_coef(coef[0], diff_res[i], diff_res)
+                else :
+                    coef = None
+                if update[i]:
+                    driver.update_density(coef = coef)
 
         self.gsystem.density[:] = 0.0
         for i, driver in enumerate(self.drivers):
@@ -119,7 +139,10 @@ class Optimization(object):
                 self.gsystem.update_density(density, isub = i)
         self.density, self.density_prev = self.density_prev, self.density
         self.density = self.gsystem.density.copy()
-        # mix the density
+        self.mix_density()
+        return
+
+    def mix_density(self, **kwargs):
         if self.mixer is not None :
             self.density = self.mixer(self.density_prev, self.density)
             r = self.density-self.density_prev
@@ -132,6 +155,45 @@ class Optimization(object):
                     driver.set_dnorm(dp_norm*factor)
                     driver.residual_norm = residual_norm*factor
         return
+
+    def update_bands_occupations(self, **kwargs):
+        band_energies = [None, ]*self.nsub
+        band_weights = [None, ]*self.nsub
+        nspin = self.gsystem.density.rank
+        for i, driver in enumerate(self.drivers):
+            if driver is not None and driver.comm.rank == 0 :
+                band_energies[i] = driver.band_energies.reshape((nspin, -1))
+                band_weights[i] = driver.band_weights.reshape((nspin, -1))
+            else :
+                band_energies[i] = None
+                band_weights[i] = None
+        band_energies = self.gsystem.graphtopo.sgather(band_energies)
+        band_weights = self.gsystem.graphtopo.sgather(band_weights)
+
+        ncharge = self.gsystem.density.integral()
+        if self.iter > self.options['delay'] :
+            if self.gsystem.graphtopo.is_root :
+                indices = [0 if x is None else len(x[0]) for x in band_energies]
+                band_energies = np.concatenate(band_energies, axis=1)
+                band_weights = np.concatenate(band_weights, axis=1)
+                # sprint('band_energies', band_energies, band_weights, ncharge)
+                occs = band_weights*0.0
+                if not hasattr(ncharge, '__len__'): ncharge = [ncharge, ]*nspin
+                for i in range(nspin):
+                    occs[i] = self.occupations.get_occupation_numbers(band_energies[i], weights = band_weights[i], ncharge = ncharge[i])
+                occs *= band_weights
+                indices = np.cumsum(indices)[:-1]
+                occs = np.split(occs, indices, axis = 1)
+                # sprint('occs', occs)
+            else :
+                occs = None
+            occs = self.gsystem.graphtopo.sscatter(occs)
+        else :
+            occs = [None, ]*self.nsub
+
+        for i, driver in enumerate(self.drivers):
+            if driver is None : continue
+            driver.get_density(occupations = occs[i], sdft = self.sdft, sum_band = True)
 
     def step(self, **kwargs):
         # Update the rhomax for NLKEDF, first step without NL will be better for scf not for tddft.
@@ -153,7 +215,7 @@ class Optimization(object):
                     calcType = ['V']
                 else :
                     calcType = ['O']
-                driver(gsystem = self.gsystem, calcType = calcType, olevel = self.options['olevel'], sdft = self.options['sdft'])
+                driver(gsystem = self.gsystem, calcType = calcType, olevel = self.options['olevel'], sdft = self.sdft)
         self.iter += 1
 
     def attach(self, function, interval=1, *args, **kwargs):
@@ -276,11 +338,10 @@ class Optimization(object):
         yield self.converged
 
     def set_global_potential(self, **kwargs):
-        sdft = self.options['sdft']
-        if sdft == 'sdft' :
-            self.set_global_potential_sdft(**kwargs)
-        elif sdft == 'pdft' :
+        if self.sdft == 'pdft' :
             self.set_global_potential_pdft(**kwargs)
+        else :
+            self.set_global_potential_sdft(**kwargs)
         self.add_external_potential(**kwargs)
 
     def set_global_potential_sdft(self, approximate = 'same', **kwargs):
@@ -293,6 +354,11 @@ class Optimization(object):
         else :
             # initial the global_potential
             if self.mixer :
+                """
+                Note :
+                    self.gsystem.density is the original summed density
+                    self.density is the mixed density
+                """
                 # Asuuming all drivers have same embedding type
                 for i, driver in enumerate(self.drivers):
                     if driver is None : continue
@@ -647,13 +713,9 @@ class Optimization(object):
 
     def print_energy(self):
         self.set_global_potential()
-        sdft = self.options['sdft']
         edict = {}
         etype = 1
-        if sdft == 'sdft' :
-            edict = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True, olevel = 0)
-            total_energy = edict.pop('TOTAL').energy
-        else :
+        if self.sdft == 'pdft' :
             if etype == 0 :
                 total_energy = np.sum(self.gsystem.total_evaluator.embed_potential * self.gsystem.density) * self.gsystem.grid.dV
                 edict['EMB'] = Functional(name = 'ZERO', energy=total_energy + 0, potential=None)
@@ -663,6 +725,9 @@ class Optimization(object):
                 # total_func= self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], olevel = 0)
                 # edict['E_GLOBAL'] = total_func
                 # total_energy = total_func.energy.copy()
+        else :
+            edict = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True, olevel = 0)
+            total_energy = edict.pop('TOTAL').energy
 
         elist = get_total_energies(gsystem = self.gsystem, drivers = self.drivers, total_energy = total_energy, olevel = 0)
         etotal = sum(elist)

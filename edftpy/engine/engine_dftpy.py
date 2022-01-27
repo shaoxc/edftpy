@@ -5,7 +5,7 @@ from dftpy.constants import ENERGY_CONV
 from dftpy.optimization import Optimization
 from dftpy.constants import environ
 
-from edftpy.mixer import LinearMixer, PulayMixer, AbstractMixer
+from edftpy.mixer import Mixer
 from edftpy.utils.math import grid_map_data
 from edftpy.functional import hartree_energy, KEDF
 from edftpy.mpi import sprint
@@ -48,9 +48,9 @@ class EngineDFTpy(Driver):
         self.evaluator_of = evaluator_of
         #-----------------------------------------------------------------------
         if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = 0.2, predecut = 0, delay = 1)
-        if not isinstance(self.mixer, AbstractMixer):
-            self.mixer = LinearMixer(predtype = None, coef = 1.0, predecut = None, delay = 1)
+            self.mixer = Mixer(scheme = 'pulay', predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = 0.2, predecut = 0, delay = 1)
+        if not hasattr(self.mixer, '__call__') :
+            self.mixer = Mixer(scheme = 'linear', predtype = None, coef = 1.0, predecut = None, delay = 1)
         #-----------------------------------------------------------------------
         self.density = self.subcell.density
         self.init_density()
@@ -81,10 +81,8 @@ class EngineDFTpy(Driver):
         self.dp_norm_prev = 0.0
         self.residual_norm_prev = 0.0
         self.core_density = None
-        if isinstance(self.mixer, AbstractMixer):
-            self.mixer.restart()
-        if subcell is not None :
-            self.subcell = subcell
+        if hasattr(self.mixer, 'restart'): self.mixer.restart()
+        if subcell is not None : self.subcell = subcell
 
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
 

@@ -112,17 +112,30 @@ class EngineQE(Engine):
         else :
             qepy.qepy_electrons_scf(0, 0, self.embed)
 
-    def sum_band(self, weights = None, **kwargs):
-        if weights is not None :
+    def sum_band(self, occupations= None, **kwargs):
+        if occupations is None :
+            update = True
+        else :
             wg = qepy.wvfct.get_array_wg()
-            wg[:] = 0.0
-            lens = min(len(wg), len(weights))
-            wg[:lens] = weights[:lens]
+            nk = wg.shape[1]
+            occupations = occupations.ravel().reshape((-1, nk), order='F')
+            nbands = min(wg.shape[0], occupations.shape[0])
+            wg[:nbands] = occupations[:nbands]
+            wg[nbands:] = 0.0
             qepy.wvfct.set_array_wg(wg)
-        qepy.sum_band()
+            update = False
+        qepy.qepy_sum_band(update_occupations=update)
 
     def get_band_energies(self, **kwargs):
-        return qepy.wvfct.get_array_et()
+        et = qepy.wvfct.get_array_et()
+        return et.T
+
+    def get_band_weights(self, **kwargs):
+        nks = qepy.klist.get_nkstot()
+        wk = qepy.klist.get_array_wk()[:nks]
+        nbands = qepy.wvfct.get_nbnd()
+        weights = np.repeat(wk, nbands).reshape((-1, nbands))
+        return weights
 
     def scf_mix(self, coef = 0.7, **kwargs):
         self.embed.mix_coef = coef
