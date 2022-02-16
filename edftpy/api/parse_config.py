@@ -963,43 +963,43 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
         grid = optimizer.grid
 
     # backup last step saved subs
-    subkeys = [key for key in config if key.startswith('SUB')]
-    for key in subkeys :
+    subkeys_prev = [key for key in config if key.startswith('SUB')]
+    for key in subkeys_prev :
         config['B' + key] = config.pop(key)
     subkeys_prev = [key for key in config if key.startswith('BSUB')]
+    reuse_drivers = {}
 
     asub = config['ASUB']
     subkeys = [key for key in asub if key.startswith('sub_')]
-    reuse_drivers = {}
 
+    hashes = OrderedDict()
     for i, index in enumerate(indices) :
         ind = set(index)
-        kind = None
         this_hash = get_hash(ind)
-        # check saved keys
-        for keysys in subkeys_prev :
-            if this_hash == config[keysys]['hash'] :
-                kind = 'saved'
-                this_key = keysys
-                break
-        if kind == 'saved' :
-            #the subsystem is same as last step
-            key = this_key[1:]
-            config[key] = config.pop(this_key)
-            #-----------------------------------------------------------------------
-            subkeys_prev.remove(this_key)
-            reuse_drivers[key] = None
-            if optimizer is not None :
-                for driver in optimizer.drivers :
-                    if driver is None : continue
-                    if driver.prefix == config[key]["prefix"] :
-                        reuse_drivers[key] = driver
-            #-----------------------------------------------------------------------
-            indices[i] = []
-            config[key]["density"]["file"] = None
-            f_str = 'New Subsytem : {} {} {}'.format(key, kind, index)
-            f_str = "\n".join(textwrap.wrap(f_str, width = 80))
-            sprint(f_str)
+        hashes[this_hash] = i
+    # check saved keys
+    for keysys in subkeys_prev :
+        hash0 = config[keysys]['hash']
+        if hash0 not in hashes : continue
+        i = hashes[hash0]
+        index = indices[i]
+        this_key = keysys
+        #the subsystem is same as last step
+        key = this_key[1:]
+        config[key] = config.pop(this_key)
+        #-----------------------------------------------------------------------
+        reuse_drivers[key] = None
+        if optimizer is not None :
+            for driver in optimizer.drivers :
+                if driver is None : continue
+                if driver.prefix == config[key]["prefix"] :
+                    reuse_drivers[key] = driver
+        #-----------------------------------------------------------------------
+        indices[i] = []
+        config[key]["density"]["file"] = None
+        f_str = 'New Subsytem : {} {} {}'.format(key, 'saved', index)
+        f_str = "\n".join(textwrap.wrap(f_str, width = 80))
+        sprint(f_str)
 
     # check ASUB
     for i, index in enumerate(indices) :
@@ -1070,9 +1070,11 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
         f_str = "\n".join(textwrap.wrap(f_str, width = 80))
         sprint(f_str)
 
-    # removed last step saved but unused subs
-    for key in subkeys_prev :
-        del config[key]
+    subkeys = [key for key in config if key.startswith('SUB')]
+
+    if len(reuse_drivers) != len(subkeys) :
+        # removed last step saved but unused subs
+        for key in subkeys_prev : config.pop(key, None)
     config = config2json(config, ions)
     return (config, reuse_drivers)
 
