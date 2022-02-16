@@ -171,12 +171,12 @@ class Optimization(object):
         band_weights = self.gsystem.graphtopo.sgather(band_weights)
 
         ncharge = self.gsystem.density.integral()
+        # self.options['delay'] = -1
         if self.iter > self.options['delay'] :
             if self.gsystem.graphtopo.is_root :
                 indices = [0 if x is None else len(x[0]) for x in band_energies]
                 band_energies = np.concatenate(band_energies, axis=1)
                 band_weights = np.concatenate(band_weights, axis=1)
-                # sprint('band_energies', band_energies, band_weights, ncharge)
                 occs = band_weights*0.0
                 if not hasattr(ncharge, '__len__'): ncharge = [ncharge, ]*nspin
                 for i in range(nspin):
@@ -184,7 +184,51 @@ class Optimization(object):
                 occs *= band_weights
                 indices = np.cumsum(indices)[:-1]
                 occs = np.split(occs, indices, axis = 1)
-                # sprint('occs', occs)
+            else :
+                occs = None
+            occs = self.gsystem.graphtopo.sscatter(occs)
+        else :
+            occs = [None, ]*self.nsub
+
+        for i, driver in enumerate(self.drivers):
+            if driver is None : continue
+            driver.get_density(occupations = occs[i], sdft = self.sdft, sum_band = True)
+
+    def update_bands_occupations_v(self, **kwargs):
+        band_energies = [None, ]*self.nsub
+        band_weights = [None, ]*self.nsub
+        nspin = self.gsystem.density.rank
+        for i, driver in enumerate(self.drivers):
+            if driver is not None and driver.comm.rank == 0 :
+                band_energies[i] = driver.band_energies
+                band_weights[i] = driver.band_weights
+            else :
+                band_energies[i] = None
+                band_weights[i] = None
+        band_energies = self.gsystem.graphtopo.sgather(band_energies)
+        band_weights = self.gsystem.graphtopo.sgather(band_weights)
+
+        ncharge = self.gsystem.density.integral()
+        if self.iter > self.options['delay'] :
+            if self.gsystem.graphtopo.is_root :
+                if not hasattr(ncharge, '__len__'): ncharge = [ncharge, ]*nspin
+                sprint('band_energies', band_energies, band_weights, ncharge, level = 1)
+                occs_spin = []
+                for i in range(nspin):
+                    energies = [x[i] for x in band_energies]
+                    weights = [x[i] for x in band_weights]
+                    ef = self.occupations.get_fermi_level_pot(energies, weights = weights, ncharge = ncharge[i], diffs = -0.3, eratio = 0.5, index = (0, 1))
+                    occ = []
+                    for e, w in zip(energies, weights):
+                        oc = self.occupations.get_occupation_numbers(e, ef = ef)*w
+                        occ.append(oc)
+                    occs_spin.append(occ)
+                if nspin == 1 :
+                    occs = occs_spin[0]
+                elif nspin == 2 :
+                    occs = [np.vstack((x, y)) for x, y in zip(occs_spin[0], occs_spin[1])]
+                else :
+                    raise AttributeError("Sorry, only support nspin=1 or 2.")
             else :
                 occs = None
             occs = self.gsystem.graphtopo.sscatter(occs)

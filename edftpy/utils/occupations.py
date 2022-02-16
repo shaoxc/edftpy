@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.special import erf
-from scipy.optimize import minimize_scalar
-# from edftpy.mpi import sprint
+from functools import partial
+
+from edftpy.mpi import sprint
 
 def gaussian(x, **kwargs):
     return methfessel_paxton(x, order=0)
@@ -97,7 +98,7 @@ class Occupations:
             occs[inds] = occs.copy()
         return occs
 
-    def get_fermi_level(self, elevels, ncharge = None, weights = 1.0, nbands = -1, maxiter = 500, tol = 1E-10, **kwargs):
+    def get_fermi_level(self, elevels, ncharge = None, weights = 1.0, emin = None, emax = None, maxiter = 500, tol = 1E-10, **kwargs):
         """
         ref :
            https://doi.org/10.1016/j.cpc.2019.06.017
@@ -119,33 +120,160 @@ class Occupations:
             ef = elevels[iband] + 1E-30 # for safe
             return ef
 
+        if emin is None : emin = elevels[0] - 2*self.degauss
+        if emax is None : emax = elevels[-1] + 2*self.degauss
+
         def func(ef):
             occs = self.get_occupation_numbers(elevels, ef=ef, **kwargs)
             diff = (occs*weights).sum() - ncharge
             return diff
 
-        emin = elevels[0] - 2*self.degauss
-        emax = elevels[nbands] + 2*self.degauss
+        ef, diff = self.get_opt_number(func, emin, emax, maxiter = maxiter, tol = tol, **kwargs)
+        if abs(diff) > tol :
+            raise AttributeError(f"Can not find the good fermi level. ({ef} -> {diff})")
+
+        return ef
+
+    @staticmethod
+    def get_opt_number(func, emin, emax, maxiter = 500, tol = 1E-10, **kwargs):
         ef = (emin + emax)/2.0
         step = min(1.0, (emax - ef)*(0.5+tol))
 
         lfirst = True
         for i in range(maxiter):
             diff = func(ef)
-            # print('eff', ef, emin, emax, step, diff, ncharge)
+            sprint('Ef opt -> ', i, ef, diff, level = 1)
             if diff * step > 0.0 :
                 step *= -0.25
-            if abs(diff) < tol: break
+            if abs(diff) < tol:
+                break
             if ef > emax or ef < emin :
                 if lfirst :
-                    # step = self.degauss*4.0*np.sign(step)
                     lfirst = False
                     if ef > emax : ef = emax
                     if ef < emin : ef = emin
                 else :
-                    raise AttributeError(f"Can not find the good fermi level. ({ef} -> {diff})")
+                    break
             ef += step
-        else :
-            raise AttributeError(f"Can not find the good fermi level. ({ef} -> {diff})")
+        return ef, diff
 
+    def get_occupation_numbers_v(self, elevels, ef = None, **kwargs):
+        if ef is None :
+            ef = self.get_fermi_level_v(elevels, **kwargs)
+        occs = []
+        for es, e in zip(elevels, ef):
+            x = self.get_occupation_numbers(es, ef = e, **kwargs)
+            occs.append(x)
+        return occs
+
+    def get_fermi_level_v(self, elevels, ncharge = None, weights = 1.0, emin = None, emax = None, maxiter = 500, tol = 1E-10, diffs = 0.0, eratio = 0.1, **kwargs):
+        if ncharge is None :
+            raise AttributeError("Please give the number of electrons : 'ncharge'")
+
+        def diff_nele(ef, efs = None, diffs = 0.0, i = 0):
+            if efs is None :
+                efs = ef + diffs
+            else :
+                efs[i] = ef
+            occs = self.get_occupation_numbers_v(elevels, ef=efs, **kwargs)
+            diff = sum([(x*y).sum() for x, y in zip(occs, weights)]) - ncharge
+            return diff
+
+        if emin is None : emin = elevels[0][0] - 2*self.degauss
+        if emax is None : emax = elevels[0][-1] + 2*self.degauss
+
+        diffs = np.concatenate((np.zeros(1), np.atleast_1d(diffs)))
+
+        func = partial(diff_nele, diffs = diffs)
+        ef, diff = self.get_opt_number(func, emin, emax, maxiter = maxiter, tol = tol, **kwargs)
+        efs = ef + diffs
+        sprint('ef', 0, ef, efs, diff, level = 1)
+        if abs(diff) > tol :
+            for i, e in enumerate(efs):
+                j = 1 if i == 0 else i
+                emin0 = efs[i]- eratio*abs(efs[j])
+                emax0 = efs[i]+ eratio*abs(efs[j])
+                func = partial(diff_nele, efs = efs, i = i)
+                ef, diff = self.get_opt_number(func, emin0, emax0, maxiter = maxiter, tol = tol, **kwargs)
+                sprint('ef', i, ef, efs, diff, flush = True, level = 1)
+                if abs(diff) < tol : break
+
+        if abs(diff) > tol :
+            raise AttributeError(f"Can not find the good fermi level. ({efs[0]} -> {diff})")
+
+        return efs
+
+    def get_fermi_level_pot(self, elevels, ncharge = None, weights = 1.0, emin = None, emax = None, maxiter = 500, tol = 1E-10, diffs = 0.0, eratio = 0.1, index = (0, 1), **kwargs):
+        if ncharge is None :
+            raise AttributeError("Please give the number of electrons : 'ncharge'")
+
+        inds = [len(x) for x in elevels]
+        inds.insert(0, 0)
+        inds = np.cumsum(inds)
+
+        elevels_total = np.concatenate(elevels)
+        weights_total = np.concatenate(weights)
+        sind = np.argsort(elevels_total)
+        elevels_total = elevels_total[sind]
+        weights_total = weights_total[sind]
+        sind = np.argsort(sind)
+        ind0 = sind[inds[index[0]]:inds[index[0]+1]]
+        ind1 = sind[inds[index[1]]:inds[index[1]+1]]
+
+        def func(ef):
+            # print('eeee', elevels_total, ef)
+            occs = self.get_occupation_numbers(elevels_total, ef=ef, **kwargs)
+            diff = (occs*weights_total).sum() - ncharge
+            return diff
+
+        if emin is None : emin = elevels_total[0] - 2*self.degauss
+        if emax is None : emax = elevels_total[-1] + 2*self.degauss
+
+        dv = 4*self.degauss*np.sign(diffs)
+        nv = int(abs(diffs//dv)) + 1
+        ef_diff = -100
+        for it in range(nv):
+            ef, diff = self.get_opt_number(func, emin, emax, maxiter = maxiter, tol = tol, **kwargs)
+            sprint('ef -> ', it, ef, diff, flush = True, level = 1)
+            if abs(diff) < tol :
+                occs = self.get_occupation_numbers(elevels_total, ef=ef, **kwargs)
+                ef_0 = self.guess_ef(elevels_total[ind0], occs[ind0])
+                ef_1 = self.guess_ef(elevels_total[ind1], occs[ind1])
+                ef_diff = ef_0 - ef_1
+                sprint('ef_try -> ', ef, ef_0, ef_1, ef_diff, level = 1)
+                if abs((ef_diff - diffs)/diffs) < eratio : break
+            elevels[index[0]] += dv
+            elevels[index[1]] -= dv
+            elevels_total = np.concatenate(elevels)
+            weights_total = np.concatenate(weights)
+            sind = np.argsort(elevels_total)
+            elevels_total = elevels_total[sind]
+            weights_total = weights_total[sind]
+            sind = np.argsort(sind)
+            ind0 = sind[inds[index[0]]:inds[index[0]+1]]
+            ind1 = sind[inds[index[1]]:inds[index[1]+1]]
+
+        if abs(diff) > tol :
+            raise AttributeError(f"Can not find the good fermi level. ({ef} -> {diff})")
+        elif abs((ef_diff - diffs)/diffs) > eratio :
+            raise AttributeError(f"Can not find the correct one. ({ef} -> {ef_diff})")
+
+        return ef
+
+    def guess_ef(self, elevels, occs, degauss = None):
+        if degauss is None : degauss = self.degauss
+        oc = np.abs(occs - 0.5)
+        i = np.argmin(oc)
+        if oc[i] < 2*degauss :
+            ef = elevels[i]
+        else :
+            e_up = elevels[0]
+            e_dw = elevels[-1]
+            for x, y in zip(elevels, occs):
+                if y > 1 - degauss :
+                    e_up = x
+                elif y < degauss :
+                    e_dw = x
+                    break
+            ef = (e_up + e_dw)/2
         return ef

@@ -332,8 +332,8 @@ class DriverKS(Driver):
     def get_bands(self, sdft = 'sdft', sum_band = False, **kwargs):
         self._get_density_prep(sdft=sdft, **kwargs)
         self.engine.scf(sum_band = sum_band, **kwargs)
-        self.band_energies = self.engine.get_band_energies(**kwargs).ravel()
-        self.band_weights = self.engine.get_band_weights(**kwargs).ravel()
+        self.band_energies = self.engine.get_band_energies(**kwargs).reshape((self.nspin, -1))
+        self.band_weights = self.engine.get_band_weights(**kwargs).reshape((self.nspin, -1))
         return self.band_energies, self.band_weights
 
     @print2file()
