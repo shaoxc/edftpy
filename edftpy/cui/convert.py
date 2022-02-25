@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import ase.io
+import ase
 import ase.build
 import os
 import numpy as np
@@ -129,7 +129,16 @@ def get_atoms(args):
         if args.traj :
             append = False if i == 0 else True
             if i == 0 and args.append : continue
-            ase.io.write(args.output, struct, format = args.format_out, append = append)
+            if args.format_out == 'traj' or os.path.splitext(args.output)[1].lower() == '.traj' :
+                from ase.io.trajectory import Trajectory
+                mode = 'a' if append else 'w'
+                fd = Trajectory(args.output, mode = mode)
+                if isinstance(struct, ase.Atoms):
+                    struct = [struct]
+                for atoms in struct:
+                    fd.write(atoms)
+            else :
+                ase.io.write(args.output, struct, format = args.format_out, append = append)
         else :
             if i>0 :
                 if args.subtract :
