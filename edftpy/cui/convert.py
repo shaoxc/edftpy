@@ -65,6 +65,8 @@ def get_args():
             default =None, help='If the fields are different from each other, \nplease provide the json file (e.g. "edftpy_running.json").')
     parser.add_argument('--qepy', dest='qepy', action='store_true',
             help='From the QE outdir get the density with QEpy. The input file will be the QE input file.')
+    parser.add_argument('--order', dest='order', type=str, action='store', default=None,
+            help='Change the order of output structure : \n   "subsystem" : base on the order of subsystem to output structure (only works for json).')
 
     args = parser.parse_args()
     return args
@@ -116,6 +118,8 @@ def get_atoms(args):
             config["GSYSTEM"]["cell"]["file"] = ''
             ions = config2ions(config)
             struct = io.ions2ase(ions)
+            if args.order == 'subsystem' :
+                struct = change_order_sub(args, config, struct)
         else :
             try:
                 struct = ase.io.read(fname, format=format_in)
@@ -148,6 +152,14 @@ def get_atoms(args):
             else :
                 atoms = struct
     return atoms
+
+def change_order_sub(args, config, struct):
+    subkeys = [key for key in config if key.startswith('SUB')]
+    inds = []
+    for key in subkeys :
+        index = config[key]["cell"]["index"]
+        inds.extend(index)
+    return struct[inds]
 
 def get_system(args):
     system = None
