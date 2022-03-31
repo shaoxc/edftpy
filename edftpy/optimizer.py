@@ -352,7 +352,7 @@ class Optimization(object):
             f_str += np.array2string(dp_norm, separator=' ', max_line_width=80)
             sprint(f_str, level = 2)
             if self.check_converge_potential(dp_norm):
-                sprint("#### Subsytem Density Optimization Converged (Potential) In {} Iterations ####".format(it+1))
+                sprint("#### Subsystem Density Optimization Converged (Potential) In {} Iterations ####".format(it+1))
                 self.converged = True
                 break
             if self.mixer :
@@ -372,7 +372,7 @@ class Optimization(object):
             sprint(seq +'\n' + fmt +'\n' + seq)
             # Only check when accurately calculate the energy
             if olevel == 0 and self.check_converge_energy(energy_history):
-                sprint("#### Subsytem Density Optimization Converged (Energy) In {} Iterations ####".format(it+1))
+                sprint("#### Subsystem Density Optimization Converged (Energy) In {} Iterations ####".format(it+1))
                 self.converged = True
                 break
             if self.check_stop(): break

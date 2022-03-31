@@ -407,6 +407,12 @@
 				"default": {},
 				"comment": "The radius of each elements for decompose the subsystems.",
 				"unit": "Angstrom"
+			},
+			"rtol": {
+				"type": "float",
+				"default": 0.0,
+				"comment": "The tolerance of distance for adaptive simulation.",
+				"unit": "Angstrom"
 			}
 		}
 	},

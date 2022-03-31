@@ -145,7 +145,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         if optimizer is None :
             for key in config :
                 if key.startswith('SUB') :
-                    f_str = 'Subsytem : {} {} {}'.format(key, config[key]['technique'], config[key]['cell']['index'])
+                    f_str = 'Subsystem : {} {} {}'.format(key, config[key]['technique'], config[key]['cell']['index'])
                     f_str = "\n".join(textwrap.wrap(f_str, width = 80))
                     sprint(f_str, lprint = True)
     #-----------------------------------------------------------------------
@@ -162,7 +162,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         total_evaluator = None
     total_evaluator = config2total_evaluator(config, ions, grid, pplist = pplist, total_evaluator=total_evaluator, cell_change = cell_change, pseudo = pseudo)
     gsystem.total_evaluator = total_evaluator
-    ############################## Subsytem ##############################
+    ############################## Subsystem ##############################
     subkeys = [key for key in config if key.startswith('SUB')]
     drivers = []
     nr_all = np.zeros((len(subkeys), 3), dtype = np.int64)
@@ -949,9 +949,73 @@ def config2asub(config):
         config['ASUB'][key]['hash'] = hs
     return config
 
+def config2sub_check_update(config, ions, rtol = 0.1):
+    if rtol < 1E-6 : return True
+    keysys = "GSYSTEM"
+    decompose = copy.deepcopy(config[keysys]["decompose"])
+    if decompose['method'] != 'distance' :
+        raise AttributeError("{} is not supported".format(decompose['method']))
+    rcut = decompose.get('rcut', 3.0)
+    radius = decompose.get('radius', {})
+    if len(radius) == 0 :
+        decompose['rcut'] = rcut + rtol
+    else :
+        for k in radius :
+            decompose['radius'][k] += 0.5*rtol
+    indices = decompose_sub(ions, **decompose)
+    subkeys = [key for key in config if key.startswith('SUB')]
+    #
+    if len(subkeys) < len(indices) :
+        sprint('Adaptive-Update : Have more subsystems')
+        return True
+    #
+    old = [np.asarray(config[x]['cell']['index']) for x in subkeys]
+    new = [np.asarray(x) for x in indices]
+    nsub_new_1 = len(new)
+
+    def issubset(a, b):
+        for idx0 in a :
+            for idx in b :
+                if np.all(np.isin(idx0, idx)):
+                    break
+            else :
+                return False
+        return True
+    #
+    if not issubset(old, new) :
+        sprint('Adaptive-Update : Different subsystems.')
+        return True
+    elif len(subkeys) == len(indices) :
+        sprint('Adaptive-Keep : If bigger same subsystems.')
+        return False
+    #
+    decompose = config[keysys]["decompose"]
+    indices = decompose_sub(ions, **decompose)
+    new = [np.asarray(x) for x in indices]
+    if issubset(new, old) :
+        if len(new) > len(old):
+            sprint('Adaptive-Keep : Bigger will be contained.')
+        elif len(new) == len(old):
+            sprint('Adaptive-Keep : Same subsystems.')
+        elif nsub_new_1 == len(old):
+            sprint('Adaptive-Keep : Bigger will be same.')
+        else :
+            raise AttributeError("AdaptiveError : This shouldn't happened.")
+        return False
+    else :
+        sprint('Adaptive-Update : If bigger will merge subsystems.')
+        return True
+
 def config2sub_global(config, ions, optimizer = None, grid = None, regions = None):
     keysys = "GSYSTEM"
     decompose = config[keysys]["decompose"]
+    rtol = decompose.get('rtol', 0.0)
+    if rtol > 1E-6 :
+        update = config2sub_check_update(config, ions, rtol = rtol)
+        if not update :
+            reuse_drivers = {key : None for key in config if key.startswith('SUB')}
+            return (config, reuse_drivers)
+
     if decompose['method'] == 'distance' :
         indices = decompose_sub(ions, **decompose)
     else :
@@ -997,7 +1061,7 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
         #-----------------------------------------------------------------------
         indices[i] = []
         config[key]["density"]["file"] = None
-        f_str = 'New Subsytem : {} {} {}'.format(key, 'saved', index)
+        f_str = 'New Subsystem : {} {} {}'.format(key, 'saved', index)
         f_str = "\n".join(textwrap.wrap(f_str, width = 80))
         sprint(f_str)
 
@@ -1066,7 +1130,7 @@ def config2sub_global(config, ions, optimizer = None, grid = None, regions = Non
             raise AttributeError("ERROR : Not support this kind : {}".format(kind))
         # set the initial density as None
         config[key]["density"]["file"] = None
-        f_str = 'New Subsytem : {} {} {}'.format(key, kind, index)
+        f_str = 'New Subsystem : {} {} {}'.format(key, kind, index)
         f_str = "\n".join(textwrap.wrap(f_str, width = 80))
         sprint(f_str)
 
