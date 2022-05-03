@@ -531,15 +531,22 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
     if mixer is None : mixer = mix_kwargs.get('coef', 0.7)
     #-----------------------------------------------------------------------
     embed_evaluator, exttype = config2embed_evaluator(config, keysys, subcell.ions, subcell.grid, pplist = pplist, cell_change = cell_change)
-    ncharge = config[keysys]["density"]["ncharge"]
     if config[keysys]["exttype"] and config[keysys]["exttype"] < 0 :
         exttype = config[keysys]["exttype"]
     #-----------------------------------------------------------------------
+    ncharge = config[keysys]["density"]["ncharge"]
     if ncharge is None :
         mol_charges = config['MOL'].get('charge', {})
         numbers = subcell.ions.Z
         ncharge = get_formal_charge(numbers, data = mol_charges)
         if abs(ncharge) < 1E-6 : ncharge = None
+    #-----------------------------------------------------------------------
+    magmom = config[keysys]["density"]["magmom"]
+    if magmom is None :
+        mol_magmom= config['MOL'].get('magmom', {})
+        numbers = subcell.ions.Z
+        magmom = get_formal_charge(numbers, data = mol_magmom)
+        if abs(magmom) < 1E-6 : magmom = None
     #-----------------------------------------------------------------------
     restart = False
     if driver is not None :
@@ -575,6 +582,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
             'comm' : mp.comm,
             'key' : keysys,
             'ncharge' : ncharge,
+            'magmom' : magmom,
             'task' : task,
             'restart' : restart,
             'append' : append,
@@ -811,8 +819,11 @@ def get_pwscf_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, mar
     params['system']['nspin'] = subcell.density.rank
 
     ncharge = margs.get('ncharge')
+    magmom = margs.get('magmom')
     if ncharge :
         params['system']['tot_charge'] = ncharge
+    if magmom:
+        params['system']['tot_magnetization'] = magmom
 
     add = {
             'cell_params': cell_params,

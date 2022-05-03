@@ -496,7 +496,7 @@
 				"type": "float",
 				"comment": "Total electronic magnetization.",
 				"level": "devel",
-				"default": 0
+				"default": null
 			},
 			"file": {
 				"type": "str",
@@ -790,6 +790,11 @@
 			"type": "ofdict",
 			"default": {},
 			"comment": "The charge of molecules or atoms."
+		},
+		"magmom": {
+			"type": "ofdict",
+			"default": {},
+			"comment": "The magnetic moment of molecules or atoms."
 		}
 	}
 }

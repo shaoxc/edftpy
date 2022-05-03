@@ -7,7 +7,7 @@ class Driver(ABC):
     def __init__(self, technique = 'OF', key = None,
             evaluator = None, subcell = None, prefix = 'sub_of', options = None, exttype = 3,
             mixer = None, ncharge = None, task = 'scf', append = False,
-            restart = False, base_in_file = None, **kwargs):
+            restart = False, base_in_file = None, magmom = None, **kwargs):
         '''
         Here, prefix is the name of the input file of the driver
         exttype :
@@ -27,6 +27,7 @@ class Driver(ABC):
         self.exttype = exttype
         self.mixer = mixer
         self.ncharge = ncharge
+        self.magmom = magmom
         self.task = task
         self.append = append
         self.restart = restart
