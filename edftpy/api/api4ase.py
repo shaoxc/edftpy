@@ -1,5 +1,7 @@
+import os
 import numpy as np
 from dftpy.constants import ENERGY_CONV, FORCE_CONV, STRESS_CONV
+import ase
 
 from edftpy.io import ase2ions
 from edftpy.interface import config2optimizer
@@ -7,13 +9,18 @@ from edftpy.mpi import sprint
 
 class eDFTpyCalculator(object):
     """eDFTpy calculator for ase"""
-    def __init__(self, config=None, graphtopo = None):
+    def __init__(self, config=None, graphtopo = None, atoms = None):
         self.config = config
         self.graphtopo = graphtopo
-        self.atoms = None
         self.optimizer = None
         self.restart()
         self.iter = 0
+        if atoms is None :
+            cell_file = config["PATH"]["cell"] +os.sep+ config['GSYSTEM']["cell"]["file"]
+            atoms = ase.io.read(cell_file)
+        self.atoms = atoms
+        self.atoms.calc = self
+        self.atoms_save = None
 
     def restart(self):
         self._energy = None
@@ -21,10 +28,11 @@ class eDFTpyCalculator(object):
         self._stress = None
 
     def check_restart(self, atoms=None):
-        if (self.atoms and atoms == self.atoms):
+        self.atoms = atoms
+        if (self.atoms_save and atoms == self.atoms_save):
             return False
         else:
-            self.atoms = atoms.copy()
+            self.atoms_save = atoms.copy()
             self.restart()
             return True
 

@@ -475,7 +475,7 @@ class EngineQE(Engine):
                     'ibrav': [int, min],
                     'nat': [int, sum],
                     'ntyp': [int, max],
-                    'nbnd': [int, max],
+                    'nbnd': [int, sum],
                     'tot_charge': [float, sum],
                     'tot_magnetization': [float, sum],
                     'ecutwfc': [float, max],
