@@ -7,7 +7,7 @@ from edftpy.utils.math import union_mlist
 def from_distance_to_sub(ions, cutoff = 3, max_nbins=1e6, **kwargs):
     atoms = ions2ase(ions)
     nat = atoms.get_global_number_of_atoms()
-    inda, indb, dists = neighbor_list('ijd', atoms, cutoff, self_interaction=True, max_nbins=max_nbins)
+    inda, indb = neighbor_list('ij', atoms, cutoff, self_interaction=True, max_nbins=max_nbins)
     subcells = []
     index = []
     for i in range(nat):
@@ -19,14 +19,13 @@ def from_distance_to_sub(ions, cutoff = 3, max_nbins=1e6, **kwargs):
     subcells = union_mlist(subcells, keys = keys, array = False)
     return subcells
 
-def decompose_sub(ions, decompose = {'method' : 'distance', 'rcut' : 3}):
+def decompose_sub(ions, method = 'distance', rcut = 3, **kwargs):
+    if method != 'distance' :
+        raise AttributeError("{} is not supported".format(method))
 
-    if decompose['method'] != 'distance' :
-        raise AttributeError("{} is not supported".format(decompose['method']))
-
-    radius = decompose.get('radius', {})
+    radius = kwargs.get('radius', {})
     if len(radius) == 0 :
-        cutoff = decompose['rcut']
+        cutoff = rcut
     else :
         keys = list(radius.keys())
         if not set(keys) >= set(list(ions.nsymbols)) :
@@ -36,7 +35,7 @@ def decompose_sub(ions, decompose = {'method' : 'distance', 'rcut' : 3}):
             for k1 in keys[i:] :
                 cutoff[(k, k1)] = radius[k] + radius[k1]
 
-    if decompose['method'] == 'distance' :
+    if method == 'distance' :
         indices = from_distance_to_sub(ions, cutoff = cutoff)
 
     return indices

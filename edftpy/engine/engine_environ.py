@@ -9,7 +9,6 @@ import numpy as np
 from dftpy.constants import LEN_CONV
 
 from edftpy.engine.engine import Engine
-from edftpy.io import print2file
 
 try:
     __version__ = pyec.__version__
@@ -146,8 +145,8 @@ class EngineEnviron(Engine):
         controller.update_electrons(rho, True)
         calculator.calc_potential(update, self.potential, lgather=True)
 
-    @print2file()
-    def get_force(self, **kwargs):
+    def get_forces(self, **kwargs):
+        """get Environ force contribution
         """
         Returns Environ's contribution to the force.
 
@@ -159,55 +158,21 @@ class EngineEnviron(Engine):
         if not self.nat: raise ValueError("Environ not yet initialized.")
 
         force = np.zeros((3, self.nat), dtype=float, order='F')
-        calculator.calc_force(force)
+        environ_calc.calc_force(force)
+        return force.T
 
-        return force.T * self.units['energy']
-
-    def get_potential(self, **kwargs):
+    def calc_energy(self, **kwargs):
+        """get Environ energy contribution
         """
-        Returns Environ's contribution to the potential.
+        # move these array options to pyec maybe
+        energy = environ_calc.calc_energy()
+        return energy
 
-        :return: Environ's contribution to the potential
-        :rtype : ndarray[float]
+    def initial(self, inputfile= None, comm = None, **kwargs):
+        """initialize the Environ module
 
-        :raises ValueError: if missing potential (not initialized)
-        """
-        return self.potential * self.units['energy']
-
-    def get_nnt(self) -> int:
-        """
-        Returns total number of grid points in Environ.
-
-        :return: total number of grid points in Environ
-        :rtype : int
-        """
-        return self.nnt
-
-    def get_grid(self, nr = None, **kwargs):
-        """
-        Returns Environ's grid dimensions.
-
-        :return: the dimensions of Environ's FFT grid
-        :rtype : ndarray[int]
-        """
-        if nr is None :
-            nr = np.zeros(3, dtype = 'int32')
-        nr[0] = controller.get_nr1x()
-        nr[1] = controller.get_nr2x()
-        nr[2] = controller.get_nr3x()
-        return nr
-
-    def get_threshold(self) -> float:
-        """
-        Returns Environ's scf threshold.
-
-        :return: Environ's scf threshold
-        :rtype : float
-        """
-        return self.threshold
-
-    @print2file()
-    def set_mbx_charges(self, rho) -> None:
+        Args:
+            comm (uint, optional): communicator for MPI. Defaults to None.
         """
         Add MBX charges to Environ's charge density.
 
@@ -287,32 +252,54 @@ class EngineEnviron(Engine):
         defaults.update(subs)
         return defaults
 
-    @staticmethod
-    def get_kwargs_from_qepy(qepy = None):
-        if qepy is None : import qepy
-        nat = qepy.ions_base.get_nat()                        # number of atoms
-        ntyp = qepy.ions_base.get_nsp()                       # number of species
-        nelec = qepy.klist.get_nelec()                        # number of electrons
-        atom_label = qepy.ions_base.get_array_atm().view('c') # atom labels
-        atom_label = atom_label[:, :ntyp]                     # discard placeholders
-        alat = qepy.cell_base.get_alat()                      # lattice parameter
-        at = qepy.cell_base.get_array_at()                    # 3 x 3 lattice in atomic units
-        gcutm = qepy.gvect.get_gcutm()                        # G-vector cutoff
-        ityp = qepy.ions_base.get_array_ityp()                # species indices
-        zv = qepy.ions_base.get_array_zv()                    # ionic charges
-        tau = qepy.ions_base.get_array_tau()                  # ion positions
+    def scf(self, rho, update = True, **kwargs):
+        """A single electronic step for Environ
 
-        kwargs = {
-            'nat': nat,
-            'ntyp': ntyp,
-            'nelec': nelec,
-            'atom_label': atom_label,
-            'ityp': ityp,
-            'alat': alat,
-            'at': at,
-            'gcutm': gcutm,
-            'zv': zv,
-            'tau': tau,
-            'use_internal_pbc_corr': False,
-        }
-        return kwargs
+        Args:
+            rho (np.ndarray): the density object
+        """
+        environ_control.update_electrons(rho, lscatter=True)
+        if self.potential is None:
+            raise ValueError("`potential` not initialized, has `initial` been run?")
+        environ_calc.calc_potential(update, self.potential, lgather=True)
+
+    def get_potential(self, **kwargs):
+        """Returns the potential from Environ
+        """
+        return self.potential
+
+    def set_mbx_charges(self, rho):
+        """Supply Environ with MBX charges
+        """
+        environ_control.add_mbx_charges(rho, lscatter=True)
+
+    def get_grid(self, nr, **kwargs):
+        nr[0] = environ_calc.get_nr1x()
+        nr[1] = environ_calc.get_nr2x()
+        nr[2] = environ_calc.get_nr3x()
+        return nr
+
+    def update_ions(self, subcell = None, update = 0, **kwargs):
+        environ_setup.clean_environ()
+        self.write_input(subcell = subcell, **kwargs)
+        self.initial(comm = self.comm)
+
+    def end_scf(self, **kwargs):
+        pass
+
+    def stop_run(self, **kwargs):
+        environ_setup.clean_environ()
+
+def _check_kwargs(key, val, funlabel='\b'):
+    """check that a kwargs value is set
+
+    Args:
+        key (str): the key for printing the label
+        val (Any): only check for None
+        funlabel (str, optional): function name. Defaults to '\b'.
+
+    Raises:
+        ValueError: [description]
+    """
+    if val is None:
+        raise ValueError(f'`{key}` not set in {funlabel} function')

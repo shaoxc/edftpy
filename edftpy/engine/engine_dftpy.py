@@ -1,14 +1,13 @@
-import copy
 import numpy as np
 from functools import partial
 import dftpy
-from dftpy.constants import LEN_CONV, ENERGY_CONV
+from dftpy.constants import ENERGY_CONV
 from dftpy.optimization import Optimization
 from dftpy.constants import environ
 
-from edftpy.mixer import LinearMixer, PulayMixer, AbstractMixer
+from edftpy.mixer import Mixer
 from edftpy.utils.math import grid_map_data
-from edftpy.functional import hartree_energy, KEDFunctional
+from edftpy.functional import hartree_energy, KEDF
 from edftpy.mpi import sprint
 from edftpy.io import print2file
 from .hamiltonian import Hamiltonian
@@ -49,27 +48,17 @@ class EngineDFTpy(Driver):
         self.evaluator_of = evaluator_of
         #-----------------------------------------------------------------------
         if self.mixer is None :
-            self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = 0.2, predecut = 0, delay = 1)
-        # elif isinstance(self.mixer, float):
-        #     self.mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = self.mixer, predecut = 0, delay = 1)
-        if not isinstance(self.mixer, AbstractMixer):
-            self.mixer = LinearMixer(predtype = None, coef = 1.0, predecut = None, delay = 1)
+            self.mixer = Mixer(scheme = 'pulay', predtype = 'kerker', predcoef = [0.8, 1.0, 1.0], maxm = 7, coef = 0.2, predecut = 0, delay = 1)
+        if not hasattr(self.mixer, '__call__') :
+            self.mixer = Mixer(scheme = 'linear', predtype = None, coef = 1.0, predecut = None, delay = 1)
         #-----------------------------------------------------------------------
         self.density = self.subcell.density
         self.init_density()
-        self.outfile = self.prefix + '.out'
-        if self.comm.rank == 0 :
-            if self.append :
-                self.fileobj = open(self.outfile, 'a', buffering = 1)
-            else :
-                self.fileobj = open(self.outfile, 'w', buffering = 1)
-        else :
-            self.fileobj = None
+        if self.comm.rank != 0 : self.fileobj = None
 
         fstr = f'Subcell grid({self.prefix}): {self.subcell.grid.nrR}  {self.subcell.grid.nr}\n'
         fstr += f'Subcell shift({self.prefix}): {self.subcell.grid.shift}\n'
         if self.fileobj : self.fileobj.write(fstr)
-        sprint(fstr, comm=self.comm)
 
         self.update_workspace(first = True)
 
@@ -87,13 +76,13 @@ class EngineDFTpy(Driver):
         self._iter = 0
         self.energy = 0.0
         self.phi = None
-        self.residual_norm = 1
-        self.dp_norm = 1
+        self.residual_norm = 1.0
+        self.dp_norm = 1.0
+        self.dp_norm_prev = 0.0
+        self.residual_norm_prev = 0.0
         self.core_density = None
-        if isinstance(self.mixer, AbstractMixer):
-            self.mixer.restart()
-        if subcell is not None :
-            self.subcell = subcell
+        if hasattr(self.mixer, 'restart'): self.mixer.restart()
+        if subcell is not None : self.subcell = subcell
 
         self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
 
@@ -193,16 +182,16 @@ class EngineDFTpy(Driver):
         self._iter += 1
         #-----------------------------------------------------------------------
         if res_max is None :
-            res_max = self.residual_norm
-
-        if self.comm.size > 1 :
-            #only rank0 has the correct residual_norm
-            res_max = self.comm.bcast(res_max, root = 0)
+            res_max = self.residual_norm_prev
 
         if self._iter == 1 :
             self.options['econv0'] = self.options['econv'] * 1E4
             self.options['econv'] = self.options['econv0']
             res_max = 1.0
+
+        if self.comm.size > 1 :
+            #only rank0 has the correct residual_norm
+            res_max = self.comm.bcast(res_max, root = 0)
 
         norm = res_max
         if self._iter < 3 :
@@ -211,7 +200,7 @@ class EngineDFTpy(Driver):
         econv = self.options['econv0'] * norm
         if econv < self.options['econv'] :
             self.options['econv'] = econv
-        if norm < 1E-7 :
+        if norm < 1E-7 and self._iter>3 :
             self.options['maxiter'] = 4
         sprint('econv', self._iter, self.options['econv'], comm=self.comm)
         #-----------------------------------------------------------------------
@@ -228,9 +217,9 @@ class EngineDFTpy(Driver):
             extpot = self.evaluator.embed_potential
             #-----------------------------------------------------------------------
             if self.exttype < 0 and self.gaussian_density_inter is not None:
-                kepot = KEDFunctional(self.gaussian_density_inter, name = 'GGA', calcType = ['V'], k_str = 'REVAPBEK').potential
+                kepot = KEDF(kedf = 'GGA', k_str = 'REVAPBEK').compute(self.gaussian_density_inter, calcType={'V'}).potential
+                # kepot = KEDF().compute(self.gaussian_density_inter, calcType={'V'}, kedf = 'GGA', k_str = 'REVAPBEK').potential
                 extpot += kepot
-                # extpot[self.gaussian_density_inter > 1E-5] = 0.0
             #-----------------------------------------------------------------------
             extpot = self.get_extpot(extpot, mapping = True, with_global = False)
         else :
@@ -241,8 +230,6 @@ class EngineDFTpy(Driver):
 
         self.prev_charge[:] = self.charge
         #-----------------------------------------------------------------------
-        # stdout = environ['STDOUT']
-        # environ['STDOUT'] = self.fileobj
         if self.options['opt_method'] == 'full' :
             self.get_density_full_opt(**kwargs)
         elif self.options['opt_method'] == 'part' :
@@ -251,7 +238,6 @@ class EngineDFTpy(Driver):
             if self.comm.size > 1 :
                 raise AttributeError("Not support parallel")
             self.get_density_hamiltonian(**kwargs)
-        # environ['STDOUT'] = stdout
         #-----------------------------------------------------------------------
         self._format_density_invert(self.charge, self.grid)
         return self.density
@@ -350,6 +336,14 @@ class EngineDFTpy(Driver):
         r = self.charge - self.prev_charge
         self.dp_norm = hartree_energy(r)
         self.residual_norm = np.sqrt(self.grid.mp.asum(r * r)/self.grid.nnrR)
+        if self._iter == 1 :
+            self.dp_norm_prev = self.dp_norm
+            self.residual_norm_prev = self.residual_norm
+        else : # Sometime the density not fully converged.
+            self.dp_norm, self.dp_norm_prev = self.dp_norm_prev, self.dp_norm
+            self.residual_norm, self.residual_norm_prev = self.residual_norm_prev, self.residual_norm
+            self.dp_norm = (self.dp_norm + self.dp_norm_prev)/2
+            self.residual_norm = (self.residual_norm + self.residual_norm_prev)/2
         rmax = r.amax()
         fstr = f'res_norm({self.prefix}): {self._iter}  {rmax}  {self.residual_norm}'
         sprint(fstr, comm=self.comm)
@@ -404,12 +398,12 @@ class EngineDFTpy(Driver):
         evaluator_of = Evaluator(**funcdicts)
         evaluator = partial(evaluator_of.compute, gather = True)
         atomicd = AtomicDensity()
-        rho_ini = atomicd.guess_rho(ions, rho.grid)
+        rho = atomicd.guess_rho(ions, rho = rho)
         #-----------------------------------------------------------------------
         optimization_options = {'econv' : 1e-6 * ions.nat, 'maxfun' : 50, 'maxiter' : 100}
         optimization_options["econv"] *= ions.nat
         optimization_options.update(options)
         opt = Optimization(EnergyEvaluator= evaluator, optimization_options = optimization_options, optimization_method = 'CG-HS')
-        new_rho = opt.optimize_rho(guess_rho=rho_ini)
+        new_rho = opt.optimize_rho(guess_rho=rho)
         environ['STDOUT'] = save
         return new_rho

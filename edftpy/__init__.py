@@ -1,3 +1,5 @@
+import os
+
 __author__ = "Pavanello Research Group"
 __contact__ = "m.pavanello@rutgers.edu"
 __license__ = "MIT"
@@ -16,3 +18,6 @@ try:
     __version__ = version("edftpy")
 except Exception:
     pass
+
+if os.environ.get('EDFTPY_LOGLEVEL', None) is not None :
+    os.environ['DFTPY_LOGLEVEL'] = os.environ.get('EDFTPY_LOGLEVEL')

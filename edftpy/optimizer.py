@@ -7,16 +7,18 @@ import os
 from dftpy.constants import ENERGY_CONV
 
 from edftpy.mpi import sprint
-from edftpy.properties import get_total_forces, get_total_stress
+from edftpy.properties import get_total_forces, get_total_stress, get_total_energies
 from edftpy.functional import hartree_energy
 from edftpy.utils.common import Grid, Field, Functional
 from edftpy.io import write
 from edftpy.engine.driver import DriverConstraint
+from edftpy.utils import get_mem_info, clean_variables
+from edftpy.utils.occupations import Occupations
 
 
 class Optimization(object):
 
-    def __init__(self, drivers=None, gsystem = None, options=None):
+    def __init__(self, drivers=[], gsystem = None, options=None, mixer = None, occupations = None):
         if drivers is None:
             raise AttributeError("Must provide optimization driver (list)")
         if gsystem is None :
@@ -24,9 +26,11 @@ class Optimization(object):
 
         self.drivers = drivers
         self.gsystem = gsystem
+        self.mixer = mixer
+        self.occupations = occupations
 
         default_options = {
-            "maxiter": 80,
+            "maxiter": 800,
             "econv": 1.0e-5,
             "pconv": None,
             "pconv_sub": None,
@@ -34,25 +38,45 @@ class Optimization(object):
             "olevel": 2,
             "sdft": 'sdft',
             "maxtime" : 0,
+            "delay" : 2,
         }
 
         self.options = default_options
         if isinstance(options, dict):
             self.options.update(options)
-        self.nsub = len(self.drivers)
-        self.of_drivers = []
-        self.of_ids = []
-        for i, driver in enumerate(self.drivers):
-            if driver is not None and driver.technique== 'OF' :
-                    self.of_drivers.append(driver)
-                    self.of_ids.append(i)
         self.energy = 0
         self.iter = 0
         self.density = None
         self.density_prev = None
         self.converged = False
-        self.update = [True for _ in range(self.nsub)]
         self.observers = []
+        #-----------------------------------------------------------------------
+        if self.sdft == 'scdft' :
+            if self.mixer is None :
+                from edftpy.mixer import Mixer
+                self.mixer = Mixer(scheme = 'pulay', predtype = 'kerker', maxm = 7, coef = 0.7, delay = 2)
+            if self.occupations is None :
+                self.occupations = Occupations(degauss = 0.01)
+
+    @property
+    def sdft(self):
+        return self.options['sdft']
+
+    @property
+    def drivers(self):
+        return self._drivers
+
+    @drivers.setter
+    def drivers(self, value):
+        self._drivers = value
+        self.nsub = len(self.drivers)
+        self.of_drivers = []
+        self.of_ids = []
+        for i, driver in enumerate(self.drivers):
+            if driver is not None and driver.technique== 'OF' :
+                self.of_drivers.append(driver)
+                self.of_ids.append(i)
+        self.update = [True for _ in range(self.nsub)]
 
     def guess_pconv(self):
         if self.options['pconv'] is None:
@@ -68,41 +92,27 @@ class Optimization(object):
         pretty_dict_str += pprint.pformat(self.options)
         sprint(pretty_dict_str)
 
-    def get_energy(self, totalrho = None, total_energy= None, update = None, olevel = 0, **kwargs):
-        elist = []
-        if total_energy is None :
-            if totalrho is None :
-                totalrho = self.gsystem.density.copy()
-            total_energy = self.gsystem.total_evaluator(totalrho, calcType = ['E'], olevel = olevel).energy
-        elist.append(total_energy)
-        for i, driver in enumerate(self.drivers):
-            if driver is None :
-                ene = 0.0
-            elif olevel < 0 : # use saved energy
-                ene = driver.energy
-            elif update is not None and not update[i]:
-                ene = driver.energy
-            else :
-                self.gsystem.density[:] = totalrho
-                driver(density =driver.density, gsystem = self.gsystem, calcType = ['E'], olevel = olevel, sdft = self.options['sdft'])
-                ene = driver.energy
-            elist.append(ene)
-        elist = np.asarray(elist)
-        etotal = np.sum(elist) + self.gsystem.ewald.energy
-        etotal = self.gsystem.grid.mp.asum(etotal)
-        elist = self.gsystem.grid.mp.vsum(elist)
-        # print('elist', etotal, elist)
-        return (etotal, elist)
+    def get_energy(self, density = None, total_energy= None, update = True, olevel = 0, **kwargs):
+        elist = get_total_energies(gsystem = self.gsystem, drivers = self.drivers, density = density,
+                total_energy= total_energy, update = update, olevel = olevel, **kwargs)
+        return sum(elist)
 
-    def update_density(self, update = None, **kwargs):
-        # diff_res = self.get_diff_residual()
-        for i, driver in enumerate(self.drivers):
-            if driver is None : continue
-            # coef = driver.calculator.mixer.coef.copy()
-            # coef[0] = self.get_frag_coef(coef[0], diff_res[i], diff_res)
-            coef = None
-            if update is not None and update[i]:
-                driver.update_density(coef = coef)
+    def update_density(self, update = None, update_coef = False, **kwargs):
+        if self.mixer is not None : update = None
+        if update_coef : diff_res = self.get_diff_residual()
+
+        if self.sdft == 'scdft' :
+            self.update_bands_occupations(**kwargs)
+        elif update is not None :
+            for i, driver in enumerate(self.drivers):
+                if driver is None : continue
+                if update_coef :
+                    coef = getattr(driver.mixer, 'coef', driver.mixer).copy()
+                    coef[0] = self.get_frag_coef(coef[0], diff_res[i], diff_res)
+                else :
+                    coef = None
+                if update[i]:
+                    driver.update_density(coef = coef)
 
         self.gsystem.density[:] = 0.0
         for i, driver in enumerate(self.drivers):
@@ -120,19 +130,114 @@ class Optimization(object):
                 extpots = self.gsystem.total_evaluator.external_potential
                 pot = extpots.get(technique, None)
                 if pot is None :
-                    pot = Field(grid=self.gsystem.grid)
+                    pot = np.zeros_like(self.gsystem.density)
                     extpots[technique] = pot
                 if potential is None and driver is not None:
-                    if driver.comm.rank == 0 :
-                        potential = Field(grid=driver.grid)*0.0
-                    else :
-                        potential = driver.atmp
+                    potential = np.zeros_like(driver.density)
                 self.gsystem.grid.scatter(potential, out = pot, root = root)
             else :
                 self.gsystem.update_density(density, isub = i)
         self.density, self.density_prev = self.density_prev, self.density
         self.density = self.gsystem.density.copy()
+        self.mix_density()
         return
+
+    def mix_density(self, **kwargs):
+        if self.mixer is not None :
+            self.density = self.mixer(self.density_prev, self.density)
+            r = self.density-self.density_prev
+            # add some information to drivers
+            dp_norm = hartree_energy(r)
+            residual_norm = np.sqrt(self.gsystem.grid.mp.asum(r * r)/self.gsystem.grid.nnrR)
+            for i, driver in enumerate(self.drivers):
+                if driver is not None :
+                    factor = driver.subcell.ions.nat/self.gsystem.ions.nat
+                    driver.set_dnorm(dp_norm*factor)
+                    driver.residual_norm = residual_norm*factor
+        return
+
+    def update_bands_occupations(self, **kwargs):
+        band_energies = [None, ]*self.nsub
+        band_weights = [None, ]*self.nsub
+        nspin = self.gsystem.density.rank
+        for i, driver in enumerate(self.drivers):
+            if driver is not None and driver.comm.rank == 0 :
+                band_energies[i] = driver.band_energies.reshape((nspin, -1))
+                band_weights[i] = driver.band_weights.reshape((nspin, -1))
+            else :
+                band_energies[i] = None
+                band_weights[i] = None
+        band_energies = self.gsystem.graphtopo.sgather(band_energies)
+        band_weights = self.gsystem.graphtopo.sgather(band_weights)
+
+        ncharge = self.gsystem.density.integral()
+        # self.options['delay'] = -1
+        if self.iter > self.options['delay'] :
+            if self.gsystem.graphtopo.is_root :
+                indices = [0 if x is None else len(x[0]) for x in band_energies]
+                band_energies = np.concatenate(band_energies, axis=1)
+                band_weights = np.concatenate(band_weights, axis=1)
+                occs = band_weights*0.0
+                if not hasattr(ncharge, '__len__'): ncharge = [ncharge, ]*nspin
+                for i in range(nspin):
+                    occs[i] = self.occupations.get_occupation_numbers(band_energies[i], weights = band_weights[i], ncharge = ncharge[i])
+                occs *= band_weights
+                indices = np.cumsum(indices)[:-1]
+                occs = np.split(occs, indices, axis = 1)
+            else :
+                occs = None
+            occs = self.gsystem.graphtopo.sscatter(occs)
+        else :
+            occs = [None, ]*self.nsub
+
+        for i, driver in enumerate(self.drivers):
+            if driver is None : continue
+            driver.get_density(occupations = occs[i], sdft = self.sdft, sum_band = True)
+
+    def update_bands_occupations_v(self, **kwargs):
+        band_energies = [None, ]*self.nsub
+        band_weights = [None, ]*self.nsub
+        nspin = self.gsystem.density.rank
+        for i, driver in enumerate(self.drivers):
+            if driver is not None and driver.comm.rank == 0 :
+                band_energies[i] = driver.band_energies
+                band_weights[i] = driver.band_weights
+            else :
+                band_energies[i] = None
+                band_weights[i] = None
+        band_energies = self.gsystem.graphtopo.sgather(band_energies)
+        band_weights = self.gsystem.graphtopo.sgather(band_weights)
+
+        ncharge = self.gsystem.density.integral()
+        if self.iter > self.options['delay'] :
+            if self.gsystem.graphtopo.is_root :
+                if not hasattr(ncharge, '__len__'): ncharge = [ncharge, ]*nspin
+                sprint('band_energies', band_energies, band_weights, ncharge, level = 1)
+                occs_spin = []
+                for i in range(nspin):
+                    energies = [x[i] for x in band_energies]
+                    weights = [x[i] for x in band_weights]
+                    ef = self.occupations.get_fermi_level_pot(energies, weights = weights, ncharge = ncharge[i], diffs = -0.3, eratio = 0.5, index = (0, 1))
+                    occ = []
+                    for e, w in zip(energies, weights):
+                        oc = self.occupations.get_occupation_numbers(e, ef = ef)*w
+                        occ.append(oc)
+                    occs_spin.append(occ)
+                if nspin == 1 :
+                    occs = occs_spin[0]
+                elif nspin == 2 :
+                    occs = [np.vstack((x, y)) for x, y in zip(occs_spin[0], occs_spin[1])]
+                else :
+                    raise AttributeError("Sorry, only support nspin=1 or 2.")
+            else :
+                occs = None
+            occs = self.gsystem.graphtopo.sscatter(occs)
+        else :
+            occs = [None, ]*self.nsub
+
+        for i, driver in enumerate(self.drivers):
+            if driver is None : continue
+            driver.get_density(occupations = occs[i], sdft = self.sdft, sum_band = True)
 
     def step(self, **kwargs):
         # Update the rhomax for NLKEDF, first step without NL will be better for scf not for tddft.
@@ -154,7 +259,7 @@ class Optimization(object):
                     calcType = ['V']
                 else :
                     calcType = ['O']
-                driver(gsystem = self.gsystem, calcType = calcType, olevel = self.options['olevel'], sdft = self.options['sdft'])
+                driver(gsystem = self.gsystem, calcType = calcType, olevel = self.options['olevel'], sdft = self.sdft)
         self.iter += 1
 
     def attach(self, function, interval=1, *args, **kwargs):
@@ -170,7 +275,11 @@ class Optimization(object):
             if call: function(*args, **kwargs)
 
     def optimize(self, **kwargs):
-        self.run(**kwargs)
+        converged = self.run(**kwargs)
+        if not converged :
+            sprint("!!!ERROR : Optimization is not converged ###")
+            self.stop_run()
+            exit()
 
     def run(self, **kwargs):
         for item in self.irun(**kwargs):
@@ -183,9 +292,10 @@ class Optimization(object):
 
         self.guess_pconv()
 
-        self.gsystem.gaussian_density[:] = 0.0
-        self.gsystem.density[:] = 0.0
-        self.gsystem.core_density[:] = 0.0
+        if self.nsub > 0 :
+            self.gsystem.gaussian_density[:] = 0.0
+            self.gsystem.density[:] = 0.0
+            self.gsystem.core_density[:] = 0.0
         for i, driver in enumerate(self.drivers):
             if driver is None :
                 density = None
@@ -203,10 +313,19 @@ class Optimization(object):
                 self.gsystem.update_density(gaussian_density, isub = i, fake = True)
                 self.gsystem.update_density(core_density, isub = i, core = True)
         sprint('Update density :', self.gsystem.density.integral())
-        self.density = self.gsystem.density.copy()
         #-----------------------------------------------------------------------
         self.add_xc_correction()
         #-----------------------------------------------------------------------
+        self.converged = False
+        yield self.converged
+        self.call_observers(self.iter)
+
+        if self.nsub == 0 :
+            self.converged = True
+            self.end_scf()
+            return self.converged
+
+        self.density = self.gsystem.density.copy()
         energy_history = [0.0]
         fmt = "{:10s}{:8s}{:24s}{:16s}{:10s}{:10s}{:16s}".format(" ", "Step", "Energy(a.u.)", "dE", "dP", "dC", "Time(s)")
         sprint(fmt)
@@ -216,13 +335,11 @@ class Optimization(object):
         res_norm = np.ones(self.nsub)
         olevel = self.options['olevel']
 
-        self.converged = False
-        yield self.converged
-        self.call_observers(self.iter)
-
         for it in range(self.options['maxiter']):
             #-----------------------------------------------------------------------
             self.step()
+            clean_variables()
+            sprint(get_mem_info, level = 0)
             yield self.converged
             self.call_observers(self.iter)
             #-----------------------------------------------------------------------
@@ -235,10 +352,14 @@ class Optimization(object):
             f_str += np.array2string(dp_norm, separator=' ', max_line_width=80)
             sprint(f_str, level = 2)
             if self.check_converge_potential(dp_norm):
-                sprint("#### Subsytem Density Optimization Converged (Potential) In {} Iterations ####".format(it+1))
+                sprint("#### Subsystem Density Optimization Converged (Potential) In {} Iterations ####".format(it+1))
                 self.converged = True
                 break
-            energy = self.get_energy(self.density, update = self.update, olevel = olevel)[0]
+            if self.mixer :
+                # The update will change the system.density which will used in the nonadditive potential
+                energy = self.get_energy(density = self.density, update = False, olevel = olevel)
+            else :
+                energy = self.get_energy(density = self.density, update = self.update, olevel = olevel)
             #-----------------------------------------------------------------------
             energy_history.append(energy)
             timecost = time.time()
@@ -251,7 +372,7 @@ class Optimization(object):
             sprint(seq +'\n' + fmt +'\n' + seq)
             # Only check when accurately calculate the energy
             if olevel == 0 and self.check_converge_energy(energy_history):
-                sprint("#### Subsytem Density Optimization Converged (Energy) In {} Iterations ####".format(it+1))
+                sprint("#### Subsystem Density Optimization Converged (Energy) In {} Iterations ####".format(it+1))
                 self.converged = True
                 break
             if self.check_stop(): break
@@ -261,16 +382,14 @@ class Optimization(object):
         yield self.converged
 
     def set_global_potential(self, **kwargs):
-        sdft = self.options['sdft']
-        if sdft == 'sdft' :
-            self.set_global_potential_sdft(**kwargs)
-        elif sdft == 'pdft' :
+        if self.sdft == 'pdft' :
             self.set_global_potential_pdft(**kwargs)
+        else :
+            self.set_global_potential_sdft(**kwargs)
         self.add_external_potential(**kwargs)
 
     def set_global_potential_sdft(self, approximate = 'same', **kwargs):
         # approximate = 'density4'
-
         calcType = ['V']
         if approximate == 'density3' :
             calcType.append('D')
@@ -278,8 +397,24 @@ class Optimization(object):
             pass
         else :
             # initial the global_potential
-            self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = calcType)
-            # static_potential = self.gsystem.total_evaluator.static_potential.copy()
+            if self.mixer :
+                """
+                Note :
+                    self.gsystem.density is the original summed density
+                    self.density is the mixed density
+                """
+                # Asuuming all drivers have same embedding type
+                for i, driver in enumerate(self.drivers):
+                    if driver is None : continue
+                    embed_keys = driver.evaluator.funcdicts.keys()
+                    break
+                self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = calcType, embed_keys = embed_keys)
+                # self.gsystem.total_evaluator.get_embed_potential(self.density, gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = calcType, embed_keys = embed_keys)
+                obj = self.gsystem.total_evaluator.get_total_functional(self.density, calcType = calcType, embed_keys = embed_keys)
+                self.gsystem.total_evaluator.embed_potential += obj.potential
+                if 'D' in calcType : self.gsystem.total_evaluator.embed_energydensity += obj.energydensity
+            else :
+                self.gsystem.total_evaluator.get_embed_potential(self.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = calcType)
         for isub in range(self.nsub):
             driver = self.drivers[isub]
             if driver is None :
@@ -289,51 +424,42 @@ class Optimization(object):
                 continue
             else :
                 if driver.evaluator.global_potential is None :
-                    if driver.comm.rank == 0 :
-                        driver.evaluator.global_potential = Field(grid=driver.grid)
-                    else :
-                        driver.evaluator.global_potential = driver.atmp
+                    driver.evaluator.global_potential = np.zeros_like(driver.density)
                 global_potential = driver.evaluator.global_potential
 
                 if approximate != 'same' :
                     if driver.evaluator.embed_potential is None :
-                        if driver.comm.rank == 0 :
-                            driver.evaluator.embed_potential = Field(grid=driver.grid)
-                        else :
-                            driver.evaluator.embed_potential = driver.atmp
+                        driver.evaluator.embed_potential = np.zeros_like(driver.density)
                     global_density = driver.evaluator.embed_potential
             self.gsystem.sub_value(self.gsystem.total_evaluator.embed_potential, global_potential, isub = isub)
 
-            if approximate == 'density' or approximate == 'density4' :
+            if approximate.startswith('density') :
                 self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
-                if driver is not None and driver.comm.rank == 0 :
-                    factor = np.minimum(np.abs(driver.density/global_density), 1.0)
-                    if approximate == 'density4' :
-                        alpha = 1E-2
-                        factor = factor ** alpha
-                    global_potential *= factor
-            elif approximate == 'density2' :
-                self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
-                if driver is not None and driver.comm.rank == 0 :
-                    factor = np.minimum(np.abs(driver.density/global_density), 1.0)
-                    factor = 2.0 - factor
-                    global_potential *= factor
-            elif approximate == 'density3' :
-                self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
-                if driver is not None :
-                    if driver.comm.rank == 0 :
-                        energydensity = Field(grid=driver.grid)
+                global_density[global_density == 0] = 1E-30
+                if approximate == 'density' or approximate == 'density4' :
+                    if driver is not None :
+                        factor = np.minimum(np.abs(driver.density/global_density), 1.0)
+                        if approximate == 'density4' :
+                            alpha = 1E-2
+                            factor = factor ** alpha
+                        global_potential *= factor
+                elif approximate == 'density2' :
+                    if driver is not None :
+                        factor = np.minimum(np.abs(driver.density/global_density), 1.0)
+                        factor = 2.0 - factor
+                        global_potential *= factor
+                elif approximate == 'density3' :
+                    if driver is not None :
+                        energydensity = np.zeros_like(driver.density)
                     else :
-                        energydensity = driver.atmp
-                else :
-                    energydensity = None
+                        energydensity = None
 
-                self.gsystem.sub_value(self.gsystem.total_evaluator.embed_energydensity, energydensity, isub = isub)
+                    self.gsystem.sub_value(self.gsystem.total_evaluator.embed_energydensity, energydensity, isub = isub)
 
-                if driver is not None and driver.comm.rank == 0 :
-                    factor = np.maximum((global_density - driver.density)/global_density ** 2, 0.0)
-                    factor = np.minimum(factor, 1E6)
-                    global_potential += factor * energydensity
+                    if driver is not None :
+                        factor = np.maximum((global_density - driver.density)/global_density ** 2, 0.0)
+                        factor = np.minimum(factor, 1E6)
+                        global_potential += factor * energydensity
         return
 
     def set_global_potential_pdft(self, approximate = 'same', **kwargs):
@@ -349,8 +475,7 @@ class Optimization(object):
         # approximate = 'density4'
 
         if approximate == 'density4' :
-            total_factor = Field(self.gsystem.grid)
-            total_factor[:] = 0.0
+            total_factor = np.zeros_like(self.gsystem.density)
 
         self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, gaussian_density = self.gsystem.gaussian_density, with_global = True)
 
@@ -372,20 +497,14 @@ class Optimization(object):
                 isub = self.of_ids[isub - self.nsub]
 
             if driver is None :
-                global_potential = None
+                global_density = None
                 extpot = None
             else :
                 if driver.evaluator.global_potential is None :
-                    if driver.technique == 'OF' :
-                        driver.evaluator.global_potential = Field(grid=driver.grid)
-                    else :
-                        if driver.comm.rank == 0 :
-                            driver.evaluator.global_potential = Field(grid=driver.grid)
-                        else :
-                            driver.evaluator.global_potential = driver.atmp
+                    driver.evaluator.global_potential = np.zeros_like(driver.density)
 
-                global_potential = driver.evaluator.global_potential
-                global_potential[:] = 0.0
+                global_density = driver.evaluator.global_potential
+                global_density[:] = 0.0
 
             if approximate != 'density4' :
                 if driver is not None :
@@ -393,22 +512,19 @@ class Optimization(object):
 
             if approximate == 'density' :
                 if driver is not None :
-                    if driver.technique == 'OF' or driver.comm.rank == 0 :
-                        extpot *= driver.density
+                    extpot *= driver.density
             elif approximate == 'density2' or approximate == 'density3' :
-                self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
+                self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
                 if driver is not None :
-                    if driver.technique == 'OF' or driver.comm.rank == 0 :
-                        factor = np.minimum(np.abs(driver.density/global_potential), 1.0)
-                        extpot *= factor
+                    global_density[global_density == 0] = 1E-30
+                    factor = np.minimum(np.abs(driver.density/global_density), 1.0)
+                    extpot *= factor
             elif approximate == 'density4' :
                 alpha = 6.0
-                self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
+                self.gsystem.sub_value(self.gsystem.density, global_density, isub = isub)
                 if driver is not None :
-                    if driver.technique == 'OF' or driver.comm.rank == 0 :
-                        factor = np.minimum((np.abs(driver.density/global_potential)) ** alpha, 1.0)
-                    else :
-                        factor = None
+                    global_density[global_density == 0] = 1E-30
+                    factor = np.minimum((np.abs(driver.density/global_density)) ** alpha, 1.0)
                     driver.pdft_factor = factor
                 else :
                     factor = None
@@ -431,12 +547,10 @@ class Optimization(object):
                 else :
                     extpot = driver.get_extpot(mapping = False, with_global = False)
                     global_potential = driver.evaluator.global_potential
-                    global_potential[:] = 0.0
                 self.gsystem.sub_value(total_factor, global_potential, isub = isub)
                 if driver is not None :
-                    if driver.technique == 'OF' or driver.comm.rank == 0 :
-                        factor = global_potential * driver.pdft_factor
-                        extpot *= factor
+                    factor = global_potential * driver.pdft_factor
+                    extpot *= factor
 
                 self.gsystem.add_to_global(extpot, self.gsystem.total_evaluator.embed_potential, isub = isub)
 
@@ -456,9 +570,8 @@ class Optimization(object):
                 self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
             if driver is not None :
                 if approximate == 'density3' :
-                    if driver.technique == 'OF' or driver.comm.rank == 0 :
-                        factor = np.minimum(np.abs(driver.density/global_potential), 1.0)
-                        driver.evaluator.global_potential = potential * factor
+                    factor = np.minimum(np.abs(driver.density/global_potential), 1.0)
+                    driver.evaluator.global_potential = potential * factor
                 driver.evaluator.embed_potential = driver.evaluator.global_potential
         return
 
@@ -476,13 +589,7 @@ class Optimization(object):
                 global_density = None
             else :
                 if driver.evaluator.global_potential is None :
-                    if driver.technique == 'OF' :
-                        driver.evaluator.global_potential = Field(grid=driver.grid)
-                    else :
-                        if driver.comm.rank == 0 :
-                            driver.evaluator.global_potential = Field(grid=driver.grid)
-                        else :
-                            driver.evaluator.global_potential = driver.atmp
+                    driver.evaluator.global_potential = np.zeros_like(driver.density)
                 global_potential = driver.evaluator.global_potential
                 if driver.comm.rank == 0 : root = self.gsystem.comm.rank
             root = self.gsystem.grid.mp.amax(root)
@@ -495,10 +602,7 @@ class Optimization(object):
                     pot.gather(out = global_potential, root = root)
                 if driver is not None :
                     if driver.density is None :
-                        if driver.comm.rank == 0 :
-                            driver.density = Field(grid=driver.grid)
-                        else :
-                            driver.density = driver.atmp
+                        driver.density = np.zeros_like(driver.density)
                     global_density = driver.density
                 self.gsystem.density.gather(out = global_density, root = root)
             elif technique == 'MM' :
@@ -653,13 +757,9 @@ class Optimization(object):
 
     def print_energy(self):
         self.set_global_potential()
-        sdft = self.options['sdft']
         edict = {}
         etype = 1
-        if sdft == 'sdft' :
-            edict = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True, olevel = 0)
-            total_energy = edict.pop('TOTAL').energy
-        else :
+        if self.sdft == 'pdft' :
             if etype == 0 :
                 total_energy = np.sum(self.gsystem.total_evaluator.embed_potential * self.gsystem.density) * self.gsystem.grid.dV
                 edict['EMB'] = Functional(name = 'ZERO', energy=total_energy + 0, potential=None)
@@ -669,13 +769,15 @@ class Optimization(object):
                 # total_func= self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], olevel = 0)
                 # edict['E_GLOBAL'] = total_func
                 # total_energy = total_func.energy.copy()
+        else :
+            edict = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True, olevel = 0)
+            total_energy = edict.pop('TOTAL').energy
 
-        etotal, elist = self.get_energy(self.gsystem.density, total_energy, olevel = 0)
+        elist = get_total_energies(gsystem = self.gsystem, drivers = self.drivers, total_energy = total_energy, olevel = 0)
+        etotal = sum(elist)
 
         keys = list(edict.keys())
         values = [item.energy for item in edict.values()]
-        keys.append('II')
-        values.append(self.gsystem.ewald.energy)
         values = self.gsystem.grid.mp.vsum(values)
 
         # etotal = values.sum()
@@ -707,6 +809,7 @@ class Optimization(object):
         for i, driver in enumerate(self.drivers):
             if driver is not None :
                 driver.stop_run(save = save, **kwargs)
+                driver.subcell.free()
         return
 
     def add_xc_correction(self):
@@ -762,13 +865,7 @@ class Optimization(object):
                     global_potential = None
                 else :
                     if driver.evaluator.global_potential is None :
-                        if driver.technique == 'OF' :
-                            driver.evaluator.global_potential = Field(grid=driver.grid)
-                        else :
-                            if driver.comm.rank == 0 :
-                                driver.evaluator.global_potential = Field(grid=driver.grid)
-                            else :
-                                driver.evaluator.global_potential = driver.atmp
+                        driver.evaluator.global_potential = np.zeros_like(driver.density)
 
                     global_potential = driver.evaluator.global_potential
                     global_potential[:] = 0.0
@@ -776,14 +873,13 @@ class Optimization(object):
                 self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
                 rhomax = 0.0
                 if driver is not None :
-                    if driver.technique == 'OF' or driver.comm.rank == 0 :
-                        mask = np.abs(driver.density/global_potential - 0.5) < thr_ratio
-                        ns = np.count_nonzero(mask)
-                        if ns > 0 :
-                            rho_w = global_potential[mask]
-                            rho_s = driver.density[mask]
-                            rhomax = rho_w.max() + rho_s.max() + (rho_w - rho_s).max()
-                            rhomax *= 3.0/4.0
+                    mask = np.abs(driver.density/global_potential - 0.5) < thr_ratio
+                    ns = np.count_nonzero(mask)
+                    if ns > 0 :
+                        rho_w = global_potential[mask]
+                        rho_s = driver.density[mask]
+                        rhomax = rho_w.max() + rho_s.max() + (rho_w - rho_s).max()
+                        rhomax *= 3.0/4.0
                     if driver.technique == 'OF' :
                         rhomax = driver.grid.mp.amax(rhomax)
                     else :

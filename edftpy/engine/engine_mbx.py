@@ -53,12 +53,9 @@ class EngineMBX(Engine):
         kwargs['units'] = units
         super().__init__(**kwargs)
 
-        self.inputs = {}
-
-    def get_force(self, **kwargs):
-        grad = mbx.get_energy_pbc_grad(self.positions, len(self.labels), self.box)[1]
-        force = np.asarray(grad).reshape((-1, 3))*-1
-        return force * self.units['energy']/self.units['length']
+    def get_forces(self, **kwargs):
+        force = None
+        return force
 
     def get_energy(self, olevel = 0, **kwargs) -> float:
         energy = mbx.get_energy_pbc_nograd(self.positions, len(self.labels), self.box)

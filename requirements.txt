@@ -4,7 +4,7 @@ ase>=3.21.1
 dftpy @ git+https://gitlab.com/pavanello-research-group/dftpy.git@edftpy
 pylibxc2
 xmltodict
-upf_to_json
+upf_to_json==0.9.3
 mpi4py>=3.0.2
 mpi4py-fft>=2.0.3
 importlib-metadata>=0.12;python_version<"3.8"

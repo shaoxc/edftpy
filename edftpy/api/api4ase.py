@@ -1,22 +1,26 @@
+import os
 import numpy as np
-from dftpy.constants import LEN_CONV, ENERGY_CONV, FORCE_CONV, STRESS_CONV
+from dftpy.constants import ENERGY_CONV, FORCE_CONV, STRESS_CONV
+import ase
 
 from edftpy.io import ase2ions
-from edftpy.utils.common import Field, Grid, Atoms, Coord
 from edftpy.interface import config2optimizer
 from edftpy.mpi import sprint
 
-
 class eDFTpyCalculator(object):
     """eDFTpy calculator for ase"""
-
-    def __init__(self, config=None, graphtopo = None):
+    def __init__(self, config=None, graphtopo = None, atoms = None):
         self.config = config
         self.graphtopo = graphtopo
-        self.atoms = None
         self.optimizer = None
         self.restart()
         self.iter = 0
+        if atoms is None :
+            cell_file = config["PATH"]["cell"] +os.sep+ config['GSYSTEM']["cell"]["file"]
+            atoms = ase.io.read(cell_file)
+        self.atoms = atoms
+        self.atoms.calc = self
+        self.atoms_save = None
 
     def restart(self):
         self._energy = None
@@ -24,10 +28,11 @@ class eDFTpyCalculator(object):
         self._stress = None
 
     def check_restart(self, atoms=None):
-        if (self.atoms and atoms == self.atoms):
+        self.atoms = atoms
+        if (self.atoms_save and atoms == self.atoms_save):
             return False
         else:
-            self.atoms = atoms.copy()
+            self.atoms_save = atoms.copy()
             self.restart()
             return True
 
@@ -49,7 +54,7 @@ class eDFTpyCalculator(object):
             if olevel == 0 :
                 self.optimizer.energy = self.optimizer.print_energy()['TOTAL']
             else :
-                self.optimizer.energy = self.optimizer.get_energy(self.optimizer.gsystem.density, olevel = olevel)[0]
+                self.optimizer.energy = self.optimizer.get_energy(olevel = olevel)
         self._energy = self.optimizer.energy
         sprint('Total energy :', self._energy * ENERGY_CONV["Hartree"]["eV"], self.graphtopo.size, self.iter)
         return self._energy * ENERGY_CONV["Hartree"]["eV"]
@@ -65,7 +70,19 @@ class eDFTpyCalculator(object):
         if self.check_restart(atoms):
             self.update_optimizer(atoms)
         stress_voigt = np.zeros(6)
-        return stress_voigt
+        return stress_voigt * STRESS_CONV["Ha/Bohr3"]["eV/A3"]
 
     def output_density(self, **kwargs):
         return self.optimizer.output_density(**kwargs)
+
+    def _add_calc_no(cls, dftd4 = None, config=None, graphtopo = None, **kwargs):
+        obj = super(eDFTpyCalculator, cls).__new__(cls)
+        if dftd4 :
+            from .dftd4 import VDWDFTD4
+            from ase.calculators.mixing import SumCalculator
+            xc_options = config['GSYSTEM']['exc'].copy()
+            xc_options.pop('dftd4', None)
+            xc_options.update(kwargs)
+            calc = VDWDFTD4(dftd4 = dftd4, **xc_options).dftd4calculator
+            obj = SumCalculator([obj, calc])
+        return obj

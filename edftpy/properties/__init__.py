@@ -30,3 +30,28 @@ def get_charge_vector(density, ions):
     rp = s2r(rp, grid)
     rp = np.moveaxis(rp, -1, 0)
     return rp
+
+def get_total_energies(gsystem = None, drivers = None, density = None, total_energy= None, update = True, olevel = 0, **kwargs):
+    elist = []
+    if density is None :
+        density = gsystem.density.copy()
+    if total_energy is None :
+        total_energy = gsystem.total_evaluator(density, calcType = ['E'], olevel = olevel).energy
+    elist.append(total_energy)
+
+    if isinstance(update, bool):
+        update = [update,]*len(drivers)
+
+    for i, driver in enumerate(drivers):
+        if driver is None :
+            ene = 0.0
+        elif not update[i]:
+            ene = driver.energy
+        else :
+            gsystem.density[:] = density
+            driver(density =driver.density, gsystem = gsystem, calcType = ['E'], olevel = olevel, **kwargs)
+            ene = driver.energy
+        elist.append(ene)
+    elist = np.asarray(elist)
+    elist = gsystem.grid.mp.vsum(elist)
+    return elist

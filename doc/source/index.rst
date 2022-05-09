@@ -18,5 +18,6 @@ Contents
    contact
    install
    tutorials/tutorials
+   cmdline
    releases
 

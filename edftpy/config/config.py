@@ -76,17 +76,17 @@ def conf_special_format(conf):
         if 'kedf' in conf[section] :
             conf[section]['kedf']['name'] = conf[section]['kedf']['kedf']
 
-    for k, v in conf.items() :
-        v.pop('comment', None)
-        v.pop('note', None)
-        v.pop('warning', None)
-        for k2, v2 in v.items():
-            if isinstance(v2, dict):
-                v2.pop('comment', None)
-                v2.pop('note', None)
-                v2.pop('warning', None)
-
+    conf_pop_comments(conf)
     return conf
+
+def conf_pop_comments(conf):
+    if isinstance(conf, dict):
+        conf.pop('comment', None)
+        conf.pop('note', None)
+        conf.pop('warning', None)
+        for k, v in conf.items():
+            conf_pop_comments(v)
+
 
 def option_format(config, mapfunc = None, final = True):
     conf = {}

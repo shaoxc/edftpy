@@ -187,7 +187,38 @@
 			},
 			"file": {
 				"type": "str",
-				"default": "POSCAR"
+				"default": null
+			},
+			"lattice": {
+				"type": "floatlist",
+				"default": null,
+				"comment": "Three numbers means three lengths of orthogonal cell; Six numbers means three vector lengths and three angles; Nine numbers means unit vector[a, b, c]. Only works for :ref:`GSYSTEM<GSYSTEM>` and when :ref:`cell-file<cell-file>` is not given.",
+				"options": ""
+			},
+			"symbols": {
+				"type": "cstrlist",
+				"default": null,
+				"comment": "A list of symbols for all atoms. Only works for :ref:`GSYSTEM<GSYSTEM>` and when :ref:`cell-file<cell-file>` is not given.",
+				"options": ""
+			},
+			"positions": {
+				"type": "floatlist",
+				"default": null,
+				"comment": "Atomic positions in Cartesian coordinate. Only works for :ref:`GSYSTEM<GSYSTEM>` and when :ref:`cell-file<cell-file>` is not given.",
+				"unit": "Angstrom",
+				"options": ""
+			},
+			"scaled_positions": {
+				"type": "floatlist",
+				"default": null,
+				"comment": "Atomic positions in crystal coordinate. Only works for :ref:`GSYSTEM<GSYSTEM>` and when :ref:`cell-file<cell-file>` is not given.",
+				"options": ""
+			},
+			"numbers": {
+				"type": "intlist",
+				"default": null,
+				"comment": "Atomic number for all atoms. Only works for :ref:`GSYSTEM<GSYSTEM>` and when :ref:`cell-file<cell-file>` is not given.",
+				"options": ""
 			}
 		},
 		"grid": {
@@ -216,6 +247,7 @@
 			"ncharge": {
 				"type": "float",
 				"comment": "Total charge of the system.",
+				"level": "devel",
 				"default": null
 			},
 			"magmom": {
@@ -246,13 +278,18 @@
 				"type": "str",
 				"default": null
 			},
-			"x_str": {
+			"dftd4": {
+				"comment": "The method of dftd4_. If use it, the dftd4_ should be installed. See `dftd4's available methods <https://github.com/dftd4/dftd4/blob/main/assets/parameters.toml>`_.",
+				"options": "",
 				"type": "str",
-				"default": "lda_x"
+				"note": "If dftd4='same', which means dftd4 use same functional as exchange-correlation.",
+				"default": null
 			},
-			"c_str": {
-				"type": "str",
-				"default": "lda_c_pz"
+			"libxc": {
+				"comment": "The type of exchange-correlation functionals with pylibxc_.",
+				"options": "",
+				"type": "lstrlist",
+				"default": "gga_x_pbe  gga_c_pbe"
 			}
 		},
 		"kedf": {
@@ -279,6 +316,67 @@
 			"k_str": {
 				"type": "str",
 				"default": "revAPBEK"
+			}
+		},
+		"mix": {
+			"comment": {
+				"type": "str",
+				"default": "Control the charge density mixing."
+			},
+			"scheme": {
+				"type": "str",
+				"default": null,
+				"comment": "Density mixing scheme, default is with driver's own scheme.",
+				"options": "Pulay, Linear"
+			},
+			"predtype": {
+				"type": "str",
+				"comment": "The preconditioning method.",
+				"options": "kerker, inverse_kerker, resta",
+				"default": "kerker"
+			},
+			"predcoef": {
+				"type": "floatlist",
+				"comment": "The parameters for preconditioning.",
+				"options": "",
+				"default": "1.0 1.0 1.0"
+			},
+			"predecut": {
+				"type": "float",
+				"comment": "The preconditioning energy cutoff.",
+				"options": "",
+				"unit": "eV",
+				"default": null
+			},
+			"maxm": {
+				"type": "int",
+				"comment": "Maximum of iterations used for mixing.",
+				"options": "",
+				"default": 7
+			},
+			"coef": {
+				"type": "float",
+				"comment": "",
+				"options": "The mixing parameter.",
+				"default": "0.7"
+			},
+			"delay": {
+				"type": "int",
+				"comment": "Delay several step to mixing the density.",
+				"options": "",
+				"default": "2"
+			},
+			"restarted": {
+				"type": "bool",
+				"comment": "Restart the mixer after several step.",
+				"options": "True, False",
+				"default": false
+			},
+			"kf": {
+				"type": "str",
+				"comment": "Similar as predcoef, not use now.",
+				"options": "",
+				"default": "auto"
 			}
 		},
 		"decompose": {
@@ -309,6 +407,12 @@
 				"default": {},
 				"comment": "The radius of each elements for decompose the subsystems.",
 				"unit": "Angstrom"
+			},
+			"rtol": {
+				"type": "float",
+				"default": 0.0,
+				"comment": "The tolerance of distance for adaptive simulation.",
+				"unit": "Angstrom"
 			}
 		}
 	},
@@ -326,7 +430,7 @@
 			},
 			"file": {
 				"type": "str",
-				"comment": "The file name of input structure. Many file formats are available. We use `ASE's I/O <https://wiki.fysik.dtu.dk/ase/ase/io/io.html#module-ase.io>`_.",
+				"comment": "The file name of input structure. Many file formats are available. We use `ASE's I/O <https://wiki.fysik.dtu.dk/ase/ase/io/io.html#module-ase.io>`_ for some formats.",
 				"default": null
 			},
 			"split": {
@@ -363,6 +467,12 @@
 				"type": "bool",
 				"default": true,
 				"comment": "Optimize the number of grid points."
+			},
+			"shift": {
+				"type": "intlist",
+				"default": null,
+				"comment": "The origin shift of grid to global grid.",
+				"level": "devel"
 			}
 		},
 		"density": {
@@ -386,7 +496,7 @@
 				"type": "float",
 				"comment": "Total electronic magnetization.",
 				"level": "devel",
-				"default": 0
+				"default": null
 			},
 			"file": {
 				"type": "str",
@@ -447,19 +557,9 @@
 				"default": "exc",
 				"comment": "x_str, c_str"
 			},
-			"xc": {
-				"type": "str",
+			"libxc": {
+				"type": "lstrlist",
 				"default": null
-			},
-			"x_str": {
-				"type": "str",
-				"default": null,
-				"comment": "See `libxc's available exchange functionals <https://www.tddft.org/programs/libxc/functionals/>`_."
-			},
-			"c_str": {
-				"type": "str",
-				"default": null,
-				"comment": "See `libxc's available correlation functionals <https://www.tddft.org/programs/libxc/functionals/>`_."
 			}
 		},
 		"kedf": {
@@ -570,6 +670,7 @@
 			},
 			"opt_method": {
 				"type": "str",
+				"level": "devel",
 				"default": "full"
 			},
 			"maxiter": {
@@ -658,6 +759,7 @@
 			"type": "int",
 			"options": "0, 1,..., 7",
 			"comment": "The embeded potential type, which is same as `embed`.",
+			"level": "devel",
 			"default": null
 		},
 		"basefile": {
@@ -688,6 +790,11 @@
 			"type": "ofdict",
 			"default": {},
 			"comment": "The charge of molecules or atoms."
+		},
+		"magmom": {
+			"type": "ofdict",
+			"default": {},
+			"comment": "The magnetic moment of molecules or atoms."
 		}
 	}
 }
