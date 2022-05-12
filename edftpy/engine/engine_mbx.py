@@ -44,11 +44,11 @@ class EngineMBX(Engine):
     """
     def __init__(self, **kwargs):
         units = kwargs.get('units', {})
-        unit_len = LEN_CONV["Angstrom"]["Bohr"]
-        # units['length'] = units.get('length', mbx.MBXLENGTH2AU)
-        # units['energy'] = units.get('energy',mbx.MBXENERGY2AU)
-        units['length'] = units.get('length', unit_len)
-        units['energy'] = units.get('energy', mbx.MBXENERGY2AU)
+        # units['length'] = units.get('length', LEN_CONV["Angstrom"]["Bohr"])
+        # # units['length'] = units.get('length', mbx.MBXLENGTH2AU)
+        # units['energy'] = units.get('energy', mbx.MBXENERGY2AU)
+        units['length'] = units.get('length', 1.0)
+        units['energy'] = units.get('energy', 1.0)
         units['order'] = 'C'
         kwargs['units'] = units
         super().__init__(**kwargs)
@@ -58,8 +58,9 @@ class EngineMBX(Engine):
         return force
 
     def get_energy(self, olevel = 0, **kwargs) -> float:
-        energy = mbx.get_energy_pbc_nograd(self.positions, len(self.labels), self.box)
-        return energy * self.units['energy']
+        energy = mbx.get_energy_pbc_nograd(self.positions, len(self.labels), self.box, units = 'au')
+        print(f'mbx-energy : {energy}')
+        return energy
 
     @print2file()
     def initial(self, inputfile = 'mbx.json', comm=None, **kwargs):
@@ -70,14 +71,20 @@ class EngineMBX(Engine):
         self.monomer_names = inputs['monomer_names']
         self.inputfile = inputfile
         self.box = inputs['box']
-        mbx.initialize_system(self.positions, self.monomer_natoms, self.labels, self.monomer_names, self.inputfile)
+        mbx.initialize_system(self.positions, self.monomer_natoms, self.labels, self.monomer_names, self.inputfile, units = 'au')
         #-----------------------------------------------------------------------
         self.npoints = len(self.labels)
         for name in self.monomer_names :
             if name == 'h2o' : self.npoints += 1
+            """
+            H2O : O H H M
+                dipole : O H H 0
+                charge : 0 H H M
+            """
         # #-----------------------------------------------------------------------
-        self.points_mm = mbx.get_xyz(self.npoints)
+        self.points_mm = mbx.get_xyz(self.npoints, units = 'au')
         self.points_mm = np.array(self.points_mm).reshape((-1, 3))
+        self.points_zval = None
 
     def initial_old(self, inputfile = 'mbx.json', comm = None, subcell = None, grid = None, **kwargs):
         """
@@ -94,20 +101,35 @@ class EngineMBX(Engine):
         xyz = subcell.ions.pos.ravel()
         box = subcell.ions.pos.cell.lattice.ravel()
         #-----------------------------------------------------------------------
-        mbx.initialize_system(xyz,number_of_atoms_per_monomer,atom_names,monomer_names,json_file)
-        mbx.set_coordinates(xyz, natom)
-        mbx.set_box(box)
+        mbx.initialize_system(xyz,number_of_atoms_per_monomer,atom_names,monomer_names,json_file, units = 'au')
+        mbx.set_coordinates(xyz, natom, units = 'au')
+        mbx.set_box(box, units = 'au')
         #-----------------------------------------------------------------------
         self.subcell = subcell
         self.npoints = nmol*4
         #-----------------------------------------------------------------------
-        self.points_mm = mbx.get_xyz(self.npoints)
+        self.points_mm = mbx.get_xyz(self.npoints, units = 'au')
         self.points_mm = np.array(self.points_mm).reshape((-1, 3))/subcell.grid.latparas
+
+    def build_zval(self, values):
+        zval = []
+        ia = 0
+        for im, name in enumerate(self.monomer_names) :
+            if name == 'h2o' :
+                zval.append(0)
+                for k in ['H', 'H', 'O'] :
+                    zval.append(values[k])
+                ia += 3
+            else :
+                for k in self.labels[ia:ia + self.monomer_natoms[im]] :
+                    zval.append(values[k])
+                ia += self.monomer_natoms[im]
+        self.points_zval = np.array(zval)
 
     @print2file()
     def update_ions(self, subcell=None, **kwargs) :
-        mbx.set_coordinates(self.positions, len(self.labels))
-        mbx.set_box(self.box)
+        mbx.set_coordinates(self.positions, len(self.labels), units = 'au')
+        mbx.set_box(self.box, units = 'au')
 
     def scf(self, **kwargs):
         pass
@@ -115,18 +137,19 @@ class EngineMBX(Engine):
     def get_potential(self, out = None, grid = None, **kwargs):
         grid_points = grid.r.reshape((3, -1)).T
         grid_points = grid_points.ravel()
-        pot, potfield = mbx.get_potential_and_electric_field_on_points(grid_points, grid_points.size//3)
+        pot, potfield = mbx.get_potential_and_electric_field_on_points(grid_points, grid_points.size//3, units = 'au')
         return pot.reshape(grid.nrR)
 
     def set_extpot(self, extpot = None, **kwargs):
+        # extpot.write('x11.den')
         pot = self.get_value_at_points(extpot, self.points_mm).ravel()
-        extfield = extpot.gradient()
+        extfield =  extpot.gradient()
         potfield = []
         for i in range(3):
             p = self.get_value_at_points(extfield[i], self.points_mm)
             potfield.append(p)
         potfield= np.asarray(potfield).T.ravel()
-        mbx.set_potential_and_electric_field_on_sites(pot, potfield)
+        mbx.set_potential_and_electric_field_on_sites(pot, potfield, units = 'au')
 
     def get_value_at_points(self, data, points):
         values = np.empty(points.shape[0])
@@ -135,14 +158,22 @@ class EngineMBX(Engine):
             values[i] = data[ip[0], ip[1], ip[2]]
         return values
 
-    def get_grid(self, nr, gaps = 4.5, **kwargs):
-        nr[:] = self.subcell.grid.latparas / gaps
+    def get_grid(self, gaps = 1.0, **kwargs):
+        nr = (self.subcell.grid.latparas / gaps).astype('int32')
         self.nr = nr
         return nr
 
-    def get_charge(self, charge, **kwargs):
-        raise AttributeError("Will do")
-        return charge
+    def get_charges(self, **kwargs):
+        charges = mbx.get_charges(self.npoints, units = 'au')
+        positions = self.points_mm
+        return charges, positions
+
+    def get_dipoles(self, **kwargs):
+        self.get_energy(**kwargs)
+        dipoles = mbx.get_induced_dipoles(self.npoints, units = 'au')
+        dipoles = np.array(dipoles).reshape((-1, 3))
+        positions = self.points_mm
+        return dipoles, positions
 
     def write_input(self, subcell = None, monomers = {}, **kwargs):
         """

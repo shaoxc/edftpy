@@ -9,6 +9,7 @@ from edftpy.functional import hartree_energy
 from edftpy.mpi import sprint, MP
 from edftpy.engine.engine import Driver
 from edftpy.io import print2file
+from edftpy.density import build_pseudo_density
 
 
 class DriverConstraint(object):
@@ -495,14 +496,14 @@ class DriverEX(DriverKS):
             self.engine.update_ions(self.subcell, update = update)
         return
 
-    @print2file()
-    def init_density(self, rho_ini = None, density_initial = None, **kwargs):
-        pass
+    # @print2file()
+    # def init_density(self, rho_ini = None, density_initial = None, **kwargs):
+        # pass
 
     @print2file()
     def get_energy(self, olevel = 0, **kwargs):
         if olevel == 0 :
-            energy = self.engine.get_energy(olevel = olevel) * self.units['energy']
+            energy = self.engine.get_energy(olevel = olevel) * self.engine.units['energy']
         else :
             energy = 0.0
         return energy
@@ -522,7 +523,7 @@ class DriverEX(DriverKS):
             pot = self.engine.get_potential(**kwargs) * self.engine.units['energy']
             func.potential = self._format_field_invert(pot)
         if 'E' in calcType :
-            energy = self.get_energy(olevel = olevel) * self.engine.units['energy']
+            energy = self.engine.get_energy(olevel = olevel) * self.engine.units['energy']
             func.energy = energy
             if self.comm.rank > 0 : func.energy = 0.0
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
@@ -530,7 +531,7 @@ class DriverEX(DriverKS):
             sprint(fstr, comm = self.comm)
         return func
 
-class DriverMM(DriverEX):
+class DriverMM(DriverKS):
     """
     Note :
         The potential and density will gather in rank == 0 for engine.
@@ -539,25 +540,91 @@ class DriverMM(DriverEX):
         kwargs["technique"] = kwargs.get("technique", 'MM')
         super().__init__(**kwargs)
 
+    @print2file()
+    def update_workspace(self, subcell = None, first = False, update = 0, restart = False, **kwargs):
+        """
+        Notes:
+            clean workspace
+        """
+        self.fermi = None
+        self._iter = 0
+        self.energy = 0.0
+        self.residual_norm = 0.0
+        self.dp_norm = 0.0
+
+        if not first :
+            self.engine.update_ions(self.subcell, update = update)
+        return
+
     def _driver_initialise(self, append = False, **kwargs):
         self.engine.initial(filename = self.filename, comm = self.comm,
                 subcell = self.subcell, grid = self.grid)
+        self.grid_driver = self.get_grid_driver(self.grid)
+        if self.grid_driver is not None :
+            grid = self.grid_driver
+        else :
+            grid = self.grid
+
+        if self.comm.rank == 0 :
+            self.density = Field(grid=self.grid, rank=self.nspin)
+            self.prev_density = Field(grid=self.grid, rank=self.nspin)
+            self.charge = np.empty((grid.nnr, self.nspin), order = self.engine.units['order'])
+            self.prev_charge = np.empty((grid.nnr, self.nspin), order = self.engine.units['order'])
+        else :
+            self.density = self.atmp2
+            self.prev_density = self.atmp2
+            self.charge = self.atmp2
+            self.prev_charge = self.atmp2
+
+    @print2file()
+    def get_energy(self, olevel = 0, **kwargs):
+        if olevel == 0 :
+            energy = self.engine.get_energy(olevel = olevel) * self.engine.units['energy']
+        else :
+            energy = 0.0
+        return energy
+
+    @print2file()
+    def update_density(self, **kwargs):
+        return self.density
 
     @print2file()
     def get_energy_potential(self, density = None, calcType = ['E', 'V'], olevel = 1, **kwargs):
         func = Functional(name = 'ZERO', energy=0.0, potential=None)
-        self.engine.set_extpot(self.evaluator.global_potential, **kwargs)
+        self.engine.set_extpot(self.evaluator.global_potential / self.engine.units['energy'], **kwargs)
         if 'V' in calcType :
             pot = self.engine.get_potential(grid = self.grid_driver, **kwargs) * self.engine.units['energy']
             func.potential = self._format_field_invert(pot)
         if 'E' in calcType :
-            energy = self.get_energy(olevel = olevel) * self.engine.units['energy']
+            energy = self.engine.get_energy(olevel = olevel) * self.engine.units['energy']
             func.energy = energy
             if self.comm.rank > 0 : func.energy = 0.0
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
             # self.write_stdout(fstr)
             sprint(fstr, comm = self.comm)
         return func
+
+    def get_density(self, rcut = 10, sigma = 0.6, **kwargs):
+        charges, positions_c = self.engine.get_charges()
+        charges = self.engine.points_zval - charges
+        positions_c = positions_c*self.engine.units['length']
+        dipoles, positions_d = self.engine.get_dipoles()
+        positions_d = positions_d*self.engine.units['length']
+        dipoles = dipoles*self.engine.units['length']
+        #
+        self.density[:] = 0.0
+        for c, p in zip(charges, positions_c):
+            self.density = build_pseudo_density(p, self.grid, scale = c, sigma = sigma, rcut = rcut,
+                    density = self.density, add = True, deriv = 0)
+        for c, p in zip(dipoles, positions_d):
+            self.density = build_pseudo_density(p, self.grid, scale = c, sigma = sigma*0.6, rcut = rcut,
+                    density = self.density, add = True, deriv = 1)
+        #
+        print('charges', charges)
+        print('dipoles :\n', dipoles, flush = True)
+        self.density.write('0_pseudo_density.xsf', ions = self.subcell.ions)
+        return self.density
+
 
 class DriverOF:
     def __init__(self, engine = None, **kwargs):

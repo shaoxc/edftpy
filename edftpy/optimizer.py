@@ -57,6 +57,9 @@ class Optimization(object):
                 self.mixer = Mixer(scheme = 'pulay', predtype = 'kerker', maxm = 7, coef = 0.7, delay = 2)
             if self.occupations is None :
                 self.occupations = Occupations(degauss = 0.01)
+        elif self.sdft == 'qmmm' :
+            self.density_qmmm = None
+            self.density_mm = None
 
     @property
     def sdft(self):
@@ -140,6 +143,7 @@ class Optimization(object):
         self.density, self.density_prev = self.density_prev, self.density
         self.density = self.gsystem.density.copy()
         self.mix_density()
+        self.update_qmmm_density()
         return
 
     def mix_density(self, **kwargs):
@@ -255,7 +259,8 @@ class Optimization(object):
 
             if self.update[isub] :
                 self.gsystem.density[:] = self.density
-                if driver.technique in ['EX', 'MM'] :
+                # if driver.technique in ['EX', 'MM'] :
+                if driver.technique in ['EX'] :
                     calcType = ['V']
                 else :
                     calcType = ['O']
@@ -313,6 +318,7 @@ class Optimization(object):
                 self.gsystem.update_density(gaussian_density, isub = i, fake = True)
                 self.gsystem.update_density(core_density, isub = i, core = True)
         sprint('Update density :', self.gsystem.density.integral())
+        self.update_qmmm_density()
         #-----------------------------------------------------------------------
         self.add_xc_correction()
         #-----------------------------------------------------------------------
@@ -384,9 +390,11 @@ class Optimization(object):
     def set_global_potential(self, **kwargs):
         if self.sdft == 'pdft' :
             self.set_global_potential_pdft(**kwargs)
+        elif self.sdft == 'qmmm' :
+            self.set_global_potential_qmmm(**kwargs)
         else :
             self.set_global_potential_sdft(**kwargs)
-        self.add_external_potential(**kwargs)
+        # self.add_external_potential(**kwargs)
 
     def set_global_potential_sdft(self, approximate = 'same', **kwargs):
         # approximate = 'density4'
@@ -575,7 +583,80 @@ class Optimization(object):
                 driver.evaluator.embed_potential = driver.evaluator.global_potential
         return
 
+    def set_global_potential_qmmm(self, **kwargs):
+        self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = ('V'))
+        self.gsystem.total_evaluator.embed_potential = self.gsystem_qmmm.total_evaluator.embed_potential
+        for isub in range(self.nsub):
+            driver = self.drivers[isub]
+            if driver is None :
+                global_potential = None
+            elif driver.technique == 'OF' :
+                continue
+            else :
+                if driver.evaluator.global_potential is None :
+                    driver.evaluator.global_potential = np.zeros_like(driver.density)
+                global_potential = driver.evaluator.global_potential
+
+            self.gsystem_qmmm.sub_value(self.gsystem_qmmm.total_evaluator.embed_potential, global_potential, isub = isub)
+
+        embed_keys = ['XC', 'KE']
+        pot_qm  = self.gsystem.total_evaluator.get_total_functional(self.density, calcType = ('V'), embed_keys = embed_keys).potential
+
+        for isub in range(self.nsub):
+            driver = self.drivers[isub]
+            if driver is None :
+                global_potential = None
+            else :
+                if driver.evaluator.global_potential is None :
+                    driver.evaluator.global_potential = np.zeros_like(driver.density)
+                global_potential = driver.evaluator.global_potential
+
+            technique = self._get_driver_technique(driver)
+
+            if technique == 'MM' :
+                self.gsystem.sub_value(pot_qm, global_potential, isub = isub)
+                # if driver is not None :
+                    # global_potential.write('0_mm_pot.xsf', ions = self.gsystem_qmmm.ions)
+        # self.gsystem_qmmm.density.write('0_qmmm.xsf', ions = self.gsystem_qmmm.ions)
+        # self.gsystem.density.write('0_qm.xsf', ions = self.gsystem.ions)
+        # self.gsystem_mm.density.write('0_mm.xsf', ions = self.gsystem_mm.ions)
+        # self.gsystem_qmmm.total_evaluator.embed_potential.write('0_pot.xsf', ions = self.gsystem_qmmm.ions)
+        # pot_qm.write('0_1_pot.xsf', ions = self.gsystem_qmmm.ions)
+        # exit()
+        return
+
+    def update_qmmm_density(self, **kwargs):
+        if self.sdft == 'qmmm' :
+            self.gsystem_mm.density[:] = 0.0
+            for i, driver in enumerate(self.drivers):
+                if driver is None :
+                    density = None
+                else :
+                    density = driver.density
+                technique = self._get_driver_technique(driver)
+                if technique in ['MM'] :
+                    self.gsystem_mm.update_density(density, isub = i)
+            #
+            self.gsystem_qmmm.density[:] = self.gsystem.density + self.gsystem_mm.density
+            #
+            if 'XC' in self.gsystem_qmmm.total_evaluator.funcdicts :
+                self.gsystem_qmmm.total_evaluator.funcdicts['XC'].core_density = self.gsystem.core_density
+
+    def build_qmmm_eint(self, calcType = ('E', 'V'), **kwargs):
+        embed_keys = ['PSEUDO', 'HARTREE']
+        obj_qmmm = self.gsystem_qmmm.total_evaluator.get_total_functional(self.density_qmmm, calcType = calcType, embed_keys = embed_keys)
+        obj_qm = self.gsystem.total_evaluator.get_total_functional(self.density, calcType = calcType, embed_keys = embed_keys)
+        obj_mm = self.gsystem_mm.total_evaluator.get_total_functional(self.density_mm, calcType = calcType, embed_keys = embed_keys)
+        return obj_qmmm, obj_qm, obj_mm
+
     def add_external_potential(self, **kwargs):
+        if self.sdft == 'qmmm' :
+            embed_keys = ['PSEUDO', 'HARTREE']
+            self.update_qmmm_density()
+            pot_qm  = self.gsystem.total_evaluator.get_total_functional(self.density, calcType = ('V'), embed_keys = embed_keys).potential
+            pot_mm = self.gsystem_mm.total_evaluator.get_total_functional(self.density_mm, calcType = ('V'), embed_keys = embed_keys).potential
+            self.gsystem.total_evaluator.external_potential['QM'] = pot_qm
+            self.gsystem.total_evaluator.external_potential['MM'] = pot_mm
         for isub in range(self.nsub + len(self.of_drivers)):
             if isub < self.nsub :
                 driver = self.drivers[isub]
@@ -610,8 +691,8 @@ class Optimization(object):
                 if pot is None : continue
                 pot_en = self.gsystem.total_evaluator.external_potential.get('EX', None)
                 if pot_en is not None : pot = pot + pot_en
-                # self.gsystem.sub_value(pot, global_potential, isub = isub)
-                pot.gather(out = global_potential, root = root)
+                self.gsystem.sub_value(pot, global_potential, isub = isub)
+                # # pot.gather(out = global_potential, root = root)
             else : # if technique in ['OF', 'KS']:
                 pot = None
                 extpots = self.gsystem.total_evaluator.external_potential

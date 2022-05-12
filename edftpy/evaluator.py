@@ -297,7 +297,6 @@ class TotalEvaluator(Evaluator):
         # self.static_potential = obj_global.potential
 
     def get_total_functional(self, rho, embed_keys = [], calcType = ['V'], **kwargs):
-        if not embed_keys : embed_keys = self.embed_keys
         remove_global = {}
         for key in self.funcdicts:
             if key in embed_keys:

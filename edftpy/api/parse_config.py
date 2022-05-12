@@ -245,6 +245,38 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
 
     if optmix :
         opt = MixOptimization(optimizer = opt)
+
+    if opt.sdft == 'qmmm' :
+        indices = np.arange(gsystem.ions.nat)
+        subkeys = [key for key in config if key.startswith('SUB')]
+        index_mm = []
+        for key in subkeys :
+            if config[key]['technique'] == 'MM' :
+                ind = config[key]['cell']['index']
+                index_mm.extend(ind)
+        #MM part
+        ions_mm = ions[index_mm]
+        gsystem_mm = config2gsystem(config, ions = ions_mm, graphtopo=graphtopo, grid = gsystem.grid, **kwargs)
+        total_evaluator_mm = config2total_evaluator(config, ions_mm, grid, pplist = pplist)
+        gsystem_mm.total_evaluator = total_evaluator_mm
+        #QM part
+        index_qm = np.delete(indices, index_mm)
+        ions_qm = ions[index_qm]
+        gsystem_qm = config2gsystem(config, ions = ions_qm, graphtopo=graphtopo, grid = gsystem.grid, **kwargs)
+        total_evaluator_qm = config2total_evaluator(config, ions_qm, grid, pplist = pplist)
+        gsystem_qm.total_evaluator = total_evaluator_qm
+        #Swap QMMM and QM
+        opt.gsystem_qmmm = opt.gsystem
+        opt.gsystem = gsystem_qm
+        opt.gsystem_mm = gsystem_mm
+        #interaction part only contain Vloc and Hartree
+        # keys=list(opt.gsystem_mm.total_evaluator.funcdicts.keys())
+        # for key in keys :
+            # if key not in ['PSEUDO', "HARTREE"] : del opt.gsystem_mm.total_evaluator.funcdicts[key]
+        # set zval
+        for driver in opt.drivers:
+            if driver is not None and driver.technique== 'MM' :
+                driver.engine.build_zval(ions_mm.Zval)
     return opt
 
 def config2ions(config, ions = None, keysys = 'GSYSTEM', **kwargs):
@@ -309,7 +341,7 @@ def config2total_embed(config, driver = None, optimizer = None, **kwargs):
         driver.total_embed = total_embed
     return driver
 
-def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell_change = None, **kwargs):
+def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell_change = None, grid = None, **kwargs):
     ############################## Gsystem ##############################
     keysys = "GSYSTEM"
 
@@ -331,7 +363,7 @@ def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell
         mp_global = gsystem.grid.mp
     else :
         mp_global = MP(comm = graphtopo.comm, parallel = graphtopo.is_mpi, decomposition = graphtopo.decomposition)
-        gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo, nspin = nspin)
+        gsystem = GlobalCell(ions, grid = grid, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo, nspin = nspin)
 
     if density_file : file2density(density_file, gsystem.density)
     return gsystem
