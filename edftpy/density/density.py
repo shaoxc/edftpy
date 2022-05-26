@@ -79,19 +79,27 @@ class AtomicDensity(object):
 
         rho_unspin = self.guess_rho_unspin(ions, grid = grid, ncharge=ncharge, rho=rho, dtol=dtol, **kwargs)
 
-        if rho_s is not None :
-            rho_s[:] = rho_unspin/nspin
-        else :
-            if nspin > 1 :
-                rho_s = Field(grid, rank = nspin)
-                rho_s[:] = rho_unspin / nspin
+        if self.is_core :
+            if rho_s is not None :
+                rho_s[:] = rho_unspin
             else :
                 rho_s = rho_unspin
+        else :
+            if rho_s is not None :
+                rho_s[:] = rho_unspin/nspin
+            else :
+                if nspin > 1 :
+                    rho_s = Field(grid, rank = nspin)
+                    rho_s[:] = rho_unspin / nspin
+                else :
+                    rho_s = rho_unspin
         return rho_s
 
     def guess_rho_unspin(self, ions, grid = None, ncharge = None, rho = None, dtol=1E-30, **kwargs):
         ncharge = ncharge or self.ncharge
         if len(self._r) == 0 :
+            if self.is_core : # no core density
+                return None
             new_rho = self.guess_rho_heg(ions, grid, ncharge, rho, dtol = dtol, **kwargs)
         elif self.direct :
             new_rho = self.guess_rho_atom(ions, grid, ncharge, rho, dtol = dtol, **kwargs)
@@ -191,7 +199,7 @@ def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=0.
         for key in r:
             r0 = r[key]
             arho0 = arho[key]
-            if arho is None : continue
+            if arho0 is None : continue
             radial[key] = RadialGrid(r0, arho0, direct = False)
             vlines[key] = radial[key].to_3d_grid(reciprocal_grid.q)
             qa[:] = 0.0
