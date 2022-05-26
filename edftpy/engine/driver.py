@@ -560,6 +560,10 @@ class DriverMM(DriverKS):
         self.engine.initial(filename = self.filename, comm = self.comm,
                 subcell = self.subcell, grid = self.grid)
         self.grid_driver = self.get_grid_driver(self.grid)
+        self.init_density(**kwargs)
+
+    @print2file()
+    def init_density(self, rho_ini = None, density_initial = None, sigma = 0.6, rcut = 10.0, **kwargs):
         if self.grid_driver is not None :
             grid = self.grid_driver
         else :
@@ -576,6 +580,28 @@ class DriverMM(DriverKS):
             self.charge = self.atmp2
             self.prev_charge = self.atmp2
 
+        self.density_sub = Field(grid = self.grid_sub, rank=self.nspin)
+        self.density_charge_sub = Field(grid = self.grid_sub, rank=self.nspin)
+
+        charges, positions_c = self.engine.get_charges()
+        charges = self.engine.get_points_zval() - charges
+        positions_c = positions_c*self.engine.units['length']
+        #-----------------------------------------------------------------------
+        if self.comm.size > 1 :
+            charges = self.comm.bcast(charges, root = 0)
+            positions_c = self.comm.bcast(positions_c, root = 0)
+        #-----------------------------------------------------------------------
+        self.density_charge_sub[:] = 0.0
+        for c, p in zip(charges, positions_c):
+            if c > 1 :
+                sigma2 = 1.4 *sigma
+            else :
+                sigma2 = sigma
+            self.density_charge_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma2, rcut = rcut,
+                    density = self.density_charge_sub, add = True, deriv = 0)
+        sprint('charges :\n', charges, comm = self.comm)
+        # self.density_charge_sub.write('1_pseudo_density_charge.xsf', ions = self.subcell.ions)
+
     @print2file()
     def get_energy(self, olevel = 0, **kwargs):
         if olevel == 0 :
@@ -591,10 +617,11 @@ class DriverMM(DriverKS):
     @print2file()
     def get_energy_potential(self, density = None, calcType = ['E', 'V'], olevel = 1, **kwargs):
         func = Functional(name = 'ZERO', energy=0.0, potential=None)
-        self.engine.set_extpot(self.evaluator.global_potential / self.engine.units['energy'], **kwargs)
-        if 'V' in calcType :
-            pot = self.engine.get_potential(grid = self.grid_driver, **kwargs) * self.engine.units['energy']
-            func.potential = self._format_field_invert(pot)
+        if olevel == 0 :
+            self.engine.set_extpot(self.evaluator.global_potential / self.engine.units['energy'], **kwargs)
+        # if 'V' in calcType :
+            # pot = self.engine.get_potential(grid = self.grid_driver, **kwargs) * self.engine.units['energy']
+            # func.potential = self._format_field_invert(pot)
         if 'E' in calcType :
             energy = self.engine.get_energy(olevel = olevel) * self.engine.units['energy']
             func.energy = energy
@@ -604,25 +631,56 @@ class DriverMM(DriverKS):
             sprint(fstr, comm = self.comm)
         return func
 
+    @print2file()
     def get_density(self, rcut = 10, sigma = 0.6, **kwargs):
-        charges, positions_c = self.engine.get_charges()
-        charges = self.engine.points_zval - charges
-        positions_c = positions_c*self.engine.units['length']
+        if self.comm.rank == 0 :
+            from edftpy.io import read_density
+            self.density[:] = read_density('0_mm.xsf')
+        return self.density
+        #
+        self.engine.set_extpot(self.evaluator.global_potential / self.engine.units['energy'], **kwargs)
+        #
         dipoles, positions_d = self.engine.get_dipoles()
         positions_d = positions_d*self.engine.units['length']
         dipoles = dipoles*self.engine.units['length']
-        #
+        #-----------------------------------------------------------------------
+        if self.comm.size > 1 :
+            dipoles = self.comm.bcast(dipoles, root = 0)
+            positions_d = self.comm.bcast(positions_d, root = 0)
+        #-----------------------------------------------------------------------
+        # self.density[:] = self.density_charge
+        self.density_sub[:] = self.density_charge_sub
+        for c, p in zip(dipoles, positions_d):
+            self.density_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma, rcut = rcut,
+                    density = self.density_sub, add = True, deriv = 1)
+        sprint('dipoles :\n', dipoles, comm = self.comm)
+        self.density_sub.gather(out = self.density, root = 0)
+        return self.density
+
+    @print2file()
+    def get_density_v0(self, rcut = 10, sigma = 0.6, **kwargs):
+        charges, positions_c = self.engine.get_charges()
+        charges = self.engine.get_points_zval() - charges
+        dipoles, positions_d = self.engine.get_dipoles()
+        #-----------------------------------------------------------------------
+        positions_c = positions_c*self.engine.units['length']
+        positions_d = positions_d*self.engine.units['length']
+        dipoles = dipoles*self.engine.units['length']
+        #-----------------------------------------------------------------------
         self.density[:] = 0.0
         for c, p in zip(charges, positions_c):
-            self.density = build_pseudo_density(p, self.grid, scale = c, sigma = sigma, rcut = rcut,
+            if c > 1 :
+                sigma2 = 1.4 *sigma
+            else :
+                sigma2 = sigma
+            self.density = build_pseudo_density(p, self.grid, scale = c, sigma = sigma2, rcut = rcut,
                     density = self.density, add = True, deriv = 0)
         for c, p in zip(dipoles, positions_d):
-            self.density = build_pseudo_density(p, self.grid, scale = c, sigma = sigma*0.6, rcut = rcut,
+            self.density = build_pseudo_density(p, self.grid, scale = c, sigma = sigma, rcut = rcut,
                     density = self.density, add = True, deriv = 1)
         #
-        print('charges', charges)
-        print('dipoles :\n', dipoles, flush = True)
-        self.density.write('0_pseudo_density.xsf', ions = self.subcell.ions)
+        sprint('charges :\n', charges, comm = self.comm)
+        sprint('dipoles :\n', dipoles, comm = self.comm)
         return self.density
 
 

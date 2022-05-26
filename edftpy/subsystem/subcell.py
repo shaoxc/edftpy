@@ -13,7 +13,7 @@ class SubCell(object):
         self._grid = None
         self._ions = None
         self._density = None
-        self._ions_index = None
+        self._ions_index = index
         self.nspin = nspin
 
         self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, full = full, nr = nr, **kwargs)
@@ -207,7 +207,7 @@ class SubCell(object):
 
 
 class GlobalCell(object):
-    def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, graphtopo = None, nspin = 1, **kwargs):
+    def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, graphtopo = None, nspin = 1, index = None, **kwargs):
         self.grid_kwargs = {
                 'ecut' : ecut,
                 'spacing' : spacing,
@@ -221,6 +221,7 @@ class GlobalCell(object):
         self.graphtopo = graphtopo
         self.comm = self.graphtopo.comm
         self.nspin = nspin
+        self._ions_index = index
 
         self.restart(grid=grid, ions=ions)
 
@@ -233,6 +234,12 @@ class GlobalCell(object):
         self._density = Field(grid=self.grid, rank=self.nspin, direct=True)
         self._gaussian_density = Field(grid=self.grid, rank=1, direct=True)
         self._core_density = Field(grid=self.grid, rank=1, direct=True)
+
+    @property
+    def ions_index(self):
+        if self._ions_index is None :
+            self._ions_index = slice(None)
+        return self._ions_index
 
     @property
     def grid(self):

@@ -12,15 +12,15 @@ except Exception :
     __version__ = '0.0.1'
 
 MBX_MONOMERS = {
-        "li"   : ["Li"],
-        "na"   : ["Na"],
-        "k"    : ["K"],
-        "rb"   : ["Rb"],
-        "cs"   : ["Cs"],
-        "f"    : ["F"],
-        "cl"   : ["Cl"],
-        "br"   : ["Br"],
-        "i"    : ["I"],
+        "li+"   : ["Li"],
+        "na+"   : ["Na"],
+        "k+"    : ["K"],
+        "rb+"   : ["Rb"],
+        "cs+"   : ["Cs"],
+        "f-"    : ["F"],
+        "cl-"   : ["Cl"],
+        "br-"   : ["Br"],
+        "i-"    : ["I"],
         "ar"   : ["Ar"],
         "he"   : ["He"],
         "h2"   : ["H", "H"],
@@ -58,12 +58,18 @@ class EngineMBX(Engine):
         return force
 
     def get_energy(self, olevel = 0, **kwargs) -> float:
-        energy = mbx.get_energy_pbc_nograd(self.positions, len(self.labels), self.box, units = 'au')
-        print(f'mbx-energy : {energy}')
+        if olevel == 0 :
+            energy = mbx.get_energy_pbc_nograd(self.positions, len(self.labels), self.box, units = 'au')
+            e2 = mbx.get_external_field_contribution_to_energy(units = 'au')
+            print('mbx -> energies', energy, e2, energy - e2, flush = True)
+            energy = energy - e2
+        else :
+            energy = 0.0
         return energy
 
     @print2file()
     def initial(self, inputfile = 'mbx.json', comm=None, **kwargs):
+        self.comm = comm or self.comm
         inputs = self.write_input(**kwargs)
         self.positions = inputs['positions']
         self.monomer_natoms = inputs['monomer_natoms']
@@ -71,7 +77,14 @@ class EngineMBX(Engine):
         self.monomer_names = inputs['monomer_names']
         self.inputfile = inputfile
         self.box = inputs['box']
-        mbx.initialize_system(self.positions, self.monomer_natoms, self.labels, self.monomer_names, self.inputfile, units = 'au')
+        self.zval = inputs['zval']
+        # mbx.initialize_system(self.positions, self.monomer_natoms, self.labels, self.monomer_names, self.inputfile, units = 'au')
+        #-----------------------------------------------------------------------
+        monomer_names = self.monomer_names.copy()
+        for i in range(len(monomer_names)):
+            if monomer_names[i] == 'h2o' :
+                monomer_names[i] = 'mbpbe'
+        mbx.initialize_system(self.positions, self.monomer_natoms, self.labels, monomer_names, self.inputfile, units = 'au')
         #-----------------------------------------------------------------------
         self.npoints = len(self.labels)
         for name in self.monomer_names :
@@ -111,20 +124,23 @@ class EngineMBX(Engine):
         self.points_mm = mbx.get_xyz(self.npoints, units = 'au')
         self.points_mm = np.array(self.points_mm).reshape((-1, 3))/subcell.grid.latparas
 
-    def build_zval(self, values):
-        zval = []
-        ia = 0
-        for im, name in enumerate(self.monomer_names) :
-            if name == 'h2o' :
-                zval.append(0)
-                for k in ['H', 'H', 'O'] :
-                    zval.append(values[k])
-                ia += 3
-            else :
-                for k in self.labels[ia:ia + self.monomer_natoms[im]] :
-                    zval.append(values[k])
-                ia += self.monomer_natoms[im]
-        self.points_zval = np.array(zval)
+    def get_points_zval(self, values = None):
+        if self.points_zval is None :
+            if values is None : values = self.zval
+            zval = []
+            ia = 0
+            for im, name in enumerate(self.monomer_names) :
+                if name == 'h2o' :
+                    zval.append(0)
+                    for k in ['H', 'H', 'O'] :
+                        zval.append(values[k])
+                    ia += 3
+                else :
+                    for k in self.labels[ia:ia + self.monomer_natoms[im]] :
+                        zval.append(values[k])
+                    ia += self.monomer_natoms[im]
+            self.points_zval = np.array(zval)
+        return self.points_zval
 
     @print2file()
     def update_ions(self, subcell=None, **kwargs) :
@@ -141,24 +157,33 @@ class EngineMBX(Engine):
         return pot.reshape(grid.nrR)
 
     def set_extpot(self, extpot = None, **kwargs):
-        # extpot.write('x11.den')
+        if self.comm.rank > 0 : return
         pot = self.get_value_at_points(extpot, self.points_mm).ravel()
-        extfield =  extpot.gradient()
-        potfield = []
-        for i in range(3):
-            p = self.get_value_at_points(extfield[i], self.points_mm)
-            potfield.append(p)
-        potfield= np.asarray(potfield).T.ravel()
+        extfield = extpot.gradient()
+        # extfield = extpot.gradient(flag = 'standard')
+        # extfield = extpot.gradient(flag = 'supersmooth')
+        potfield = self.get_value_at_points(extfield, self.points_mm).ravel()
+        # potfield = []
+        # for i in range(3):
+            # p = self.get_value_at_points(extfield[i], self.points_mm)
+            # potfield.append(p)
+        # potfield= np.asarray(potfield).T.ravel()
         mbx.set_potential_and_electric_field_on_sites(pot, potfield, units = 'au')
 
     def get_value_at_points(self, data, points):
-        values = np.empty(points.shape[0])
+        if data.ndim > 3 :
+            values = np.empty((points.shape[0], data.shape[0]))
+        else :
+            values = np.empty(points.shape[0])
         for i, p in enumerate(points):
             ip = (np.rint(p*data.grid.nrR/data.grid.latparas[0:3])).astype('int32')
-            values[i] = data[ip[0], ip[1], ip[2]]
+            if data.ndim > 3 :
+                values[i] = data[:, ip[0], ip[1], ip[2]]
+            else :
+                values[i] = data[ip[0], ip[1], ip[2]]
         return values
 
-    def get_grid(self, gaps = 1.0, **kwargs):
+    def get_grid(self, gaps = 2.0, **kwargs):
         nr = (self.subcell.grid.latparas / gaps).astype('int32')
         self.nr = nr
         return nr
@@ -211,8 +236,17 @@ class EngineMBX(Engine):
         inputs['positions'] = subcell.ions.pos.to_cart().ravel()/self.units['length']
         inputs['monomer_names'] = monomer_names
         inputs['monomer_natoms'] = monomer_natoms
+        inputs['zval'] = subcell.ions.Zval
         if inputs.get('box', None) is None :
             inputs['box'] = subcell.ions.pos.cell.lattice.ravel()/self.units['length']
 
         self.subcell = subcell
+
+        if self.comm.rank > 0 :
+            inputs['labels'] = ['Li']
+            inputs['positions'] = [0.0, 0.0, 0.0]
+            inputs['monomer_names'] = ['li+']
+            inputs['monomer_natoms'] = [1]
+            inputs['zval'] = {'Li' : 3.0}
+            inputs['box'] = [10, 0, 0, 0, 10, 0, 0, 0, 10]
         return inputs

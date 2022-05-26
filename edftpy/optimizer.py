@@ -96,9 +96,22 @@ class Optimization(object):
         sprint(pretty_dict_str)
 
     def get_energy(self, density = None, total_energy= None, update = True, olevel = 0, **kwargs):
+        others = []
+        if self.sdft == 'qmmm' :
+            eint = self.get_energy_qmmm_int(olevel = olevel)
+            others.append(eint)
         elist = get_total_energies(gsystem = self.gsystem, drivers = self.drivers, density = density,
-                total_energy= total_energy, update = update, olevel = olevel, **kwargs)
+                total_energy= total_energy, update = update, olevel = olevel, others = others, **kwargs)
         return sum(elist)
+
+    def get_energy_qmmm_int(self, olevel = 0, **kwargs):
+        if olevel > 0 :
+            eint = 0.0
+        else :
+            eint = self.gsystem_qmmm.total_evaluator(self.gsystem_qmmm.density, calcType = ('E'), olevel = olevel).energy
+            eint = eint - self.gsystem.total_evaluator(self.gsystem.density, calcType = ('E'), olevel = olevel).energy
+            eint = eint - self.gsystem_mm.total_evaluator(self.gsystem_mm.density, calcType = ('E'), olevel = olevel).energy
+        return eint
 
     def update_density(self, update = None, update_coef = False, **kwargs):
         if self.mixer is not None : update = None
@@ -617,12 +630,40 @@ class Optimization(object):
                 self.gsystem.sub_value(pot_qm, global_potential, isub = isub)
                 # if driver is not None :
                     # global_potential.write('0_mm_pot.xsf', ions = self.gsystem_qmmm.ions)
+                    # extfield = global_potential.gradient()
+                    # extfield.write('0_mm_field.xsf', ions = self.gsystem_qmmm.ions)
         # self.gsystem_qmmm.density.write('0_qmmm.xsf', ions = self.gsystem_qmmm.ions)
         # self.gsystem.density.write('0_qm.xsf', ions = self.gsystem.ions)
         # self.gsystem_mm.density.write('0_mm.xsf', ions = self.gsystem_mm.ions)
         # self.gsystem_qmmm.total_evaluator.embed_potential.write('0_pot.xsf', ions = self.gsystem_qmmm.ions)
         # pot_qm.write('0_1_pot.xsf', ions = self.gsystem_qmmm.ions)
         # exit()
+
+        # if self.iter > 0 :
+            # self.gsystem_mm.density.write('0_mm.xsf', ions = self.gsystem_mm.ions)
+            # embed_keys = ['XC', 'KE']
+            # pot_mm  = self.gsystem_mm.total_evaluator.get_total_functional(self.density, calcType = ('V'), embed_keys = embed_keys).potential
+            # for isub in range(self.nsub):
+                # driver = self.drivers[isub]
+                # if driver is None :
+                    # global_potential = None
+                # else :
+                    # if driver.evaluator.global_potential is None :
+                        # driver.evaluator.global_potential = np.zeros_like(driver.density)
+                    # global_potential = driver.evaluator.global_potential
+
+                # technique = self._get_driver_technique(driver)
+
+                # if technique == 'MM' :
+                    # from edftpy.utils.math import grid_map_data
+                    # self.gsystem_mm.sub_value(pot_mm, global_potential, isub = isub)
+                    # if driver is not None :
+                        # tmp = grid_map_data(global_potential, grid = driver.grid_driver)
+                        # tmp.write('0_pseudo_pot.xsf', ions = self.gsystem_mm.ions)
+                        # pot = driver.engine.get_potential(grid = driver.grid_driver)
+                        # pot.write('0_mm_pot.xsf', ions = self.gsystem_mm.ions)
+            # exit()
+
         return
 
     def update_qmmm_density(self, **kwargs):
@@ -827,6 +868,16 @@ class Optimization(object):
         forces = get_total_forces(drivers = self.drivers, gsystem = self.gsystem, **kwargs)
         return forces
 
+    def get_forces_qmmm_eint(self, **kwargs):
+        forces_qmmm = self.gsystem_qmmm.get_forces(**kwargs).copy()
+        forces_qm = self.gsystem.get_forces(**kwargs)
+        forces_mm = self.gsystem_mm.get_forces(**kwargs)
+        index_mm = self.gsystem_mm.ions_index
+        index_qm = self.gsystem.ions_index
+        forces_qmmm[index_qm] -= forces_qm
+        forces_qmmm[index_mm] -= forces_mm
+        return forces_qmmm
+
     def get_stress(self, **kwargs):
         stress = get_total_stress(drivers = self.drivers, gsystem = self.gsystem, **kwargs)
         return stress
@@ -854,7 +905,11 @@ class Optimization(object):
             edict = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True, olevel = 0)
             total_energy = edict.pop('TOTAL').energy
 
-        elist = get_total_energies(gsystem = self.gsystem, drivers = self.drivers, total_energy = total_energy, olevel = 0)
+        others = []
+        # if self.sdft == 'qmmm' :
+            # eint = self.get_energy_qmmm_int(olevel = 0)
+            # others.append(eint)
+        elist = get_total_energies(gsystem = self.gsystem, drivers = self.drivers, total_energy = total_energy, olevel = 0, others = others)
         etotal = sum(elist)
 
         keys = list(edict.keys())
@@ -867,11 +922,29 @@ class Optimization(object):
         ep_w = OrderedDict()
         for i, key in sorted(enumerate(keys), key=lambda x:x[1]):
             ep_w[key] = values[i]
-        for i, item in enumerate(elist[1:]):
+        for i, item in enumerate(elist[1:len(elist)-len(others)]):
             key = "SUB_"+str(i)
             ep_w[key] = item
-        key = "TOTAL"
-        ep_w[key] = etotal
+        #-----------------------------------------------------------------------
+        if self.sdft == 'qmmm' :
+            ep_w['EINT'] = elist[-1]
+            edict_qmmm = self.gsystem_qmmm.total_evaluator(self.gsystem_qmmm.density, calcType = ['E'], split = True, olevel = 0)
+            edict_qm = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True, olevel = 0)
+            edict_mm = self.gsystem_mm.total_evaluator(self.gsystem_mm.density, calcType = ['E'], split = True, olevel = 0)
+            vsum = self.gsystem.density.mp.vsum
+            sprint('EINT->')
+            sprint("{:>12s} energy: {:22s} {:22s} {:22s} {:22s}".format('Eint', 'QMMM', 'QM', 'MM', 'EINT'))
+            eint = 0
+            for k in edict_qmmm.keys():
+                e0 = vsum(edict_qmmm[k].energy)
+                e1 = vsum(edict_qm[k].energy)
+                e2 = vsum(edict_mm[k].energy)
+                sprint("{:>12s} energy: {:22.15E} {:22.15E} {:22.15E} {:22.15E}".format(k, e0, e1, e2, e0 - e1 - e2))
+                eint += e0 - e1 - e2
+            sprint('EINT<-')
+            ep_w['EINT'] = eint*0.5
+        #-----------------------------------------------------------------------
+        ep_w["TOTAL"] = etotal
         sprint(format("Energy information", "-^80"))
         for key, value in ep_w.items():
             sprint("{:>12s} energy: {:22.15E} (eV) = {:22.15E} (a.u.)".format(key, value* ENERGY_CONV["Hartree"]["eV"], value))

@@ -256,27 +256,38 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
                 index_mm.extend(ind)
         #MM part
         ions_mm = ions[index_mm]
-        gsystem_mm = config2gsystem(config, ions = ions_mm, graphtopo=graphtopo, grid = gsystem.grid, **kwargs)
+        gsystem_mm = config2gsystem(config, ions = ions, graphtopo=graphtopo, grid = gsystem.grid, index = index_mm, **kwargs)
         total_evaluator_mm = config2total_evaluator(config, ions_mm, grid, pplist = pplist)
         gsystem_mm.total_evaluator = total_evaluator_mm
         #QM part
         index_qm = np.delete(indices, index_mm)
         ions_qm = ions[index_qm]
-        gsystem_qm = config2gsystem(config, ions = ions_qm, graphtopo=graphtopo, grid = gsystem.grid, **kwargs)
+        gsystem_qm = config2gsystem(config, ions = ions, graphtopo=graphtopo, grid = gsystem.grid, index = index_qm, **kwargs)
         total_evaluator_qm = config2total_evaluator(config, ions_qm, grid, pplist = pplist)
         gsystem_qm.total_evaluator = total_evaluator_qm
         #Swap QMMM and QM
         opt.gsystem_qmmm = opt.gsystem
         opt.gsystem = gsystem_qm
         opt.gsystem_mm = gsystem_mm
-        #interaction part only contain Vloc and Hartree
-        # keys=list(opt.gsystem_mm.total_evaluator.funcdicts.keys())
-        # for key in keys :
-            # if key not in ['PSEUDO', "HARTREE"] : del opt.gsystem_mm.total_evaluator.funcdicts[key]
-        # set zval
-        for driver in opt.drivers:
-            if driver is not None and driver.technique== 'MM' :
-                driver.engine.build_zval(ions_mm.Zval)
+    # for driver in opt.drivers:
+        # if driver is not None and driver.technique== 'MM' :
+            #-----------------------------------------------------------------------test
+            # from edftpy.utils.common import Atoms, Field
+            # charges, positions_c = driver.engine.get_charges()
+            # charges = driver.engine.points_zval - charges
+            # # pot = driver.engine.get_potential(grid = driver.grid_driver)
+            # # pot = Field(grid = driver.grid_driver, data = pot)
+            # # pot.write('0_mm_pot.xsf', ions = driver.subcell.ions)
+            # # atomicd = AtomicDensity(pseudo = opt.gsystem_mm.total_evaluator.pseudo, comm = driver.comm)
+            # atomicd = AtomicDensity(pseudo = opt.gsystem.total_evaluator.pseudo, comm = driver.comm)
+            # atomicd._arho['O'] *= charges[3] / atomicd._arho['O'][0]
+            # atomicd._arho['H'] *= charges[1] / atomicd._arho['H'][0]
+            # ions = Atoms(['H', 'H', 'O'], zvals =driver.subcell.ions.Zval, pos=positions_c[1:], cell = driver.subcell.grid.lattice, basis = 'Cartesian')
+            # rho = atomicd.guess_rho(ions, driver.subcell.grid)
+
+            # # rho = atomicd.guess_rho(driver.subcell.ions, driver.subcell.grid)
+            # rho.write('0_atomic_mm.xsf', ions = driver.subcell.ions)
+            #-----------------------------------------------------------------------test
     return opt
 
 def config2ions(config, ions = None, keysys = 'GSYSTEM', **kwargs):
@@ -341,7 +352,7 @@ def config2total_embed(config, driver = None, optimizer = None, **kwargs):
         driver.total_embed = total_embed
     return driver
 
-def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell_change = None, grid = None, **kwargs):
+def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell_change = None, grid = None, index = None, **kwargs):
     ############################## Gsystem ##############################
     keysys = "GSYSTEM"
 
@@ -363,7 +374,7 @@ def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell
         mp_global = gsystem.grid.mp
     else :
         mp_global = MP(comm = graphtopo.comm, parallel = graphtopo.is_mpi, decomposition = graphtopo.decomposition)
-        gsystem = GlobalCell(ions, grid = grid, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo, nspin = nspin)
+        gsystem = GlobalCell(ions, grid = grid, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo, nspin = nspin, index = index)
 
     if density_file : file2density(density_file, gsystem.density)
     return gsystem

@@ -197,6 +197,7 @@ class EngineQE(Engine):
 
     def check_convergence(self, **kwargs):
         return qepy.control_flags.get_conv_elec()
+
     def set_dnorm(self, dnorm, **kwargs):
         self.embed.dnorm = dnorm
 

@@ -316,8 +316,7 @@ class TotalEvaluator(Evaluator):
             obj = Functional(name = 'ZERO', potential = self.embed_potential)
             if 'E' in calcType :
                 obj.energy = np.sum(rho * self.embed_potential) * rho.grid.dV
-
-        if 'E' in calcType and gather:
-            obj.energy = rho.mp.vsum(obj.energy)
+            if gather:
+                obj.energy = rho.mp.vsum(obj.energy)
 
         return obj
