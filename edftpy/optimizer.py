@@ -303,8 +303,6 @@ class Optimization(object):
                 core_density = None
             else :
                 density = driver.density
-                if driver.gaussian_density is None :
-                    driver.gaussian_density = driver.core_density
                 gaussian_density = driver.gaussian_density
                 core_density = driver.core_density
             technique = self._get_driver_technique(driver)
