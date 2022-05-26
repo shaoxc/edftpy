@@ -787,6 +787,10 @@ def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = 
             subcell.density[:] = EngineDFTpy.dftpy_opt(subcell.ions, subcell.density, pplist, pseudo = pseudo)
         else :
             pass
+    #-----------------------------------------------------------------------
+    atomicd = AtomicDensity(pseudo = pseudo, comm = subcell.grid.mp.comm, is_core = True)
+    atomicd.guess_rho(subcell.ions, subcell.grid, rho=subcell.core_density)
+    #-----------------------------------------------------------------------
 
     return subcell
 

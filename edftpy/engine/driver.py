@@ -96,8 +96,6 @@ class DriverKS(Driver):
         if hasattr(self.mixer, 'restart') : self.mixer.restart()
         if subcell is not None : self.subcell = subcell
 
-        self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
-
         if not first :
             self.engine.update_ions(self.subcell, update)
             if update == 0 :
@@ -123,13 +121,24 @@ class DriverKS(Driver):
         else :
             core_charge = self.atmp2
         self.engine.get_rho_core(core_charge)
-        self.core_density= self._format_field_invert(core_charge)
+        self.core_density_sub = self.subcell.core_density
 
-        self.core_density_sub = Field(grid = self.grid_sub)
+        # Use engine core_density
+        self.core_density = self._format_field_invert(core_charge)
         self.grid_sub.scatter(self.core_density, out = self.core_density_sub)
+        #Use eDFTpy core density------------------------------------------------
+        # self.core_density = self.core_density_sub.gather(grid = self.grid)
+        #-----------------------------------------------------------------------
         if self.comm.rank == 0 :
             fstr = f'ncharge({self.prefix}): {self._iter} {self.density.integral()}'
             sprint(fstr, comm = self.comm)
+
+        if self.subcell.gaussian_density is None :
+            self.subcell.gaussian_density = self.subcell.core_density
+        self.gaussian_density = self.get_gaussian_density(self.subcell, grid = self.grid)
+        #
+        self.density_sub = self.subcell.density
+        self.gaussian_density_sub = self.subcell.gaussian_density
         return
 
     @property
@@ -143,10 +152,7 @@ class DriverKS(Driver):
 
     @property
     def grid_sub(self):
-        if self._grid_sub is None :
-            mp = MP(comm = self.comm, decomposition = self.subcell.grid.mp.decomposition)
-            self._grid_sub = Grid(self.subcell.grid.lattice, self.subcell.grid.nrR, direct = True, mp = mp)
-        return self._grid_sub
+        return self.subcell.grid
 
     @print2file()
     def get_grid_driver(self, grid):
@@ -184,9 +190,6 @@ class DriverKS(Driver):
             self.prev_density = self.atmp2
             self.charge = self.atmp2
             self.prev_charge = self.atmp2
-
-        self.density_sub = Field(grid = self.grid_sub, rank=self.nspin)
-        self.gaussian_density_sub = Field(grid = self.grid_sub)
 
         if rho_ini is None :
             if density_initial and density_initial != 'temp' :
@@ -250,8 +253,6 @@ class DriverKS(Driver):
     @print2file()
     def _get_extpot_mpi(self, with_global = True, **kwargs):
         self.grid_sub.scatter(self.density, out = self.density_sub)
-        if self.gaussian_density is not None :
-            self.grid_sub.scatter(self.gaussian_density, out = self.gaussian_density_sub)
         self.evaluator.get_embed_potential(self.density_sub, gaussian_density = self.gaussian_density_sub, gather = True, with_global = with_global)
         extpot = self.evaluator.embed_potential
         return extpot

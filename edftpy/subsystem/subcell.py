@@ -24,6 +24,8 @@ class SubCell(object):
             self._gen_gaussian_density(gaussian_options)
             # self._gen_gaussian_density_recip(gaussian_options)
 
+        self.core_density = Field(grid=self.grid, rank=1, direct=True)
+
     @property
     def grid(self):
         if self._grid is None:
@@ -59,6 +61,10 @@ class SubCell(object):
     @property
     def gaussian_density(self):
         return self._gaussian_density
+
+    @gaussian_density.setter
+    def gaussian_density(self, value):
+        self._gaussian_density = value
 
     @property
     def shift(self):
