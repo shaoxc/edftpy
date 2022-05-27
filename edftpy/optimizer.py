@@ -670,16 +670,26 @@ class Optimization(object):
             for i, driver in enumerate(self.drivers):
                 if driver is None :
                     density = None
+                    core_density = None
                 else :
                     density = driver.density
+                    core_density = driver.core_density
                 technique = self._get_driver_technique(driver)
                 if technique in ['MM'] :
                     self.gsystem_mm.update_density(density, isub = i)
+                    #-----------------------------------------------------------------------
+                    # Only works for one MM subsystem, and only need once.
+                    self.gsystem_mm.update_density(core_density, isub = i, core = True, overwrite = True)
+                    #-----------------------------------------------------------------------
             #
             self.gsystem_qmmm.density[:] = self.gsystem.density + self.gsystem_mm.density
+            # Only need once, but for simple
+            self.gsystem_qmmm.core_density[:] = self.gsystem.core_density + self.gsystem_mm.core_density
             #
             if 'XC' in self.gsystem_qmmm.total_evaluator.funcdicts :
-                self.gsystem_qmmm.total_evaluator.funcdicts['XC'].core_density = self.gsystem.core_density
+                self.gsystem_qmmm.total_evaluator.funcdicts['XC'].core_density = self.gsystem_qmmm.core_density
+            if 'XC' in self.gsystem_mm.total_evaluator.funcdicts :
+                self.gsystem_mm.total_evaluator.funcdicts['XC'].core_density = self.gsystem_mm.core_density
 
     def build_qmmm_eint(self, calcType = ('E', 'V'), **kwargs):
         embed_keys = ['PSEUDO', 'HARTREE']

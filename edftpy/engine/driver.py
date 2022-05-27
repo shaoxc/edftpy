@@ -581,7 +581,6 @@ class DriverMM(DriverKS):
             self.charge = self.atmp2
             self.prev_charge = self.atmp2
 
-        self.density_sub = Field(grid = self.grid_sub, rank=self.nspin)
         self.density_charge_sub = Field(grid = self.grid_sub, rank=self.nspin)
 
         charges, positions_c = self.engine.get_charges()
@@ -602,6 +601,10 @@ class DriverMM(DriverKS):
                     density = self.density_charge_sub, add = True, deriv = 0)
         sprint('charges :\n', charges, comm = self.comm)
         # self.density_charge_sub.write('1_pseudo_density_charge.xsf', ions = self.subcell.ions)
+        self.density_sub = self.subcell.density
+        self.gaussian_density_sub = self.subcell.gaussian_density
+        self.core_density_sub = self.subcell.core_density
+        self.core_density = self.core_density_sub.gather(grid = self.grid)
 
     @print2file()
     def get_energy(self, olevel = 0, **kwargs):
@@ -634,10 +637,6 @@ class DriverMM(DriverKS):
 
     @print2file()
     def get_density(self, rcut = 10, sigma = 0.6, **kwargs):
-        if self.comm.rank == 0 :
-            from edftpy.io import read_density
-            self.density[:] = read_density('0_mm.xsf')
-        return self.density
         #
         self.engine.set_extpot(self.evaluator.global_potential / self.engine.units['energy'], **kwargs)
         #
