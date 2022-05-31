@@ -5,6 +5,7 @@ from dftpy.constants import LEN_CONV
 
 from edftpy.engine.engine import Engine
 from edftpy.io import print2file
+from edftpy.mpi import sprint
 
 try:
     __version__ = mbx.__version__
@@ -42,7 +43,7 @@ class EngineMBX(Engine):
     Note :
         Only works for serial.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, xc = 'mbx', **kwargs):
         units = kwargs.get('units', {})
         # units['length'] = units.get('length', LEN_CONV["Angstrom"]["Bohr"])
         # # units['length'] = units.get('length', mbx.MBXLENGTH2AU)
@@ -52,6 +53,9 @@ class EngineMBX(Engine):
         units['order'] = 'C'
         kwargs['units'] = units
         super().__init__(**kwargs)
+        self.xc = xc
+        if isinstance(self.xc, dict):
+            self.xc = self.xc.get('xc', 'mbx') or 'mbx'
 
     def get_forces(self, **kwargs):
         force = None
@@ -61,7 +65,7 @@ class EngineMBX(Engine):
         if olevel == 0 :
             energy = mbx.get_energy_pbc_nograd(self.positions, len(self.labels), self.box, units = 'au')
             e2 = mbx.get_external_field_contribution_to_energy(units = 'au')
-            print('mbx -> energies', energy, e2, energy - e2, flush = True)
+            sprint('mbx -> energies', energy, e2, energy - e2, comm = self.comm)
             energy = energy - e2
         else :
             energy = 0.0
@@ -82,8 +86,13 @@ class EngineMBX(Engine):
         #-----------------------------------------------------------------------
         monomer_names = self.monomer_names.copy()
         for i in range(len(monomer_names)):
-            if monomer_names[i] == 'h2o' :
-                monomer_names[i] = 'mbpbe'
+            if self.xc == 'pbe' :
+                if monomer_names[i] == 'h2o' :
+                    monomer_names[i] = 'mbpbe'
+            elif self.xc == 'mbx' :
+                pass
+            else :
+                raise AttributeError(f"Sorry, MBX only support 'MBX' and 'PBE' xc, not {self.xc}.")
         mbx.initialize_system(self.positions, self.monomer_natoms, self.labels, monomer_names, self.inputfile, units = 'au')
         #-----------------------------------------------------------------------
         self.npoints = len(self.labels)

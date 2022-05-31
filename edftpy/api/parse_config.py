@@ -558,6 +558,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
     prefix = config[keysys]["prefix"]
     kpoints = config[keysys]["kpoints"]
     exttype = config[keysys]["exttype"]
+    xc_options = config[keysys]["exc"].copy()
     opt_options = config[keysys]["opt"].copy()
     density_initial = config[keysys]["density"]["initial"]
     density_file = config[keysys]["density"]["file"]
@@ -630,6 +631,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
             'restart' : restart,
             'append' : append,
             'options' : opt_options,
+            'xc' : xc_options,
             'density_initial' : density_initial
             }
 
@@ -892,7 +894,7 @@ def get_environ_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, m
 
 def get_mbx_driver(pplist, margs = {}, **kwargs):
     from edftpy.engine.engine_mbx import EngineMBX
-    engine = EngineMBX()
+    engine = EngineMBX(xc = margs.get('xc'))
     driver = DriverMM(**margs, engine = engine)
     return driver
 

@@ -104,13 +104,21 @@ class Optimization(object):
                 total_energy= total_energy, update = update, olevel = olevel, others = others, **kwargs)
         return sum(elist)
 
-    def get_energy_qmmm_int(self, olevel = 0, **kwargs):
+    def get_energy_qmmm_int(self, olevel = 0, split = False, **kwargs):
         if olevel > 0 :
             eint = 0.0
         else :
-            eint = self.gsystem_qmmm.total_evaluator(self.gsystem_qmmm.density, calcType = ('E'), olevel = olevel).energy
-            eint = eint - self.gsystem.total_evaluator(self.gsystem.density, calcType = ('E'), olevel = olevel).energy
-            eint = eint - self.gsystem_mm.total_evaluator(self.gsystem_mm.density, calcType = ('E'), olevel = olevel).energy
+            edict_qmmm = self.gsystem_qmmm.total_evaluator(self.gsystem_qmmm.density, calcType = ['E'], split = split, olevel = 0)
+            edict_qm = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = split, olevel = 0)
+            edict_mm = self.gsystem_mm.total_evaluator(self.gsystem_mm.density, calcType = ['E'], split = split, olevel = 0)
+            if split :
+                eint = {}
+                keys_qmmm = list(edict_qmmm.keys())
+                for k in keys_qmmm :
+                    v = [edict_qmmm[k].energy, edict_qm[k].energy, edict_mm[k].energy]
+                    eint[k] = v
+            else :
+                eint = edict_qmmm.energy - edict_qm.energy - edict_mm.energy
         return eint
 
     def update_density(self, update = None, update_coef = False, **kwargs):
@@ -914,9 +922,11 @@ class Optimization(object):
             total_energy = edict.pop('TOTAL').energy
 
         others = []
-        # if self.sdft == 'qmmm' :
-            # eint = self.get_energy_qmmm_int(olevel = 0)
-            # others.append(eint)
+        if self.sdft == 'qmmm' :
+            edict_qmmm = self.get_energy_qmmm_int(olevel = 0, split = True)
+            v = edict_qmmm['TOTAL']
+            eint = v[0]-v[1]-v[2]
+            others.append(eint)
         elist = get_total_energies(gsystem = self.gsystem, drivers = self.drivers, total_energy = total_energy, olevel = 0, others = others)
         etotal = sum(elist)
 
@@ -934,29 +944,25 @@ class Optimization(object):
             key = "SUB_"+str(i)
             ep_w[key] = item
         #-----------------------------------------------------------------------
-        if self.sdft == 'qmmm' :
-            ep_w['EINT'] = elist[-1]
-            edict_qmmm = self.gsystem_qmmm.total_evaluator(self.gsystem_qmmm.density, calcType = ['E'], split = True, olevel = 0)
-            edict_qm = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = True, olevel = 0)
-            edict_mm = self.gsystem_mm.total_evaluator(self.gsystem_mm.density, calcType = ['E'], split = True, olevel = 0)
-            vsum = self.gsystem.density.mp.vsum
-            sprint('EINT->')
-            sprint("{:>12s} energy: {:22s} {:22s} {:22s} {:22s}".format('Eint', 'QMMM', 'QM', 'MM', 'EINT'))
-            eint = 0
-            for k in edict_qmmm.keys():
-                e0 = vsum(edict_qmmm[k].energy)
-                e1 = vsum(edict_qm[k].energy)
-                e2 = vsum(edict_mm[k].energy)
-                sprint("{:>12s} energy: {:22.15E} {:22.15E} {:22.15E} {:22.15E}".format(k, e0, e1, e2, e0 - e1 - e2))
-                eint += e0 - e1 - e2
-            sprint('EINT<-')
-            ep_w['EINT'] = eint*0.5
+        if self.sdft == 'qmmm' : ep_w['EINT'] = elist[-1]
         #-----------------------------------------------------------------------
         ep_w["TOTAL"] = etotal
         sprint(format("Energy information", "-^80"))
         for key, value in ep_w.items():
             sprint("{:>12s} energy: {:22.15E} (eV) = {:22.15E} (a.u.)".format(key, value* ENERGY_CONV["Hartree"]["eV"], value))
         sprint("-" * 80)
+        #-----------------------------------------------------------------------
+        if self.sdft == 'qmmm' :
+            keys_qmmm = list(edict_qmmm.keys())
+            values_qmmm = [edict_qmmm[k] for k in keys_qmmm]
+            values_qmmm = self.gsystem.grid.mp.vsum(values_qmmm)
+            sprint('QMMM EINT energy->')
+            sprint("{:>20s} {:22s} {:22s} {:22s} {:22s}".format(' ', 'QMMM', 'QM', 'MM', 'EINT'))
+            for k, v in zip(keys_qmmm, values_qmmm):
+                sprint("{:>12s} energy: {:22.15E} {:22.15E} {:22.15E} {:22.15E}".format(
+                    k, v[0], v[1], v[2], v[0] - v[1] - v[2]))
+            sprint('QMMM EINT energy <-')
+        #-----------------------------------------------------------------------
         return ep_w
 
     def end_scf(self):
