@@ -396,6 +396,7 @@ class Optimization(object):
             fmt = "{:>10s}{:<8d}{:<24.12E}{:<16.6E}{:<10.2E}{:<10.2E}{:<16.6E}".format("Embed: ", self.iter, energy, dE, d_ehart, d_res, timecost - time_begin)
             sprint(seq +'\n' + fmt +'\n' + seq)
             # Only check when accurately calculate the energy
+            # break
             if olevel == 0 and self.check_converge_energy(energy_history):
                 sprint("#### Subsystem Density Optimization Converged (Energy) In {} Iterations ####".format(it+1))
                 self.converged = True
@@ -959,7 +960,7 @@ class Optimization(object):
             sprint('QMMM EINT energy->')
             sprint("{:>20s} {:22s} {:22s} {:22s} {:22s}".format(' ', 'QMMM', 'QM', 'MM', 'EINT'))
             for k, v in zip(keys_qmmm, values_qmmm):
-                sprint("{:>12s} energy: {:22.15E} {:22.15E} {:22.15E} {:22.15E}".format(
+                sprint("{:>12s} (QMMM): {:22.15E} {:22.15E} {:22.15E} {:22.15E}".format(
                     k, v[0], v[1], v[2], v[0] - v[1] - v[2]))
             sprint('QMMM EINT energy <-')
         #-----------------------------------------------------------------------

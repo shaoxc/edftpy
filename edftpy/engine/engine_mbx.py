@@ -151,6 +151,20 @@ class EngineMBX(Engine):
             self.points_zval = np.array(zval)
         return self.points_zval
 
+    def get_m_sites(self):
+        index = []
+        index_m = []
+        pos = []
+        ia = 0
+        for im, name in enumerate(self.monomer_names) :
+            if name == 'h2o' :
+                index.append(ia)
+                ia += 3
+                index_m.append(ia + len(index_m))
+            else :
+                ia += self.monomer_natoms[im]
+        return self.points_mm[index_m], index_m, index
+
     @print2file()
     def update_ions(self, subcell=None, **kwargs) :
         mbx.set_coordinates(self.positions, len(self.labels), units = 'au')

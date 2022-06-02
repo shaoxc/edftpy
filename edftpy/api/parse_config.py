@@ -269,6 +269,39 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         opt.gsystem_qmmm = opt.gsystem
         opt.gsystem = gsystem_qm
         opt.gsystem_mm = gsystem_mm
+        #-----------------------------------------------------------------------
+        #! Only for one MM subsystem
+        ions_qmmm = ions.copy()
+        ions_mm = ions[index_mm]
+        rank_d = 0
+        pos_m, inds_m, inds_o = None, None, None
+        for driver in opt.drivers:
+            if driver is not None and driver.technique== 'MM' :
+                pos_m, inds_m, inds_o = driver.engine.get_m_sites()
+                if driver.comm.rank == 0 :
+                    rank_d = opt.gsystem.graphtopo.comm.rank
+        rank_d = opt.gsystem.graphtopo.comm.allreduce(rank_d)
+        pos_m  = opt.gsystem.graphtopo.comm.bcast(pos_m, root = rank_d)
+        inds_m = opt.gsystem.graphtopo.comm.bcast(inds_m, root = rank_d)
+        inds_o = opt.gsystem.graphtopo.comm.bcast(inds_o, root = rank_d)
+        # print('rank', opt.gsystem.graphtopo.comm.rank, rank_d, inds_m, pos_m)
+        if len(pos_m) > 0 :
+            ions_mm.pos[inds_o] = pos_m
+            index_mm = opt.gsystem_mm.ions_index
+            ions_qmmm.pos[index_mm] = ions_mm.pos
+
+        def update_evaluator_ions(evaluator, ions, grid = None, linearii = True):
+            pseudo = evaluator.funcdicts['PSEUDO']
+            if grid is None : grid = pseudo.grid
+            ewald = Ewald(ions=ions, grid = grid, PME=linearii)
+            evaluator.funcdicts['EWALD'] = ewald
+            pseudo.restart(grid=grid, ions=ions, full=False)
+            return evaluator
+
+        linearii = config["MATH"]["linearii"]
+        opt.gsystem_qmmm.total_evaluator = update_evaluator_ions(opt.gsystem_qmmm.total_evaluator, ions_qmmm, linearii = linearii)
+        opt.gsystem_mm.total_evaluator = update_evaluator_ions(opt.gsystem_mm.total_evaluator, ions_mm, linearii = linearii)
+        #-----------------------------------------------------------------------
     # for driver in opt.drivers:
         # if driver is not None and driver.technique== 'MM' :
             #-----------------------------------------------------------------------test
