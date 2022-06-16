@@ -6,6 +6,9 @@ Optimization of Density with Heterogeneous susbsystems
 
 This tutorial assumes the user has already finished the :ref:`Optimization of Density<optimize>` tutorial, using the automatic definition of subsystems when you have the same chemical nature for each subsystem or have previous experience setting up QE calculations. This tutorial will focus on the details, to run a calculation that requires including a manual definition of subsystems combined with the adaptive definition of subsystems to run an SCF calculation of a global system composed of a binary salt (NaCl) molecule surrounded by a water dimer. 
 
+.. note::
+   To avoid mixing some files, we strongly recommend setup each calculation (e.g. Optimization of density, relaxation of a structure of an MD simulation) in separate folders.
+
 Input Files
 -----------
 

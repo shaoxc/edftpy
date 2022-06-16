@@ -8,6 +8,9 @@ This tutorial will guide the user through the general workflow to perform a rela
 
 .. _ASE: https://gitlab.com/ase/ase
 
+.. note::
+   To avoid mixing some files, we strongly recommend setup each calculation (e.g. Optimization of density, relaxation of a structure of an MD simulation) in separate folders.
+
 Input files
 -----------
 

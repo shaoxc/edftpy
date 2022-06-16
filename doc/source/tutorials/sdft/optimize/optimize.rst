@@ -7,6 +7,9 @@ Optimization of Density
 Input Files
 -----------
 
+.. note::
+   To avoid mixing some files, we strongly recommend setup each calculation (e.g. Optimization of density, relaxation of a structure of an MD simulation) in separate folders.
+
 System Coordinates
 ~~~~~~~~~~~~~~~~~~
 

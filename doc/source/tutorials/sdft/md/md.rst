@@ -6,7 +6,8 @@ Molecular Dynamics Simulation
 
 This tutorial will guide the user through the general workflow to perform a molecular dynamicsi (MD) simulation for a water dimer by using python based packages such as eDFTpy and the Atomic Simulation Environment (ASE)
 
-Once you finished the relaxation step, you should move the `opt.xyz` file to your working folder for the molecular dynamics production, due to this coordination file will provide the initial geometry coordinates for the global system.
+.. note::
+   To avoid mixing some files, we strongly recommend setup each calculation (e.g. Optimization of density, relaxation of a structure of an MD simulation) in separate folders.
 
 Input Files
 -----------
@@ -20,7 +21,7 @@ Same as the relaxation  step, MD simulation also, requires a set of input files 
 
 Global system coordinates
 ~~~~~~~~~~~~~~~~~~~~~~~~~
-In this tutorial, we are going to use the optimized structure obtaned as an output from the relaxation of a structure tutorial `opt.xyz`.
+In this tutorial, we are going to use the optimized structure obtaned as an output from the relaxation of a structure tutorial `opt.xyz` however, this workflow in real conditions depends on the needs of each user, this means there may be times when the user does not have to perform a relaxation calculation prior to the molecular dynamics simulation.
 
 .. dropdown:: opt.xyz
 
@@ -102,20 +103,17 @@ Open the trajectory file with the ASE visualization tool by typing::
 
   $ ase gui md.traj
 
-Once you open MD trajectory file observe the step by step structure change and a graphic generator which includes a set of graphics check ASE's GUI_. Here we show the variation of the total energy (eV) in function of the number steps for two different  MD simulation of the  binary salt (NaCl) molecule surrounded by a water dimer, Using as an initial structure the `opt.xyz` from this tutorial by 20 steps (left) and the one which used the structure from `fmax=0.05` relaxation by 1000 steps (Right).
+Once you open MD trajectory file observe the step by step structure change and a graphic generator which includes a set of graphics check ASE's GUI_. Here we show the variation of the total energy (eV) in function of the number steps for the MD simulation of the  binary salt (NaCl) molecule surrounded by a water dimer by 20 steps of simulation. 
 
 .. |logo1| image:: /tutorials/sdft/md/files/energy-10.png
     :scale: 80%
 
-.. |logo2| image:: /tutorials/sdft/md/files/energy-100.png
-    :scale: 75%
-
 .. table:: Total energy Variation
    :align: center
 
-   +---------+---------+
-   | |logo1| | |logo2| |
-   +---------+---------+
+   +---------+
+   | |logo1| | 
+   +---------+
 
 .. note::
    For the purposes of this tutorial, the configured input file only includes 20 steps, otherwise the wait time would be proportional to a couple of days using four (4) cores.
