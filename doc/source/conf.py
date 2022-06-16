@@ -18,7 +18,8 @@ extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.napoleon',
               'sphinx.ext.intersphinx',
               'sphinx.ext.graphviz',
-              'nbsphinx']
+              'nbsphinx',
+              'sphinx_panels']
 
 templates_path = ['templates']
 exclude_patterns = ['build']

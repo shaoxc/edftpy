@@ -58,3 +58,11 @@ Git:
 .. note::
 
     Because ``eDFTpy`` still under active development, non-backward-compatible changes can happen at any time. Please, clone the lastest release often.
+
+Step by Step Installation
+=========================
+
+Pavanello Reseach Group has developed and step by step installation guide which has the goal to help the new or non-experienced users with the installation of eDFTpy package tested in Ubuntu/Debian and CentOS/RedHat based systems. 
+
+Would you like to check the installation guide? :ref:`Click Here<step_by_step>`
+
