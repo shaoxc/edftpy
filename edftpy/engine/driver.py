@@ -443,7 +443,11 @@ class DriverKS(Driver):
             0 : all                              : 000
             1 : no ewald                         : 001
             2 : no local                         : 010
-            3 : no ewald and local               : 011
+            3 : no ewald + local                 : 011
+            4 : no nlcc                          : 100
+            5 : no ewald + nlcc                  : 101
+            6 : no local + nlcc                  : 110
+            7 : no ewald + local + nlcc          : 011
         """
         forces = self.engine.get_forces(icalc = icalc, **kwargs)
         forces *= self.engine.units['energy']/self.engine.units['length']

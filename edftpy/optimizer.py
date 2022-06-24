@@ -9,7 +9,7 @@ from dftpy.constants import ENERGY_CONV
 from edftpy.mpi import sprint
 from edftpy.properties import get_total_forces, get_total_stress, get_total_energies
 from edftpy.functional import hartree_energy
-from edftpy.utils.common import Grid, Field, Functional
+from edftpy.utils.common import Functional
 from edftpy.io import write
 from edftpy.engine.driver import DriverConstraint
 from edftpy.utils import get_mem_info, clean_variables
@@ -400,8 +400,8 @@ class Optimization(object):
                 Note :
                     self.gsystem.density is the original summed density
                     self.density is the mixed density
+                    All drivers have to have same embedding type
                 """
-                # Asuuming all drivers have same embedding type
                 for i, driver in enumerate(self.drivers):
                     if driver is None : continue
                     embed_keys = driver.evaluator.funcdicts.keys()
@@ -744,6 +744,28 @@ class Optimization(object):
         forces = get_total_forces(drivers = self.drivers, gsystem = self.gsystem, **kwargs)
         return forces
 
+    def get_forces_with_nad(self, **kwargs):
+        forces = get_total_forces(drivers = self.drivers, gsystem = self.gsystem, shift = False, **kwargs)
+        forces_nad = self.get_forces_nad_ke(**kwargs)
+        if forces_nad is not None :
+            forces_nad = self.gsystem.grid.mp.vsum(forces_nad)
+            sprint('Forces nad: \n', forces_nad)
+            forces += forces_nad
+        # shift 
+        forces_shift = np.mean(forces, axis = 0)
+        sprint('Forces shift :', forces_shift)
+        forces -= forces_shift
+        return forces
+
+    def get_forces_nad_ke(self, **kwargs):
+        """ Return the nonadditive forces of KE
+
+        All drivers have to have same embedding type
+        """
+        potential = self.get_potential_nad_ke(**kwargs)
+        forces_nad = self.gsystem.total_evaluator.funcdicts['PSEUDO'].calc_force_cc(pot = potential)
+        return forces_nad
+
     def get_stress(self, **kwargs):
         stress = get_total_stress(drivers = self.drivers, gsystem = self.gsystem, **kwargs)
         return stress
@@ -919,6 +941,30 @@ class Optimization(object):
                 sprint("!WARN Optimization is exit due to the maxtime in {} iterations ###".format(self.iter))
                 stop = True
         return stop
+
+    def get_potential_nad_ke(self, **kwargs):
+        calcType = ('V')
+        potential = self.gsystem.total_evaluator.funcdicts['KE'](self.gsystem.density + self.gsystem.gaussian_density, calcType = calcType).potential
+
+        for isub in range(self.nsub + len(self.of_drivers)):
+            if isub < self.nsub :
+                driver = self.drivers[isub]
+                if driver is not None and driver.technique == 'OF' : continue
+            else :
+                driver = self.of_drivers[isub - self.nsub]
+                isub = self.of_ids[isub - self.nsub]
+
+            if driver is None :
+                pot = None
+            else :
+                if hasattr(driver, 'density_sub'):
+                    pot = driver.evaluator.funcdicts['KE'](driver.density_sub, gaussian_density = driver.gaussian_density_sub, calcType = calcType).potential
+                    pot = pot.gather()
+                else :
+                    pot = driver.evaluator.funcdicts['KE'](driver.density, gaussian_density = driver.gaussian_density, calcType = calcType).potential
+                pot *= -1.0
+            self.gsystem.add_to_global(pot, potential, isub = isub)
+        return potential
 
 class MixOptimization(object):
     """

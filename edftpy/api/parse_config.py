@@ -392,6 +392,7 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
             pseudo = LocalPP(grid = grid, ions=ions, PP_list=pplist, PME=pme)
         hartree = Hartree()
         xc = XC(**xc_kwargs)
+        # xc = XC(pseudo = pseudo, **xc_kwargs)
         funcdicts = {'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
         if ke_kwargs['kedf'] is None or ke_kwargs['kedf'].lower().startswith('no'):
             pass

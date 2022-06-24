@@ -400,7 +400,8 @@ class GlobalCell(object):
                 f = value.forces
                 if hasattr(f, '__call__'):
                     f = f(self.density)
-                forces += f
+                if f is not None :
+                    forces += f
         return forces
 
     def get_stress(self, **kwargs):

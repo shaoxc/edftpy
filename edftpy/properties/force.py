@@ -1,9 +1,8 @@
 import numpy as np
-from dftpy.constants import FORCE_CONV, STRESS_CONV
 
 from edftpy.mpi import sprint
 
-def get_total_forces(drivers = None, gsystem = None, linearii=True):
+def get_total_forces(drivers = None, gsystem = None, linearii=True, shift = True):
     forces = gsystem.get_forces(linearii = linearii)
     # sprint('Total forces0 : \n', forces)
     for i, driver in enumerate(drivers):
@@ -18,9 +17,10 @@ def get_total_forces(drivers = None, gsystem = None, linearii=True):
         # sprint('fs\n', fs, comm = driver.comm)
     forces = gsystem.grid.mp.vsum(forces)
     #-----------------------------------------------------------------------
-    forces_shift = np.mean(forces, axis = 0)
-    sprint('Forces shift :', forces_shift)
-    forces -= forces_shift
+    if shift :
+        forces_shift = np.mean(forces, axis = 0)
+        sprint('Forces shift :', forces_shift)
+        forces -= forces_shift
     #-----------------------------------------------------------------------
     sprint('Total forces : \n', forces)
     return forces
