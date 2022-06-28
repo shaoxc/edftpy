@@ -177,6 +177,35 @@ class EngineDFTpy(Driver):
         self.evaluator_of.set_rest_rho(self.charge)
         return
 
+    def calc_extpot(self, sdft = 'sdft', **kwargs):
+        self.evaluator_of.embed_potential_prev, self.evaluator_of.embed_potential = \
+                self.evaluator_of.embed_potential, self.evaluator_of.embed_potential_prev
+        if self.options['opt_method'] == 'full' :
+            hamil = False
+        else :
+            hamil = True
+        if hamil or self._iter == 1 :
+            self._format_density()
+
+        if sdft == 'pdft' :
+            if not hamil :
+                raise AttributeError("Only 'part' and 'hamiltonian' method can use PDFT")
+            extpot = self.evaluator.embed_potential
+            #-----------------------------------------------------------------------
+            if self.exttype < 0 and self.gaussian_density_inter is not None:
+                kepot = KEDF(kedf = 'GGA', k_str = 'REVAPBEK').compute(self.gaussian_density_inter, calcType={'V'}).potential
+                # kepot = KEDF().compute(self.gaussian_density_inter, calcType={'V'}, kedf = 'GGA', k_str = 'REVAPBEK').potential
+                extpot += kepot
+            #-----------------------------------------------------------------------
+            extpot = self.get_extpot(extpot, mapping = True, with_global = False)
+        else :
+            self.get_extpot(with_all = hamil)
+
+        if self.evaluator_of.nfunc > 0 and hamil:
+            self.evaluator_of.embed_potential += self.evaluator_of(self.charge, calcType = ['V'], with_global = False, with_ke = False, with_embed = False).potential
+
+        return self.evaluator_of.embed_potential
+
     @print2file()
     def get_density(self, res_max = None, sdft = 'sdft', **kwargs):
         self._iter += 1
@@ -204,30 +233,7 @@ class EngineDFTpy(Driver):
             self.options['maxiter'] = 4
         sprint('econv', self._iter, self.options['econv'], comm=self.comm)
         #-----------------------------------------------------------------------
-        if self.options['opt_method'] == 'full' :
-            hamil = False
-        else :
-            hamil = True
-        if hamil or self._iter == 1 :
-            self._format_density()
-
-        if sdft == 'pdft' :
-            if not hamil :
-                raise AttributeError("Only 'part' and 'hamiltonian' method can use PDFT")
-            extpot = self.evaluator.embed_potential
-            #-----------------------------------------------------------------------
-            if self.exttype < 0 and self.gaussian_density_inter is not None:
-                kepot = KEDF(kedf = 'GGA', k_str = 'REVAPBEK').compute(self.gaussian_density_inter, calcType={'V'}).potential
-                # kepot = KEDF().compute(self.gaussian_density_inter, calcType={'V'}, kedf = 'GGA', k_str = 'REVAPBEK').potential
-                extpot += kepot
-            #-----------------------------------------------------------------------
-            extpot = self.get_extpot(extpot, mapping = True, with_global = False)
-        else :
-            self.get_extpot(with_all = hamil)
-
-        if self.evaluator_of.nfunc > 0 and hamil:
-            self.evaluator_of.embed_potential += self.evaluator_of(self.charge, calcType = ['V'], with_global = False, with_ke = False, with_embed = False).potential
-
+        self.calc_extpot(sdft=sdft, **kwargs)
         self.prev_charge[:] = self.charge
         #-----------------------------------------------------------------------
         if self.options['opt_method'] == 'full' :
@@ -363,8 +369,16 @@ class EngineDFTpy(Driver):
         results = self.fermi_level
         return results
 
-    def get_forces(self, **kwargs):
-        forces = np.zeros((self.subcell.ions.nat, 3))
+    @print2file()
+    def get_forces(self, sdft = 'sdft', **kwargs):
+        # forces = np.zeros((self.subcell.ions.nat, 3))
+        # return forces
+        self.calc_extpot(sdft = sdft, **kwargs)
+        pot = self.evaluator_of.embed_potential - self.evaluator_of.embed_potential_prev
+        pseudo = self.evaluator_of.gsystem.total_evaluator.PSEUDO
+        forces = pseudo.calc_force_cc(pot, pseudo.vlines_atomic, ions = self.subcell.ions)
+        ff = self.evaluator_of.gsystem.grid.mp.vsum(forces)
+        sprint('corr', ff, comm = self.comm)
         return forces
 
     def get_stress(self, **kwargs):

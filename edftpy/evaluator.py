@@ -161,6 +161,8 @@ class EvaluatorOF(Evaluator):
 
         self._gsystem = gsystem
         self._ke_evaluator = ke_evaluator
+        self.embed_potential = None
+        self.embed_potential_prev = None
 
     @property
     def gsystem(self):
@@ -188,17 +190,6 @@ class EvaluatorOF(Evaluator):
     @rest_rho.setter
     def rest_rho(self, value):
         self._rest_rho = value
-
-    @property
-    def embed_potential(self):
-        if self._embed_potential is not None:
-            return self._embed_potential
-        else:
-            raise AttributeError("Must specify embed_potential for EvaluatorOF")
-
-    @embed_potential.setter
-    def embed_potential(self, value):
-        self._embed_potential = value
 
     def set_rest_rho(self, subrho):
         self.rest_rho = - subrho
