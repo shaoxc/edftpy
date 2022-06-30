@@ -20,4 +20,5 @@ Contents
    tutorials/tutorials
    cmdline
    releases
+   faq
 
