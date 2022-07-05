@@ -605,6 +605,7 @@ class DriverMM(DriverKS):
         self.gaussian_density_sub = self.subcell.gaussian_density
         self.core_density_sub = self.subcell.core_density
         self.core_density = self.core_density_sub.gather(grid = self.grid)
+        self.density_charge = self.density_charge_sub.gather(grid = self.grid)
 
     @print2file()
     def get_energy(self, olevel = 0, **kwargs):
@@ -648,8 +649,8 @@ class DriverMM(DriverKS):
             dipoles = self.comm.bcast(dipoles, root = 0)
             positions_d = self.comm.bcast(positions_d, root = 0)
         #-----------------------------------------------------------------------
-        # self.density[:] = self.density_charge
-        self.density_sub[:] = self.density_charge_sub
+        self.density_sub[:] = 0.0
+        # self.density_sub[:] = self.density_charge_sub
         for c, p in zip(dipoles, positions_d):
             self.density_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma, rcut = rcut,
                     density = self.density_sub, add = True, deriv = 1)

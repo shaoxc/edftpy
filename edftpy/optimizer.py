@@ -604,8 +604,14 @@ class Optimization(object):
         return
 
     def set_global_potential_qmmm(self, **kwargs):
-        self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = ('V'))
+        # self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = ('V'))
+        embed_keys = ['XC', 'KE']
+        self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.gaussian_density, embed_keys = embed_keys,
+                gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = ('V'))
+        pot_qmmm = self.gsystem.total_evaluator.get_total_functional(self.gsystem_qmmm.density, calcType = ('V'), embed_keys = embed_keys).potential
+        self.gsystem_qmmm.total_evaluator.embed_potential[:] += pot_qmmm
         self.gsystem.total_evaluator.embed_potential = self.gsystem_qmmm.total_evaluator.embed_potential
+        #-----------------------------------------------------------------------
         for isub in range(self.nsub):
             driver = self.drivers[isub]
             if driver is None :
@@ -676,24 +682,28 @@ class Optimization(object):
     def update_qmmm_density(self, **kwargs):
         if self.sdft == 'qmmm' :
             self.gsystem_mm.density[:] = 0.0
+            self.gsystem_mm.core_density[:] = 0.0
+            self.gsystem_mm.gaussian_density[:] = 0.0
             for i, driver in enumerate(self.drivers):
-                if driver is None :
-                    density = None
-                    core_density = None
-                else :
-                    density = driver.density
-                    core_density = driver.core_density
+                density = None if not hasattr(driver, 'density') else driver.density
+                core_density = None if not hasattr(driver, 'core_density') else driver.core_density
+                density_charge = None if not hasattr(driver, 'density_charge') else driver.density_charge
                 technique = self._get_driver_technique(driver)
                 if technique in ['MM'] :
                     self.gsystem_mm.update_density(density, isub = i)
                     #-----------------------------------------------------------------------
                     # Only works for one MM subsystem, and only need once.
-                    self.gsystem_mm.update_density(core_density, isub = i, core = True, overwrite = True)
+                    self.gsystem_mm.update_density(core_density, isub = i, core = True)
+                    # Only works for one MM subsystem, and use gaussian_density to save the O-site density
+                    self.gsystem_mm.update_density(density_charge, isub = i, fake = True)
                     #-----------------------------------------------------------------------
             #
             self.gsystem_qmmm.density[:] = self.gsystem.density + self.gsystem_mm.density
             # Only need once, but for simple
             self.gsystem_qmmm.core_density[:] = self.gsystem.core_density + self.gsystem_mm.core_density
+            #
+            # self.gsystem_qmmm.gaussian_density[:] = self.gsystem.density + self.gsystem_mm.gaussian_density
+            self.gsystem_qmmm.gaussian_density[:] = self.gsystem_qmmm.density + self.gsystem_mm.gaussian_density
             #
             if 'XC' in self.gsystem_qmmm.total_evaluator.funcdicts :
                 self.gsystem_qmmm.total_evaluator.funcdicts['XC'].core_density = self.gsystem_qmmm.core_density

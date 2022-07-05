@@ -256,13 +256,13 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
                 index_mm.extend(ind)
         #MM part
         ions_mm = ions[index_mm]
-        gsystem_mm = config2gsystem(config, ions = ions, graphtopo=graphtopo, grid = gsystem.grid, index = index_mm, **kwargs)
+        gsystem_mm = config2gsystem(config, ions = ions_mm, graphtopo=graphtopo, grid = gsystem.grid, index = index_mm, **kwargs)
         total_evaluator_mm = config2total_evaluator(config, ions_mm, grid, pplist = pplist)
         gsystem_mm.total_evaluator = total_evaluator_mm
         #QM part
         index_qm = np.delete(indices, index_mm)
         ions_qm = ions[index_qm]
-        gsystem_qm = config2gsystem(config, ions = ions, graphtopo=graphtopo, grid = gsystem.grid, index = index_qm, **kwargs)
+        gsystem_qm = config2gsystem(config, ions = ions_qm, graphtopo=graphtopo, grid = gsystem.grid, index = index_qm, **kwargs)
         total_evaluator_qm = config2total_evaluator(config, ions_qm, grid, pplist = pplist)
         gsystem_qm.total_evaluator = total_evaluator_qm
         #Swap QMMM and QM

@@ -79,7 +79,9 @@ class SubCell(object):
 
         origin = grid_sub.shift / grid.nrR
         pos_cry -= origin
-        pos_cry %= 1.0
+        #-----------------------------------------------------------------------
+        # pos_cry %= 1.0
+        #-----------------------------------------------------------------------
         pos = pos_cry.to_cart()
 
         ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = grid_sub.lattice, basis = 'Cartesian', origin = origin)
