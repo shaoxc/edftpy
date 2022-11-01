@@ -9,7 +9,7 @@ from dftpy.constants import LEN_CONV
 
 from edftpy.io import ions2ase
 from edftpy.engine.engine import Engine
-from edftpy.utils.common import Grid, Field, Atoms
+from edftpy.utils.common import Grid, Field, Ions
 
 try:
     __version__ = qepy.__version__
@@ -183,7 +183,7 @@ class EngineQE(Engine):
         qepy.qepy_tddft_main_setup(self.embed)
 
     def update_ions(self, subcell, update = 0, **kwargs):
-        pos = subcell.ions.pos.to_cart().T
+        pos = subcell.ions.positions.T
         if hasattr(qepy, 'qepy_api'):
             qepy.qepy_api.qepy_update_ions(self.embed, pos, update)
         else : # old version
@@ -395,7 +395,7 @@ class EngineQE(Engine):
         for i in range(nat):
             labels.append(symbols[ityp[i]])
 
-        ions = Atoms(labels=labels, pos=pos, cell=lattice, basis="Cartesian")
+        ions = Ions(symbols=labels, positions=pos, cell=lattice)
         return ions
 
     @staticmethod
@@ -412,7 +412,7 @@ class EngineQE(Engine):
         qepy.qepy_mod.qepy_get_rho(rho)
 
         if comm is None or comm.rank == 0 :
-            grid = Grid(ions.pos.cell.lattice, nr)
+            grid = Grid(ions.cell, nr)
             density = Field(grid=grid, direct=True, data = rho, rank = nspin, order = 'F')
         else :
             density = np.zeros(1)

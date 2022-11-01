@@ -8,7 +8,6 @@ import hashlib
 from ase.symbols import Symbols, symbols2numbers
 
 from dftpy.utils import grid_map_index, grid_map_data
-from dftpy.base import r2s, s2r
 
 from .common import Field, Grid
 
@@ -156,15 +155,25 @@ def dict_update(d, u):
             d[k] = v
     return d
 
-def get_core_points(ions, grid, rcut, index=0):
+def get_core_points(pos, grid, rcut):
+    """get_core_points.
+
+    Parameters
+    ----------
+    pos : np.ndarray (3,)
+        scaled position
+    grid : Grid
+        grid
+    rcut : float
+        distance cutoff
+    """
     nr = grid.nrR
     dnr = (1.0/nr).reshape((3, 1))
     gaps = grid.spacings
     border = (rcut / gaps).astype(np.int32) + 1
     border = np.minimum(border, nr//2)
     ixyzA = np.mgrid[-border[0]:border[0]+1, -border[1]:border[1]+1, -border[2]:border[2]+1].reshape((3, -1))
-    posi = ions.pos[index].reshape((1, 3))
-    atomp = np.array(posi.to_crys()) * nr
+    atomp = nr * pos
     atomp = atomp.reshape((3, 1))
     ipoint = np.floor(atomp + 1E-8)
     px = atomp - ipoint

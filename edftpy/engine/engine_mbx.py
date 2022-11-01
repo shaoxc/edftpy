@@ -47,8 +47,8 @@ class EngineMBX(Engine):
         monomer_names = ["h2o",] * nmol
         # json_file = "./mbx.json"
         json_file = filename
-        xyz = subcell.ions.pos.ravel()
-        box = subcell.ions.pos.cell.lattice.ravel()
+        xyz = subcell.ions.positions.ravel()
+        box = subcell.ions.cell.ravel()
         #-----------------------------------------------------------------------
         mbx.initialize_system(xyz,number_of_atoms_per_monomer,atom_names,monomer_names,json_file)
         mbx.set_coordinates(xyz, natom)

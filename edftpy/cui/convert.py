@@ -146,7 +146,7 @@ def get_atoms(args):
         else :
             if i>0 :
                 if args.subtract :
-                    atoms = io.ase_io.subtract_atoms(atoms, struct)
+                    atoms = io.ase_io.subtract_ase_atoms(atoms, struct)
                 else :
                     atoms += struct
             else :
@@ -162,36 +162,35 @@ def change_order_sub(args, config, struct):
     return struct[inds]
 
 def get_system(args):
-    system = None
     iolist = ['snpy', 'xsf', 'pp', 'qepp']
-    has_field = True
     for fname in (*args.cells, args.output) :
         prefix, ext = os.path.splitext(fname)
         if ext.lower()[1:] not in iolist :
-            has_field = False
             return None
 
-    if has_field :
-        lens = max([len(item) for item in args.cells] + [len(args.output)])
-        for i, fname in enumerate(args.cells) :
-            struct=io.read_system(fname, data_type = args.data_type)
-            nele = struct.field.integral()
-            print(f'Number_of_electrons {fname:{lens}s} : {nele}', flush = True)
-            if i>0 :
-                if not np.all(system.field.shape == struct.field.shape):
-                    if len(args.cells) == 2 :
-                        # print(f'!WARN: We interpolate the sencond {struct.field.shape} to the first one {system.field.shape}. If sDFT, please with json file.', flush = True)
-                        print(f'\033[91m !WARN: \033[00m We interpolate the second {struct.field.shape} to the first one {system.field.shape}. If sDFT, please with json file.', flush = True)
-                        struct.field = grid_map_data(struct.field, grid = system.field.grid)
-                    else :
-                        raise AttributeError("The shapes are not matched, If sDFT, try with json file?")
-                if args.subtract :
-                    system.field -= struct.field
+    ions = None
+    field = None
+
+    lens = max([len(item) for item in args.cells] + [len(args.output)])
+    for i, fname in enumerate(args.cells) :
+        ions_n, field_n, _ = io.read_all(fname, data_type = args.data_type)
+        nele = field_n.integral()
+        print(f'Number_of_electrons {fname:{lens}s} : {nele}', flush = True)
+        if i>0 :
+            if not np.all(field.shape == field_n.shape):
+                if len(args.cells) == 2 :
+                    print(f'\033[91m !WARN: \033[00m We interpolate the second {field_n.shape} to the first one {field.shape}. If sDFT, please with json file.', flush = True)
+                    field_n = grid_map_data(field_n, grid = field.grid)
                 else :
-                    system += struct
+                    raise AttributeError("The shapes are not matched, If sDFT, try with json file?")
+            if args.subtract :
+                field -= field_n
             else :
-                system = struct
-        return (system.ions, system.field)
+                field += field_n
+        else :
+            ions = ions_n
+            field = field_n
+    return (ions, field)
 
 def get_system_json(args):
     from edftpy.utils.common import Field, Grid
@@ -199,7 +198,7 @@ def get_system_json(args):
     config = read_conf(args.json)
     config["GSYSTEM"]["cell"]["file"] = ''
     gions = config2ions(config)
-    cell = gions.pos.cell
+    cell = gions.cell
     # lattice = config["GSYSTEM"]['cell']['lattice']
     nr = config["GSYSTEM"]['grid']['nr']
     grid = Grid(lattice=cell, nr=nr)
@@ -220,27 +219,28 @@ def get_system_json(args):
             graph.sub_shape[0] = snr
         else :
             shift = np.zeros(3, dtype = 'int32')
-        struct=io.read_system(fname, data_type = args.data_type)
-        nele = struct.field.integral()
+        ions_n, field_n, _ = io.read_all(fname, data_type = args.data_type)
+        nele = field_n.integral()
         print(f'Number_of_electrons {fname:{lens}s} : {nele}', flush = True)
+        ions_n.translate(shift*spacings)
         if i>0 :
             if prefix.startswith('SUB'):
                 index = graph.get_sub_index(0, in_global = True)
             else :
                 index = slice(None)
             if args.subtract :
-                field[index] -= struct.field
+                field[index] -= field_n
             else :
-                ions = ions + struct.ions.translate(shift*spacings)
-                field[index] += struct.field
+                ions = ions + ions_n
+                field[index] += field_n
         else :
-            ions = struct.ions.translate(shift*spacings)
+            ions = ions_n
             ions.set_cell(cell)
             if prefix.startswith('SUB'):
                 index = graph.get_sub_index(0, in_global = True)
             else :
                 index = slice(None)
-            field[index] += struct.field
+            field[index] += field_n
     return (ions, field)
 
 def get_qepy_system(args):

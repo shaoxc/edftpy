@@ -7,7 +7,9 @@ import ase.io
 from ase.io import ulm
 
 from dftpy.formats import ase_io
-from dftpy.formats.io import read, write, read_system, read_density, guess_format, IOFormats
+from dftpy.formats.io import read, read_all, read_density, read_potential, \
+        write, write_all, write_density, write_potential, \
+        guess_format
 from dftpy.formats.ase_io import ase_read, ase_write, ase2ions, ions2ase
 
 def print2file(fileobj = None):

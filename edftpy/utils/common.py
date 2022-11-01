@@ -2,20 +2,18 @@ import numpy as np
 from dftpy.functional.functional_output import FunctionalOutput as dftpy_func
 from dftpy.field import DirectField, ReciprocalField
 from dftpy.grid import DirectGrid, ReciprocalGrid
-from dftpy.atom import Atom as dftpy_atom
-from dftpy.base import DirectCell
-from dftpy.base import Coord as dftpy_coord
+from dftpy.ions import Ions
 from abc import ABC, abstractmethod
 from scipy.interpolate import splrep, splev
 # from dftpy.math_utils import quartic_interpolation
 
 
-def Grid(lattice, nr, direct = True, origin=np.array([0.0, 0.0, 0.0]), units=None, full=False, uppergrid = None, **kwargs):
+def Grid(lattice, nr, direct = True, units=None, full=False, uppergrid = None, **kwargs):
     if hasattr(lattice, 'lattice') : lattice = lattice.lattice
     if direct :
-        obj = DirectGrid(lattice, nr, origin = origin, units=units, full=full, uppergrid = uppergrid, **kwargs)
+        obj = DirectGrid(lattice, nr, units=units, full=full, uppergrid = uppergrid, **kwargs)
     else :
-        obj = ReciprocalGrid(lattice, nr, origin = origin, units=units, full=full, uppergrid = uppergrid, **kwargs)
+        obj = ReciprocalGrid(lattice, nr, units=units, full=full, uppergrid = uppergrid, **kwargs)
     return obj
 
 class RadialGrid(object):
@@ -87,22 +85,8 @@ def Field(grid, memo="", rank=1, data = None, direct = True, order = 'C', cplx =
             obj = ReciprocalField(grid, **kwargs)
         return obj
 
-def Atoms(labels, zvals=None, pos=None, cell=None, origin = [0.0, 0.0, 0.0], **kwargs):
-    if not isinstance(cell, DirectCell):
-        cell = DirectCell(cell, origin=origin)
-    obj = dftpy_atom(Zval = zvals, label = labels, pos = pos, cell = cell, **kwargs)
-    return obj
-
 def Functional(name=None, energy=None, potential=None, **kwargs):
     obj = dftpy_func(name = name, energy = energy, potential = potential, **kwargs)
-    return obj
-
-def Coord(pos, cell=None, basis="Cartesian"):
-    if cell is None :
-        cell = pos.cell
-    elif not isinstance(cell, DirectCell):
-        cell = DirectCell(cell)
-    obj = dftpy_coord(pos, cell, basis)
     return obj
 
 class AbsFunctional(ABC):

@@ -116,9 +116,7 @@ class AtomicDensity(object):
         """
         """
         if ncharge is None :
-            ncharge = 0.0
-            for i in range(ions.nat) :
-                ncharge += ions.Zval[ions.labels[i]]
+            ncharge = ions.get_ncharges()
         if rho is None :
             rho = Field(grid)
             rho[:] = 1.0
@@ -140,6 +138,7 @@ class AtomicDensity(object):
         for i in range(3):
             latp[i] = np.sqrt(metric[i, i])
         gaps = latp / nr
+        scaled_positions = ions.get_scaled_positions()
         for key in self._r :
             r = self._r[key]
             arho = self._arho[key]
@@ -152,11 +151,10 @@ class AtomicDensity(object):
             prho = np.zeros((2 * border[0]+1, 2 * border[1]+1, 2 * border[2]+1))
             tck = splrep(r, arho)
             for i in range(ions.nat):
-                if ions.labels[i] != key:
+                if ions.symbols[i] != key:
                     continue
                 prho[:] = 0.0
-                posi = ions.pos[i].reshape((1, 3))
-                atomp = np.array(posi.to_crys()) * nr
+                atomp = nr * scaled_positions[i]
                 atomp = atomp.reshape((3, 1))
                 ipoint = np.floor(atomp)
                 px = atomp - ipoint
@@ -171,9 +169,7 @@ class AtomicDensity(object):
         nc = rho.integral()
         sprint('Guess density : ', nc)
         if ncharge is None :
-            ncharge = 0.0
-            for i in range(ions.nat) :
-                ncharge += ions.Zval[ions.labels[i]]
+            ncharge = ions.get_ncharges()
         if ncharge > 1E-6 : rho[:] *= ncharge / nc
         return rho
 
@@ -203,8 +199,8 @@ def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=0.
             radial[key] = RadialGrid(r0, arho0, direct = False)
             vlines[key] = radial[key].to_3d_grid(reciprocal_grid.q)
             qa[:] = 0.0
-            for i in range(len(ions.pos)):
-                if ions.labels[i] == key:
+            for i in range(ions.nat):
+                if ions.symbols[i] == key:
                     qa = Bspline.get_PME_Qarray(i, qa)
             qarray = Field(grid=grid, data=qa, direct = True)
             rho_g += vlines[key] * qarray.fft()
@@ -216,7 +212,7 @@ def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=0.
             radial[key] = RadialGrid(r0, arho0, direct = False)
             vlines[key] = radial[key].to_3d_grid(reciprocal_grid.q)
             for i in range(ions.nat):
-                if ions.labels[i] == key:
+                if ions.symbols[i] == key:
                     strf = ions.strf(reciprocal_grid, i)
                     rho_g += vlines[key] * strf
 
@@ -229,9 +225,7 @@ def get_3d_value_recipe(r, arho, ions, grid, ncharge = None, rho = None, dtol=0.
         nc = rho.integral()
         sprint('Guess density (Real): ', nc, comm=grid.mp.comm)
         if ncharge is None :
-            ncharge = 0.0
-            for i in range(ions.nat) :
-                ncharge += ions.Zval[ions.labels[i]]
+            ncharge = ions.get_ncharges()
         if ncharge > 1E-6 :
             rho[:] *= ncharge / nc
             sprint('Guess density (Scale): ', rho.integral(), comm=grid.mp.comm)

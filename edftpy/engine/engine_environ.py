@@ -132,11 +132,11 @@ class EngineEnviron(Engine):
                 'ecutrho' : 300,
                 }
         nat = subcell.ions.nat
-        ntyp = len(subcell.ions.Zval)
+        ntyp = len(subcell.ions.zval)
         alat = subcell.grid.latparas[0]
-        at = subcell.ions.pos.cell.lattice/alat
-        tau = subcell.ions.pos.to_cart().T / subcell.grid.latparas[0]
-        labels = subcell.ions.labels
+        at = subcell.ions.cell/alat
+        tau = subcell.ions.positions().T / subcell.grid.latparas[0]
+        labels = subcell.ions.get_chemical_symbols()
         zv = np.zeros(ntyp)
         # atom_label = np.ones((3, ntyp), dtype = 'int32')*32
         atom_label = np.zeros((3, ntyp), dtype = 'c')
@@ -144,7 +144,7 @@ class EngineEnviron(Engine):
         ityp = np.ones(nat, dtype = 'int32')
         i = -1
         nelec = 0.0
-        for key, v in subcell.ions.Zval.items():
+        for key, v in subcell.ions.zval.items():
             i += 1
             zv[i] = v
             atom_label[:len(key), i] = key

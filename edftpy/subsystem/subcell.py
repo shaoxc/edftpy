@@ -3,7 +3,7 @@ from numpy import linalg as LA
 from dftpy.math_utils import ecut2nr, bestFFTsize
 
 from edftpy.functional import LocalPP, Ewald
-from edftpy.utils.common import Field, Grid, Atoms, Coord
+from edftpy.utils.common import Field, Grid, Ions
 from edftpy.utils.math import gaussian
 from edftpy.density import get_3d_value_recipe
 from edftpy.mpi import sprint
@@ -73,16 +73,16 @@ class SubCell(object):
     def _gen_cell(self, ions, grid, index = None, grid_sub = None, **kwargs):
 
         if index is None : index = slice(None)
-        pos_cry = ions.pos.to_crys()[index].copy()
+        pos_cry = ions.get_scaled_positions()[index]
 
         grid_sub = self.gen_grid_sub(ions, grid, index = index, grid_sub = grid_sub, **kwargs)
 
         origin = grid_sub.shift / grid.nrR
         pos_cry -= origin
         pos_cry %= 1.0
-        pos = pos_cry.to_cart()
+        pos = ions.cell.cartesian_positions(pos_cry)
 
-        ions_sub = Atoms(ions.labels[index].copy(), zvals =ions.Zval, pos=pos, cell = grid_sub.lattice, basis = 'Cartesian', origin = origin)
+        ions_sub = Ions(numbers = ions.numbers[index].copy(), positions = pos, cell = grid_sub.lattice, charges = ions.charges[index].copy())
         self._grid = grid_sub
         self._ions = ions_sub
         self._ions_index = index
@@ -94,10 +94,9 @@ class SubCell(object):
     def gen_grid_sub(ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True,
             full = False, grid_sub = None, max_prime = 5, scale = 1.0, nr = None, mp = None):
         tol = 1E-8
-        lattice = ions.pos.cell.lattice.copy()
-        lattice_sub = ions.pos.cell.lattice.copy()
-        if index is None :
-            index = np.ones(ions.nat, dtype = 'bool')
+        lattice = ions.cell.copy()
+        lattice_sub = lattice.copy()
+        if index is None : index = slice(None)
         if isinstance(cellcut, (int, float)) or len(cellcut) == 1 :
             cellcut = np.ones(3) * cellcut
         if cellsplit is not None :
@@ -109,14 +108,14 @@ class SubCell(object):
         if grid_sub is not None :
             nr = grid_sub.nrR
 
-        pos_cry = ions.pos.to_crys()[index].copy()
+        pos_cry = ions.get_scaled_positions()[index]
         cs = np.min(pos_cry, axis = 0)
         pos_cry -= cs
         for i, p in enumerate(pos_cry) :
             for j in range(3):
                 if pos_cry[i][j] > 0.5 :
                     pos_cry[i][j] -= 1.0
-        pos = pos_cry.to_cart()
+        pos = ions.cell.cartesian_positions(pos_cry)
         #-----------------------------------------------------------------------
         cell_size = np.ptp(pos, axis = 0)
         pbc = np.ones(3, dtype = 'int')
@@ -159,16 +158,17 @@ class SubCell(object):
                     nr[i] = grid.nrR[i]
                     origin[i] = 0.0
 
-        c1 = Coord(origin, lattice_sub, basis = 'Crystal').to_cart()
+        lattice_sub = ions.cell.__class__(lattice_sub)
+        c1 = lattice_sub.cartesian_positions(origin)
 
         c0 = np.mean(pos, axis = 0)
-        center = Coord(c0, lattice, basis = 'Cartesian').to_crys()
+        center = lattice.scaled_positions(c0)
         center += cs
         center[origin < tol] = 0.0
-        c0 = Coord(center, lattice, basis = 'Crystal').to_cart()
+        c1 = lattice.cartesian_positions(origin)
 
         origin = np.array(c0) - np.array(c1)
-        shift[:] = np.array(Coord(origin, lattice, basis = 'Cartesian').to_crys()) * grid.nrR
+        shift[:] = np.array(lattice.scaled_positions(origin)) * grid.nrR
 
         if grid_sub is None :
             grid_sub = Grid(lattice=lattice_sub, nr=nr, full=full, direct = True, origin = origin, pbc = pbc, mp = mp)
@@ -187,6 +187,7 @@ class SubCell(object):
         self._gaussian_density = Field(self.grid)
         ncharge = 0.0
         sigma_min = np.max(gaps) * 2 / fwhm
+        scaled_positions = self.ions.get_scaled_positions()
         for key, option in options.items() :
             rcut = option.get('rcut', 5.0)
             sigma = option.get('sigma', 0.3)
@@ -200,11 +201,10 @@ class SubCell(object):
             ixyzA = np.mgrid[-border[0]:border[0]+1, -border[1]:border[1]+1, -border[2]:border[2]+1].reshape((3, -1))
             prho = np.zeros((2 * border[0]+1, 2 * border[1]+1, 2 * border[2]+1))
             for i in range(self.ions.nat):
-                if self.ions.labels[i] != key:
+                if self.ions.symbols[i] != key:
                     continue
                 prho[:] = 0.0
-                posi = self.ions.pos[i].reshape((1, 3))
-                atomp = np.array(posi.to_crys()) * nr
+                atomp = nr * scaled_positions[i]
                 atomp = atomp.reshape((3, 1))
                 ipoint = np.floor(atomp + 1E-8)
                 # ipoint = np.floor(atomp)
@@ -257,7 +257,7 @@ class SubCell(object):
             if scale is None or abs(scale) < 1E-10 :
                 continue
             for i in range(self.ions.nat):
-                if self.ions.labels[i] != key:
+                if self.ions.symbols[i] != key:
                     continue
                 ncharge += scale
             r_g[key] = np.linspace(0, 30, 10000)
@@ -292,7 +292,7 @@ class GlobalCell(object):
         self._ions = ions
         self._grid = grid
         if self._grid is None :
-            self._grid = self.gen_grid(self.ions.pos.cell.lattice, **self.grid_kwargs)
+            self._grid = self.gen_grid(self.ions.cell, **self.grid_kwargs)
             sprint('GlobalCell grid', self._grid.nrR, comm=self.comm)
         self._density = Field(grid=self.grid, rank=self.nspin, direct=True)
         self._gaussian_density = Field(grid=self.grid, rank=1, direct=True)

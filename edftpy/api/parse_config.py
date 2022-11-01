@@ -20,7 +20,7 @@ from edftpy.mpi import GraphTopo, MP, sprint
 from edftpy.utils.math import get_hash, get_formal_charge
 from edftpy.subsystem.decompose import decompose_sub
 from edftpy.engine.driver import DriverKS, DriverEX, DriverMM, DriverOF
-from edftpy.utils.common import Grid
+from edftpy.utils.common import Grid, Ions
 from edftpy.utils.math import grid_map_data
 
 
@@ -96,7 +96,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
     if optimizer is None :
         cell_change = None
     elif cell_change is None:
-        if not np.allclose(optimizer.gsystem.ions.pos.cell.lattice, ions.pos.cell.lattice):
+        if not np.allclose(optimizer.gsystem.ions.cell, ions.cell):
             cell_change = None # cell_change = 'cell'
         else :
             cell_change = 'position'
@@ -149,7 +149,7 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
                     f_str = "\n".join(textwrap.wrap(f_str, width = 80))
                     sprint(f_str, lprint = True)
     #-----------------------------------------------------------------------
-    labels = set(ions.labels)
+    labels = set(ions.symbols)
     pplist = {}
     for key in config["PP"]:
         ele = key.capitalize()
@@ -259,7 +259,6 @@ def config2ions(config, ions = None, keysys = 'GSYSTEM', **kwargs):
             ions = io.ase_read(filename,
                     format=config[keysys]["cell"]["format"])
     else :
-        from ase import Atoms
         lattice = config[keysys]['cell']['lattice']
         symbols = config[keysys]['cell']['symbols']
         positions = config[keysys]['cell']['positions']
@@ -271,16 +270,15 @@ def config2ions(config, ions = None, keysys = 'GSYSTEM', **kwargs):
             positions = np.asarray(positions).reshape((-1, 3))
         if scaled_positions is not None :
             scaled_positions = np.asarray(scaled_positions).reshape((-1, 3))
-        atoms = Atoms(symbols = symbols, positions = positions, cell = lattice,
-                numbers = numbers, scaled_positions = scaled_positions)
-        ions = io.ase2ions(atoms)
+        ions = Ions(symbols = symbols, positions = positions, cell = lattice,
+                numbers = numbers, scaled_positions = scaled_positions, units = 'ase')
     return ions
 
 def ions2config(config, ions, keysys = 'GSYSTEM', **kwargs):
-    lattice = ions.pos.cell.lattice.ravel(order = 'F')
+    lattice = ions.cell.ravel()
     config[keysys]['cell']['lattice'] = (lattice*LEN_CONV["Bohr"]["Angstrom"]).tolist()
-    config[keysys]['cell']['symbols'] = ions.labels.tolist()
-    config[keysys]['cell']['positions'] = (ions.pos.to_cart().ravel()*LEN_CONV["Bohr"]["Angstrom"]).tolist()
+    config[keysys]['cell']['symbols'] = ions.get_chemical_symbols()
+    config[keysys]['cell']['positions'] = (ions.positions.ravel()*LEN_CONV["Bohr"]["Angstrom"]).tolist()
     return config
 
 def config2total_embed(config, driver = None, optimizer = None, **kwargs):
@@ -538,14 +536,14 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
     ncharge = config[keysys]["density"]["ncharge"]
     if ncharge is None :
         mol_charges = config['MOL'].get('charge', {})
-        numbers = subcell.ions.Z
+        numbers = subcell.ions.numbers
         ncharge = get_formal_charge(numbers, data = mol_charges)
         if abs(ncharge) < 1E-6 : ncharge = None
     #-----------------------------------------------------------------------
     magmom = config[keysys]["density"]["magmom"]
     if magmom is None :
         mol_magmom= config['MOL'].get('magmom', {})
-        numbers = subcell.ions.Z
+        numbers = subcell.ions.numbers
         magmom = get_formal_charge(numbers, data = mol_magmom)
         if abs(magmom) < 1E-6 : magmom = None
     #-----------------------------------------------------------------------
@@ -695,9 +693,9 @@ def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = 
                 scale = float(gaussians_scale[key])
             else :
                 for i in range(ions.nat):
-                    if ions.labels[i] == key :
+                    if ions.symbols[i] == key :
                         break
-                scale = ions.Z[i] - ions.Zval[key]
+                scale = ions.numbers[i] - ions.zval[key]
             gaussian_options[key] = {'rcut' : gaussians_rcut, 'sigma' : gaussians_sigma, 'scale' : scale}
     #-----------------------------------------------------------------------
     if calculator == 'dftpy' and ecut and abs(ecut - gsystem_ecut) > 1.0 :
