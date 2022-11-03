@@ -649,13 +649,14 @@ class DriverMM(DriverKS):
             dipoles = self.comm.bcast(dipoles, root = 0)
             positions_d = self.comm.bcast(positions_d, root = 0)
         #-----------------------------------------------------------------------
-        self.density_sub[:] = 0.0
-        # self.density_sub[:] = self.density_charge_sub
-        for c, p in zip(dipoles, positions_d):
-            self.density_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma, rcut = rcut,
-                    density = self.density_sub, add = True, deriv = 1)
+        # self.density_sub[:] = 0.0
+        self.density_sub[:] = self.density_charge_sub
+        # for c, p in zip(dipoles, positions_d):
+            # self.density_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma, rcut = rcut,
+                    # density = self.density_sub, add = True, deriv = 1)
         sprint('dipoles :\n', dipoles, comm = self.comm)
         self.density_sub.gather(out = self.density, root = 0)
+        # self.density_sub.write('1_density_charge.xsf', ions = self.subcell.ions)
         return self.density
 
     @print2file()
