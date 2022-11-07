@@ -604,12 +604,14 @@ class Optimization(object):
         return
 
     def set_global_potential_qmmm(self, **kwargs):
-        # self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = ('V'))
-        embed_keys = ['XC', 'KE']
-        self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.gaussian_density, embed_keys = embed_keys,
-                gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = ('V'))
-        pot_qmmm = self.gsystem_qmmm.total_evaluator.get_total_functional(self.gsystem_qmmm.density, calcType = ('V'), embed_keys = embed_keys).potential
-        self.gsystem_qmmm.total_evaluator.embed_potential[:] += pot_qmmm
+        self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = ('V'))
+        #-----------------------------------------------------------------------
+        # embed_keys = ['XC', 'KE']
+        # self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.gaussian_density, embed_keys = embed_keys,
+                # gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = ('V'))
+        # pot_qmmm = self.gsystem_qmmm.total_evaluator.get_total_functional(self.gsystem_qmmm.density, calcType = ('V'), embed_keys = embed_keys).potential
+        # self.gsystem_qmmm.total_evaluator.embed_potential[:] += pot_qmmm
+        #-----------------------------------------------------------------------
         self.gsystem.total_evaluator.embed_potential = self.gsystem_qmmm.total_evaluator.embed_potential
         #-----------------------------------------------------------------------
         for isub in range(self.nsub):
@@ -702,7 +704,7 @@ class Optimization(object):
             # Only need once, but for simple
             self.gsystem_qmmm.core_density[:] = self.gsystem.core_density + self.gsystem_mm.core_density
             # For nonadditive terms
-            self.gsystem_qmmm.gaussian_density[:] = self.gsystem.density + self.gsystem_mm.gaussian_density
+            # self.gsystem_qmmm.gaussian_density[:] = self.gsystem.density + self.gsystem_mm.gaussian_density
             # self.gsystem_qmmm.gaussian_density[:] = self.gsystem_qmmm.density
             #
             if 'XC' in self.gsystem_qmmm.total_evaluator.funcdicts :

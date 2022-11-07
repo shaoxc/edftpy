@@ -637,24 +637,35 @@ class DriverMM(DriverKS):
         return func
 
     @print2file()
-    def get_density(self, rcut = 10, sigma = 0.6, **kwargs):
+    def get_density(self, rcut = 10, sigma = 1.7, **kwargs):
         #
+        #-----------------------------------------------------------------------
+        # if self.comm.rank == 0 :
+            # from edftpy.io import read_density
+            # self.density[:] = read_density('sub_mbx_0.xsf')
+            # self.density_charge[:] = self.density
+        # return self.density
+        #-----------------------------------------------------------------------
         self.engine.set_extpot(self.evaluator.global_potential / self.engine.units['energy'], **kwargs)
         #
         dipoles, positions_d = self.engine.get_dipoles()
+        sprint('dipoles0 :\n', dipoles, comm = self.comm)
         positions_d = positions_d*self.engine.units['length']
         dipoles = dipoles*self.engine.units['length']
         #-----------------------------------------------------------------------
         if self.comm.size > 1 :
             dipoles = self.comm.bcast(dipoles, root = 0)
             positions_d = self.comm.bcast(positions_d, root = 0)
+        # dip = np.loadtxt('edftpy_mm_dipole.txt').reshape((-1,3))
+        # dipoles[:3] = dip[:3]
+        # dipoles[:] = 0.0
+        sprint('dipoles :\n', dipoles, comm = self.comm)
         #-----------------------------------------------------------------------
         # self.density_sub[:] = 0.0
         self.density_sub[:] = self.density_charge_sub
-        # for c, p in zip(dipoles, positions_d):
-            # self.density_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma, rcut = rcut,
-                    # density = self.density_sub, add = True, deriv = 1)
-        sprint('dipoles :\n', dipoles, comm = self.comm)
+        for c, p in zip(dipoles, positions_d):
+            self.density_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma, rcut = rcut,
+                    density = self.density_sub, add = True, deriv = 1)
         self.density_sub.gather(out = self.density, root = 0)
         # self.density_sub.write('1_density_charge.xsf', ions = self.subcell.ions)
         return self.density
