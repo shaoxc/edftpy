@@ -39,6 +39,7 @@ class Optimization(object):
             "sdft": 'sdft',
             "maxtime" : 0,
             "delay" : 2,
+            "voltage" : 0,
         }
 
         self.options = default_options
@@ -56,7 +57,8 @@ class Optimization(object):
                 from edftpy.mixer import Mixer
                 self.mixer = Mixer(scheme = 'pulay', predtype = 'kerker', maxm = 7, coef = 0.7, delay = 2)
             if self.occupations is None :
-                self.occupations = Occupations(degauss = 0.01)
+                self.occupations = Occupations(degauss = 0.05)
+        sprint('sss', self.options)
 
     @property
     def sdft(self):
@@ -139,7 +141,10 @@ class Optimization(object):
                 self.gsystem.update_density(density, isub = i)
         self.density, self.density_prev = self.density_prev, self.density
         self.density = self.gsystem.density.copy()
-        self.mix_density()
+        if self.sdft == 'scdft' and self.iter == self.options['delay'] :
+            self.mixer.restart()
+        else :
+            self.mix_density()
         return
 
     def mix_density(self, **kwargs):
@@ -160,30 +165,43 @@ class Optimization(object):
         band_energies = [None, ]*self.nsub
         band_weights = [None, ]*self.nsub
         nspin = self.gsystem.density.rank
+        if nspin > 2 : raise AttributeError("Sorry, only support nspin=1 or 2.")
         for i, driver in enumerate(self.drivers):
             if driver is not None and driver.comm.rank == 0 :
                 band_energies[i] = driver.band_energies.reshape((nspin, -1))
                 band_weights[i] = driver.band_weights.reshape((nspin, -1))
             else :
                 band_energies[i] = None
-                band_weights[i] = None
+                # band_weights[i] = None
         band_energies = self.gsystem.graphtopo.sgather(band_energies)
         band_weights = self.gsystem.graphtopo.sgather(band_weights)
 
         ncharge = self.gsystem.density.integral()
-        # self.options['delay'] = -1
         if self.iter > self.options['delay'] :
             if self.gsystem.graphtopo.is_root :
-                indices = [0 if x is None else len(x[0]) for x in band_energies]
-                band_energies = np.concatenate(band_energies, axis=1)
-                band_weights = np.concatenate(band_weights, axis=1)
-                occs = band_weights*0.0
                 if not hasattr(ncharge, '__len__'): ncharge = [ncharge, ]*nspin
-                for i in range(nspin):
-                    occs[i] = self.occupations.get_occupation_numbers(band_energies[i], weights = band_weights[i], ncharge = ncharge[i])
-                occs *= band_weights
-                indices = np.cumsum(indices)[:-1]
-                occs = np.split(occs, indices, axis = 1)
+                if self.options['voltage'] :
+                    occs= []
+                    for i in range(nspin):
+                        energies = [x[i] for x in band_energies]
+                        weights = [x[i] for x in band_weights]
+                        voltage = self.options['voltage']
+                        oc = self.occupations.opt_occupation_voltage(energies, weights = weights, ncharge = ncharge[i], voltage = voltage, index = (0, 1))
+                        occs.append(oc)
+                    if nspin == 1 :
+                        occs = occs[0]
+                    elif nspin == 2 :
+                        occs = [np.vstack((x, y)) for x, y in zip(occs[0], occs[1])]
+                else :
+                    indices = [0 if x is None else len(x[0]) for x in band_energies]
+                    indices = np.cumsum(indices)[:-1]
+                    band_energies = np.concatenate(band_energies, axis=1)
+                    band_weights = np.concatenate(band_weights, axis=1)
+                    occs = band_weights*0.0
+                    for i in range(nspin):
+                        occs[i] = self.occupations.get_occupation_numbers(band_energies[i], weights = band_weights[i], ncharge = ncharge[i])
+                    occs *= band_weights
+                    occs = np.split(occs, indices, axis = 1)
             else :
                 occs = None
             occs = self.gsystem.graphtopo.sscatter(occs)
@@ -349,10 +367,13 @@ class Optimization(object):
             f_str += '\nEnergy of reidual density : \n'
             f_str += np.array2string(dp_norm, separator=' ', max_line_width=80)
             sprint(f_str, level = 2)
-            if self.check_converge_potential(dp_norm):
-                sprint("#### Subsystem Density Optimization Converged (Potential) In {} Iterations ####".format(it+1))
-                self.converged = True
-                break
+            if olevel != 0 and self.check_converge_potential(dp_norm):
+                if self.sdft  == 'scdft' and self.iter <= self.options['delay'] :
+                    pass
+                else :
+                    sprint("#### Subsystem Density Optimization Converged (Potential) In {} Iterations ####".format(it+1))
+                    self.converged = True
+                    break
             if self.mixer :
                 # The update will change the system.density which will used in the nonadditive potential
                 energy = self.get_energy(density = self.density, update = False, olevel = olevel)
@@ -370,9 +391,12 @@ class Optimization(object):
             sprint(seq +'\n' + fmt +'\n' + seq)
             # Only check when accurately calculate the energy
             if olevel == 0 and self.check_converge_energy(energy_history):
-                sprint("#### Subsystem Density Optimization Converged (Energy) In {} Iterations ####".format(it+1))
-                self.converged = True
-                break
+                if self.sdft  == 'scdft' and self.iter <= self.options['delay'] :
+                    pass
+                else :
+                    sprint("#### Subsystem Density Optimization Converged (Energy) In {} Iterations ####".format(it+1))
+                    self.converged = True
+                    break
             if self.check_stop(): break
         else :
             sprint("!WARN Optimization is exit due to reaching maxium iterations ###")

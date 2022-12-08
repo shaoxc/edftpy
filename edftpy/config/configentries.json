@@ -126,6 +126,12 @@
 			"comment": "Maximum execution time. Non-positive number means no time limit.",
 			"unit": "second",
 			"default": 0
+		},
+		"voltage": {
+			"type": "float",
+			"default": null,
+			"comment": "The voltage between first and second subsystems.",
+			"unit": "a.u"
 		}
 	},
 	"TD": {
