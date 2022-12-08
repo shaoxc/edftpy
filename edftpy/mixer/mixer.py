@@ -30,7 +30,7 @@ class SpecialPrecondition :
     def matrix(self):
         if self._matrix is None :
             if self.predtype is None :
-                self._matrix = np.ones(self.grid.nrG)
+                self._matrix = Field(self.grid.get_reciprocal(), direct=False)+1.0
             elif self.predtype == 'kerker' :
                 self._matrix = self.kerker()
             elif self.predtype == 'inverse_kerker' :
