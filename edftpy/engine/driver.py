@@ -325,6 +325,8 @@ class DriverKS(Driver):
         if self.comm.rank == 0 :
             fstr = f'ncharge({self.prefix}): {self._iter} {self.density.integral()}'
             sprint(fstr, comm = self.comm)
+            sprint('occupations :\n', occupations, comm = self.comm, level = 1)
+            sprint('band_energies :\n', self.band_energies, comm = self.comm, level = 1)
             # from edftpy.io import write
             # write(self.prefix+'.xsf', self.density, ions = self.subcell.ions)
         return self.density
@@ -333,7 +335,7 @@ class DriverKS(Driver):
     def get_bands(self, sdft = 'sdft', sum_band = False, **kwargs):
         self._get_density_prep(sdft=sdft, **kwargs)
         self.engine.scf(sum_band = sum_band, **kwargs)
-        self.band_energies = self.engine.get_band_energies(**kwargs).reshape((self.nspin, -1))
+        self.band_energies = self.engine.get_band_energies(**kwargs).reshape((self.nspin, -1)) * self.engine.units['energy']
         self.band_weights = self.engine.get_band_weights(**kwargs).reshape((self.nspin, -1))
         return self.band_energies, self.band_weights
 
