@@ -163,6 +163,9 @@ class AbstractMixer(ABC):
     def __call__(self):
         pass
 
+    def restart(self, *arg, **kwargs):
+        pass
+
     def format_density(self, results, nin):
         ncharge = nin.integral()
         results = normalization_density(results, ncharge=ncharge, grid=nin.grid, method='no')
