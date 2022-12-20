@@ -599,6 +599,26 @@ class DriverMM(DriverKS):
                 sigma2 = sigma
             self.density_charge_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma2, rcut = rcut,
                     density = self.density_charge_sub, add = True, deriv = 0)
+        #Double density---------------------------------------------------------
+        self.density_charge_mo_sub = Field(grid = self.grid_sub, rank=self.nspin)
+        self.density_charge_mo_sub[:] = 0.0
+        pos_m, inds_m, inds_o = self.engine.get_m_sites()
+        if len(inds_m) > 0 :
+            dipoles, positions_d = self.engine.get_dipoles()
+            if self.comm.size > 1 :
+                positions_d = self.comm.bcast(positions_d, root = 0)
+            positions_c[inds_m] = positions_d[inds_o]
+            #
+            for c, p in zip(charges, positions_c):
+                if c > 1 :
+                    sigma2 = 1.4 *sigma
+                else :
+                    sigma2 = sigma
+                self.density_charge_mo_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma2, rcut = rcut,
+                        density = self.density_charge_mo_sub, add = True, deriv = 0)
+        else :
+            self.density_charge_mo_sub = self.density_charge_sub
+        #-----------------------------------------------------------------------
         sprint('charges :\n', charges, comm = self.comm)
         # self.density_charge_sub.write('1_pseudo_density_charge.xsf', ions = self.subcell.ions)
         self.density_sub = self.subcell.density
@@ -606,6 +626,7 @@ class DriverMM(DriverKS):
         self.core_density_sub = self.subcell.core_density
         self.core_density = self.core_density_sub.gather(grid = self.grid)
         self.density_charge = self.density_charge_sub.gather(grid = self.grid)
+        self.density_charge_mo = self.density_charge_mo_sub.gather(grid = self.grid)
 
     @print2file()
     def get_energy(self, olevel = 0, **kwargs):
@@ -661,8 +682,8 @@ class DriverMM(DriverKS):
         # dipoles[:] = 0.0
         sprint('dipoles :\n', dipoles, comm = self.comm)
         #-----------------------------------------------------------------------
-        # self.density_sub[:] = 0.0
-        self.density_sub[:] = self.density_charge_sub
+        self.density_sub[:] = 0.0
+        # self.density_sub[:] = self.density_charge_sub
         for c, p in zip(dipoles, positions_d):
             self.density_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma, rcut = rcut,
                     density = self.density_sub, add = True, deriv = 1)

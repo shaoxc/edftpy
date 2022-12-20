@@ -154,7 +154,6 @@ class EngineMBX(Engine):
     def get_m_sites(self):
         index = []
         index_m = []
-        pos = []
         ia = 0
         for im, name in enumerate(self.monomer_names) :
             if name == 'h2o' :
@@ -191,7 +190,7 @@ class EngineMBX(Engine):
             # p = self.get_value_at_points(extfield[i], self.points_mm)
             # potfield.append(p)
         # potfield= np.asarray(potfield).T.ravel()
-        mbx.set_potential_and_electric_field_on_sites(pot, potfield, units = 'au')
+        mbx.set_potential_and_electric_field_on_sites(-pot, potfield, units = 'au')
 
     def get_value_at_points(self, data, points):
         if data.ndim > 3 :

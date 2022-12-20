@@ -604,13 +604,13 @@ class Optimization(object):
         return
 
     def set_global_potential_qmmm(self, **kwargs):
-        self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = ('V'))
+        # self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = ('V'))
         #-----------------------------------------------------------------------
-        # embed_keys = ['XC', 'KE']
-        # self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.gaussian_density, embed_keys = embed_keys,
-                # gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = ('V'))
-        # pot_qmmm = self.gsystem_qmmm.total_evaluator.get_total_functional(self.gsystem_qmmm.density, calcType = ('V'), embed_keys = embed_keys).potential
-        # self.gsystem_qmmm.total_evaluator.embed_potential[:] += pot_qmmm
+        embed_keys = ['XC', 'KE']
+        self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.gaussian_density, embed_keys = embed_keys,
+                gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = ('V'))
+        pot_qmmm = self.gsystem_qmmm.total_evaluator.get_total_functional(self.gsystem_qmmm.density, calcType = ('V'), embed_keys = embed_keys).potential
+        self.gsystem_qmmm.total_evaluator.embed_potential[:] += pot_qmmm
         #-----------------------------------------------------------------------
         self.gsystem.total_evaluator.embed_potential = self.gsystem_qmmm.total_evaluator.embed_potential
         #-----------------------------------------------------------------------
@@ -690,21 +690,25 @@ class Optimization(object):
                 density = None if not hasattr(driver, 'density') else driver.density
                 core_density = None if not hasattr(driver, 'core_density') else driver.core_density
                 density_charge = None if not hasattr(driver, 'density_charge') else driver.density_charge
+                density_charge_mo = None if not hasattr(driver, 'density_charge_mo') else driver.density_charge_mo
+                if density is not None :
+                    if density_charge_mo is not None : density_charge_mo = density_charge_mo + density
+                    if density_charge is not None : density_charge = density_charge + density
                 technique = self._get_driver_technique(driver)
                 if technique in ['MM'] :
-                    self.gsystem_mm.update_density(density, isub = i)
+                    self.gsystem_mm.update_density(density_charge, isub = i)
                     #-----------------------------------------------------------------------
                     # Only works for one MM subsystem, and only need once.
                     self.gsystem_mm.update_density(core_density, isub = i, core = True)
                     # Only works for one MM subsystem, and use gaussian_density to save the O-site density
-                    self.gsystem_mm.update_density(density_charge, isub = i, fake = True)
+                    self.gsystem_mm.update_density(density_charge_mo, isub = i, fake = True)
                     #-----------------------------------------------------------------------
             #
             self.gsystem_qmmm.density[:] = self.gsystem.density + self.gsystem_mm.density
             # Only need once, but for simple
             self.gsystem_qmmm.core_density[:] = self.gsystem.core_density + self.gsystem_mm.core_density
             # For nonadditive terms
-            # self.gsystem_qmmm.gaussian_density[:] = self.gsystem.density + self.gsystem_mm.gaussian_density
+            self.gsystem_qmmm.gaussian_density[:] = self.gsystem.density + self.gsystem_mm.gaussian_density
             # self.gsystem_qmmm.gaussian_density[:] = self.gsystem_qmmm.density
             #
             if 'XC' in self.gsystem_qmmm.total_evaluator.funcdicts :
