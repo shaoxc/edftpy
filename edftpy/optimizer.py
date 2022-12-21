@@ -119,6 +119,16 @@ class Optimization(object):
                     eint[k] = v
             else :
                 eint = edict_qmmm.energy - edict_qm.energy - edict_mm.energy
+            #-----------------------------------------------------------------------
+            # Only for test duo-density, later need update !!!
+            edict_qmmm = self.gsystem_qmmm.total_evaluator(self.gsystem_qmmm.gaussian_density, calcType = ['E'], split = split, olevel = 0)
+            edict_qm = self.gsystem.total_evaluator(self.gsystem.density, calcType = ['E'], split = split, olevel = 0)
+            edict_mm = self.gsystem_mm.total_evaluator(self.gsystem_mm.gaussian_density, calcType = ['E'], split = split, olevel = 0)
+            if split :
+                for k in ['XC', 'KE'] :
+                    v = [edict_qmmm[k].energy, edict_qm[k].energy, edict_mm[k].energy]
+                    eint[k] = v
+            #-----------------------------------------------------------------------
         return eint
 
     def update_density(self, update = None, update_coef = False, **kwargs):
@@ -710,6 +720,7 @@ class Optimization(object):
             # For nonadditive terms
             self.gsystem_qmmm.gaussian_density[:] = self.gsystem.density + self.gsystem_mm.gaussian_density
             # self.gsystem_qmmm.gaussian_density[:] = self.gsystem_qmmm.density
+            # self.gsystem_mm.gaussian_density[:] = self.gsystem_mm.density
             #
             if 'XC' in self.gsystem_qmmm.total_evaluator.funcdicts :
                 self.gsystem_qmmm.total_evaluator.funcdicts['XC'].core_density = self.gsystem_qmmm.core_density

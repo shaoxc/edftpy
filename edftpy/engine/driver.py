@@ -603,11 +603,16 @@ class DriverMM(DriverKS):
         self.density_charge_mo_sub = Field(grid = self.grid_sub, rank=self.nspin)
         self.density_charge_mo_sub[:] = 0.0
         pos_m, inds_m, inds_o = self.engine.get_m_sites()
+        if self.comm.size > 1 :
+            pos_m = self.comm.bcast(pos_m, root = 0)
+            inds_m = self.comm.bcast(inds_m, root = 0)
+            inds_o = self.comm.bcast(inds_o, root = 0)
         if len(inds_m) > 0 :
             dipoles, positions_d = self.engine.get_dipoles()
             if self.comm.size > 1 :
                 positions_d = self.comm.bcast(positions_d, root = 0)
             positions_c[inds_m] = positions_d[inds_o]
+            positions_c[inds_o] = positions_d[inds_m]
             #
             for c, p in zip(charges, positions_c):
                 if c > 1 :
@@ -627,6 +632,8 @@ class DriverMM(DriverKS):
         self.core_density = self.core_density_sub.gather(grid = self.grid)
         self.density_charge = self.density_charge_sub.gather(grid = self.grid)
         self.density_charge_mo = self.density_charge_mo_sub.gather(grid = self.grid)
+        # self.density_charge_sub.write('sub_c_1.xsf', ions = self.subcell.ions)
+        # self.density_charge_mo_sub.write('sub_c_1_2.xsf', ions = self.subcell.ions)
 
     @print2file()
     def get_energy(self, olevel = 0, **kwargs):
