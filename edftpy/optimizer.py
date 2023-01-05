@@ -127,6 +127,8 @@ class Optimization(object):
             if split :
                 for k in ['XC', 'KE'] :
                     v = [edict_qmmm[k].energy, edict_qm[k].energy, edict_mm[k].energy]
+                    for i in range(3):
+                        eint['TOTAL'][i] += v[i] - eint[k][i]
                     eint[k] = v
             #-----------------------------------------------------------------------
         return eint
@@ -718,9 +720,9 @@ class Optimization(object):
             # Only need once, but for simple
             self.gsystem_qmmm.core_density[:] = self.gsystem.core_density + self.gsystem_mm.core_density
             # For nonadditive terms
+            # self.gsystem_mm.gaussian_density[:] = self.gsystem_mm.density
             self.gsystem_qmmm.gaussian_density[:] = self.gsystem.density + self.gsystem_mm.gaussian_density
             # self.gsystem_qmmm.gaussian_density[:] = self.gsystem_qmmm.density
-            # self.gsystem_mm.gaussian_density[:] = self.gsystem_mm.density
             #
             if 'XC' in self.gsystem_qmmm.total_evaluator.funcdicts :
                 self.gsystem_qmmm.total_evaluator.funcdicts['XC'].core_density = self.gsystem_qmmm.core_density
