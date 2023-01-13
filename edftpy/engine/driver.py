@@ -624,6 +624,9 @@ class DriverMM(DriverKS):
         else :
             self.density_charge_mo_sub = self.density_charge_sub
         #-----------------------------------------------------------------------
+        if len(inds_m) > 0 :
+            self.subcell.ions.pos[inds_o] = pos_m
+        #-----------------------------------------------------------------------
         sprint('charges :\n', charges, comm = self.comm)
         # self.density_charge_sub.write('1_pseudo_density_charge.xsf', ions = self.subcell.ions)
         self.density_sub = self.subcell.density
