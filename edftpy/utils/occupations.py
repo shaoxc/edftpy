@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.special import erf
+from scipy.optimize import minimize_scalar
 from functools import partial
 
 from edftpy.mpi import sprint
@@ -98,7 +99,7 @@ class Occupations:
             occs[inds] = occs.copy()
         return occs
 
-    def get_fermi_level(self, elevels, ncharge = None, weights = 1.0, emin = None, emax = None, maxiter = 500, tol = 1E-10, **kwargs):
+    def get_fermi_level(self, elevels, ncharge = None, weights = 1.0, emin = None, emax = None, tol = 1E-10, **kwargs):
         """
         ref :
            https://doi.org/10.1016/j.cpc.2019.06.017
@@ -128,14 +129,31 @@ class Occupations:
             diff = (occs*weights).sum() - ncharge
             return diff
 
-        ef, diff = self.get_opt_number(func, emin, emax, maxiter = maxiter, tol = tol, **kwargs)
-        if abs(diff) > tol :
-            raise AttributeError(f"Can not find the good fermi level. ({ef} -> {diff})")
-
+        ef = self.get_opt_number(func, emin, emax, tol = tol, **kwargs)
         return ef
 
+    def get_opt_number(self, func, emin, emax, tol = 1E-10, method = 'Brent', **kwargs):
+        if method.lower() == 'step' :
+            x, diff = self.minimize_step(func, emin, emax, tol = tol, **kwargs)
+            if abs(diff) > tol :
+                success = False
+            else :
+                success = True
+        else :
+            def fx(x) :
+                return np.abs(func(x))
+            res = minimize_scalar(fx, bracket=(emin, emax), tol=tol/10, method=method)
+            x = res.x
+            diff = res.fun
+            success = res.success
+            if abs(diff) > max(tol*100, 1E-4): # not converged to the target.
+                success = False
+        if not success :
+            raise AttributeError(f"Can not find a good value. ({x} -> {diff})")
+        return x
+
     @staticmethod
-    def get_opt_number(func, emin, emax, maxiter = 500, tol = 1E-10, **kwargs):
+    def minimize_step(func, emin, emax, maxiter = 500, tol = 1E-10, **kwargs):
         ef = (emin + emax)/2.0
         step = min(1.0, (emax - ef)*(0.5+tol))
 
@@ -202,6 +220,75 @@ class Occupations:
             raise AttributeError(f"Can not find the good fermi level. ({efs[0]} -> {diff})")
 
         return efs
+
+    def opt_occupation_voltage(self, elevels, ncharge = None, weights = 1.0, emin = None, emax = None, voltage = 0.0, tol = 1E-10, index = (0, 1), **kwargs):
+        """
+        Note :
+            voltage >= 0
+        """
+        if ncharge is None :
+            raise AttributeError("Please give the number of electrons : 'ncharge'")
+
+        inds = [len(x) for x in elevels]
+        inds.insert(0, 0)
+        inds = np.cumsum(inds)
+
+        elevels_total = np.concatenate(elevels)
+        weights_total = np.concatenate(weights)
+        sind = np.argsort(elevels_total)
+        elevels_total = elevels_total[sind]
+        weights_total = weights_total[sind]
+        sind = np.argsort(sind)
+        ind0 = sind[inds[index[0]]:inds[index[0]+1]]
+        ind1 = sind[inds[index[1]]:inds[index[1]+1]]
+        #
+        elevels_0 = elevels[index[0]]
+        elevels_1 = elevels[index[1]]
+        weights_0 = weights[index[0]]
+        weights_1 = weights[index[1]]
+        #
+
+        def func(ef):
+            occs = self.get_occupation_numbers(elevels_total, ef=ef, **kwargs)
+            diff = (occs*weights_total).sum() - ncharge
+            return diff
+
+        if emin is None : emin = elevels_total[0] - 2*self.degauss
+        if emax is None : emax = elevels_total[-1] + 2*self.degauss
+
+        ef = self.get_opt_number(func, emin, emax, tol = tol, **kwargs)
+        occs = self.get_occupation_numbers(elevels_total, ef=ef, **kwargs)
+
+        nc = (occs[ind0]*weights_0).sum() + (occs[ind1]*weights_1).sum()
+
+        def func_dv(dv_0):
+            dv_1 = dv_0 - voltage
+            occs_0 = self.get_occupation_numbers(elevels_0, ef=ef+dv_0, **kwargs)
+            n0 = (occs_0*weights_0).sum()
+
+            occs_1 = self.get_occupation_numbers(elevels_1, ef=ef+dv_1, **kwargs)
+            n1 = (occs_1*weights_1).sum()
+
+            diff = abs(n0 + n1 - nc)
+            return diff
+
+        if voltage > 0.0 :
+            dv_0 = self.get_opt_number(func_dv, 0, voltage, tol = tol, **kwargs)
+        else :
+            dv_0 = self.get_opt_number(func_dv, voltage, 0, tol = tol, **kwargs)
+
+        dv_1 = dv_0 - voltage
+        occs_0 = self.get_occupation_numbers(elevels_0, ef=ef+dv_0, **kwargs)
+        occs_1 = self.get_occupation_numbers(elevels_1, ef=ef+dv_1, **kwargs)
+        occs[ind0] = occs_0
+        occs[ind1] = occs_1
+        #
+        occs *= weights_total
+        occs = occs[sind]
+        occs = np.split(occs, inds[1:-1])
+        sprint(ef, dv_0, dv_1, flush = True, level = 3)
+        sprint(occs, flush = True, level = 3)
+        return occs
 
     def get_fermi_level_pot(self, elevels, ncharge = None, weights = 1.0, emin = None, emax = None, maxiter = 500, tol = 1E-10, diffs = 0.0, eratio = 0.1, index = (0, 1), **kwargs):
         if ncharge is None :
