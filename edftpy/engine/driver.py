@@ -594,9 +594,11 @@ class DriverMM(DriverKS):
         self.density_charge_sub[:] = 0.0
         for c, p in zip(charges, positions_c):
             if c > 1 :
-                sigma2 = 1.4 *sigma
+                #sigma2 = 1.4 *sigma
+                sigma2 = 0.84
             else :
-                sigma2 = sigma
+                #sigma2 = sigma
+                sigma2 = 0.84
             self.density_charge_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma2, rcut = rcut,
                     density = self.density_charge_sub, add = True, deriv = 0)
         #Double density---------------------------------------------------------
@@ -611,14 +613,19 @@ class DriverMM(DriverKS):
             dipoles, positions_d = self.engine.get_dipoles()
             if self.comm.size > 1 :
                 positions_d = self.comm.bcast(positions_d, root = 0)
-            positions_c[inds_m] = positions_d[inds_o]
-            positions_c[inds_o] = positions_d[inds_m]
+
+            for idx_M in inds_m:
+                idx_O = idx_M - 3
+                positions_c[idx_M] = positions_d[idx_O]
+                positions_c[idx_O] = positions_d[idx_M]
             #
             for c, p in zip(charges, positions_c):
                 if c > 1 :
-                    sigma2 = 1.4 *sigma
+                    #sigma2 = 1.4 *sigma
+                    sigma2 = 0.90
                 else :
-                    sigma2 = sigma
+                    #sigma2 = sigma
+                    sigma2 = 0.96
                 self.density_charge_mo_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma2, rcut = rcut,
                         density = self.density_charge_mo_sub, add = True, deriv = 0)
         else :
