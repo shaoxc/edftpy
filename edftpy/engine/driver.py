@@ -575,6 +575,12 @@ class DriverMM(DriverKS):
             self.prev_density = Field(grid=self.grid, rank=self.nspin)
             self.charge = np.empty((grid.nnr, self.nspin), order = self.engine.units['order'])
             self.prev_charge = np.empty((grid.nnr, self.nspin), order = self.engine.units['order'])
+            # original MM dipole norm, The dipoles are induced from inner MBX part. Datatype: numpy array [nsites]
+            self.MM_dp0 = None
+            # updated MM dipole norm, The dipoles are induced by MBX and QM part.   Datatype: numpy array [nsites] 
+            self.QMMM_dp = None
+            # MM pentalty energy.  sum of alpha*|DP1-DP2| 
+            self.MMpenalty_energy = 0.0
         else :
             self.density = self.atmp2
             self.prev_density = self.atmp2
@@ -611,6 +617,8 @@ class DriverMM(DriverKS):
             inds_o = self.comm.bcast(inds_o, root = 0)
         if len(inds_m) > 0 :
             dipoles, positions_d = self.engine.get_dipoles()
+            # Get original dipole length (inner MM zone)
+            self.MM_dp0 =dipoles
             if self.comm.size > 1 :
                 positions_d = self.comm.bcast(positions_d, root = 0)
 
@@ -668,6 +676,7 @@ class DriverMM(DriverKS):
         if 'E' in calcType :
             energy = self.engine.get_energy(olevel = olevel) * self.engine.units['energy']
             func.energy = energy
+            func.energy = func.energy + self.MMpenalty_energy
             if self.comm.rank > 0 : func.energy = 0.0
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
             # self.write_stdout(fstr)
@@ -698,6 +707,16 @@ class DriverMM(DriverKS):
         # dipoles[:3] = dip[:3]
         # dipoles[:] = 0.0
         sprint('dipoles :\n', dipoles, comm = self.comm)
+
+        # Get updated dipole (induced by QM and MM part)
+        self.QMMM_dp =dipoles
+
+        Dp_length =(self.QMMM_dp[:,0]-self.MM_dp0[:,0])**2 +\
+                   (self.QMMM_dp[:,1]-self.MM_dp0[:,1])**2 +\
+                   (self.QMMM_dp[:,2]-self.MM_dp0[:,2])**2
+        # sqrt is ignored. 
+        self.MMpenalty_energy = np.sum(Dp_length)*12/627.51
+        sprint("MM distorsion energy (Hartree):",self.MMpenalty_energy,comm = self.comm)
         #-----------------------------------------------------------------------
         self.density_sub[:] = 0.0
         # self.density_sub[:] = self.density_charge_sub
