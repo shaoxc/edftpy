@@ -181,9 +181,9 @@ class EngineMBX(Engine):
     def set_extpot(self, extpot = None, **kwargs):
         if self.comm.rank > 0 : return
         pot = self.get_value_at_points(extpot, self.points_mm).ravel()
-        extfield = extpot.gradient()
+        #extfield = extpot.gradient()
         # extfield = extpot.gradient(flag = 'standard')
-        # extfield = extpot.gradient(flag = 'supersmooth')
+        extfield = extpot.gradient(flag = 'supersmooth',sigma=0.3)
         potfield = self.get_value_at_points(extfield, self.points_mm).ravel()
         # potfield = []
         # for i in range(3):

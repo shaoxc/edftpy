@@ -678,6 +678,7 @@ class DriverMM(DriverKS):
             func.energy = energy
             func.energy = func.energy + self.MMpenalty_energy
             if self.comm.rank > 0 : func.energy = 0.0
+            self._iter += 1
             fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
             # self.write_stdout(fstr)
             sprint(fstr, comm = self.comm)
