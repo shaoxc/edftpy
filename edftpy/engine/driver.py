@@ -342,6 +342,15 @@ class DriverKS(Driver):
     @print2file()
     def get_energy(self, olevel = 0, sdft = 'sdft', **kwargs):
         if olevel == 0 :
+            if sdft == 'pdft' :
+                extpot = self.evaluator.embed_potential
+                extpot = self.get_extpot(extpot, mapping = False)
+            else :
+                extpot = self.get_extpot(mapping = False)
+            # Use Harris-Foulkes energy
+            energy = self.engine.get_energy(olevel = 1) * self.engine.units['energy']
+            energy -= self._get_extene(extpot)
+        elif olevel == -1 :
             # Here, we directly use saved density
             if sdft == 'pdft' :
                 extpot = self.evaluator.embed_potential
