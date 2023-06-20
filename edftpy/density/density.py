@@ -4,10 +4,11 @@ from scipy.interpolate import splrep, splev
 import os
 from edftpy import io
 from dftpy.ewald import CBspline
-from edftpy.utils.common import Field, RadialGrid
+from edftpy.utils.common import Field, RadialGrid, Coord
 from edftpy.utils.math import fermi_dirac
 from edftpy.mpi import sprint
 from edftpy.functional.pseudopotential import ReadPseudo
+from edftpy.utils.math import gaussian
 
 class AtomicDensity(object):
     """
@@ -298,3 +299,93 @@ def file2density(filename, density, grid = None):
         else :
             density_gather = np.zeros(1)
         grid.scatter(density_gather, out = density)
+
+def gen_gaussian_density(ions, grid, options={}, density = None):
+    """
+    FWHM : 2*np.sqrt(2.0*np.log(2)) = 2.354820
+    """
+    fwhm = 2.354820
+    nr = grid.nrR
+    dnr = (1.0/nr).reshape((3, 1))
+    gaps = grid.spacings
+    if density is None : density = Field(grid)
+    ncharge = 0.0
+    sigma_min = np.max(gaps) * 2 / fwhm
+    for key, option in options.items() :
+        rcut = option.get('rcut', 5.0)
+        sigma = option.get('sigma', 0.3)
+        scale = option.get('scale', 0.0)
+        if scale is None or abs(scale) < 1E-10 :
+            continue
+        sigma = max(sigma, sigma_min)
+        border = (rcut / gaps).astype(np.int32) + 1
+        border = np.minimum(border, nr//2)
+        ixyzA = np.mgrid[-border[0]:border[0]+1, -border[1]:border[1]+1, -border[2]:border[2]+1].reshape((3, -1))
+        prho = np.zeros((2 * border[0]+1, 2 * border[1]+1, 2 * border[2]+1))
+        for i in range(ions.nat):
+            if ions.labels[i] != key:
+                continue
+            prho[:] = 0.0
+            posi = ions.pos[i].reshape((1, 3))
+            atomp = np.array(posi.to_crys()) * nr
+            atomp = atomp.reshape((3, 1))
+            ipoint = np.floor(atomp + 1E-8)
+            # ipoint = np.floor(atomp)
+            px = atomp - ipoint
+            l123A = np.mod(ipoint.astype(np.int32) - ixyzA, nr[:, None])
+            positions = (ixyzA + px) * dnr
+            positions = np.einsum("j...,kj->k...", positions, grid.lattice)
+            dists = LA.norm(positions, axis = 0).reshape(prho.shape)
+            index = dists < rcut
+            prho[index] = gaussian(dists[index], sigma) * scale
+            # prho[index] = gaussian(dists[index], sigma, dim = 0) * scale
+            mask = grid.get_array_mask(l123A)
+            density[l123A[0][mask], l123A[1][mask], l123A[2][mask]] += prho.ravel()[mask]
+            ncharge += scale
+
+    return density, ncharge
+
+def build_pseudo_density(pos, grid, scale = 0.0, sigma = 0.3, rcut = 5.0, density = None, add = True, deriv = 0):
+    """
+    FWHM : 2*np.sqrt(2.0*np.log(2)) = 2.354820
+    """
+    fwhm = 2.354820
+    nr = grid.nrR
+    dnr = (1.0/nr).reshape((3, 1))
+    gaps = grid.spacings
+    if density is None : density = Field(grid)
+    sigma_min = np.max(gaps) * 2 / fwhm
+    #
+    if scale is None : return density
+    scale = np.asarray(scale)
+    if np.all(np.abs(scale)) < 1E-10 : return density
+    #
+    sigma = max(sigma, sigma_min)
+    border = (rcut / gaps).astype(np.int32) + 1
+    border = np.minimum(border, nr//2)
+    ixyzA = np.mgrid[-border[0]:border[0]+1, -border[1]:border[1]+1, -border[2]:border[2]+1].reshape((3, -1))
+    prho = np.zeros((2 * border[0]+1, 2 * border[1]+1, 2 * border[2]+1))
+    posi = Coord(pos.reshape((1, 3)), grid.lattice, basis = 'Cartesian')
+    atomp = np.array(posi.to_crys()) * nr
+    atomp = atomp.reshape((3, 1))
+    ipoint = np.floor(atomp + 1E-8)
+    # ipoint = np.floor(atomp)
+    px = atomp - ipoint
+    l123A = np.mod(ipoint.astype(np.int32) - ixyzA, nr[:, None])
+    positions = (ixyzA + px) * dnr
+    positions = np.einsum("j...,kj->k...", positions, grid.lattice)
+    dists = LA.norm(positions, axis = 0).reshape(prho.shape)
+    index = dists < rcut
+    if scale.size > 1 :
+        if deriv != 1 : raise AttributeError("'scale' with array only works for deriv==1")
+        positions = positions.reshape((3, *prho.shape))
+        for i, s in enumerate(scale):
+            prho[index] += gaussian(dists[index], sigma) * positions[i][index]/sigma**2*scale[i]
+    else :
+        prho[index] = gaussian(dists[index], sigma) * scale
+    mask = grid.get_array_mask(l123A)
+    if add :
+        density[l123A[0][mask], l123A[1][mask], l123A[2][mask]] += prho.ravel()[mask]
+    else :
+        density[l123A[0][mask], l123A[1][mask], l123A[2][mask]] = prho.ravel()[mask]
+    return density

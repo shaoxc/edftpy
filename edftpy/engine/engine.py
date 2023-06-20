@@ -66,6 +66,10 @@ class Driver(ABC):
         self.set_stdout(self.outfile, append = append)
 
     @property
+    def units(self):
+        return self.engine.units
+
+    @property
     def grid(self):
         return self.subcell.grid
 

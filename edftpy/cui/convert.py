@@ -163,7 +163,7 @@ def change_order_sub(args, config, struct):
 
 def get_system(args):
     system = None
-    iolist = ['snpy', 'xsf', 'pp', 'qepp']
+    iolist = ['snpy', 'xsf', 'pp', 'qepp', 'cube']
     has_field = True
     for fname in (*args.cells, args.output) :
         prefix, ext = os.path.splitext(fname)
