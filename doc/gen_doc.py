@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from edftpy.config.config import default_option
+import sys, os
 
 header = r"""
 .. _config:
