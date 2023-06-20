@@ -1,0 +1,41 @@
+ &CONTROL
+   !
+   calculation = 'relax'
+   restart_mode = 'from_scratch'
+   pseudo_dir = '/home/sxc/work/environ/pseudo/'
+   outdir = '/home/sxc/work/environ/tempdir/'
+   prefix = 'h2o_vacuum_direct'
+   tprnfor = .TRUE.
+   verbosity = 'high'
+   !
+ /
+ &SYSTEM
+   !
+   ecutrho = 300
+   ecutwfc = 30
+   ibrav = 1
+   celldm(1) = 20
+   nat = 3
+   ntyp = 2
+   !
+/
+ &ELECTRONS
+   !
+   conv_thr = 5.D-9
+   diagonalization = 'cg'
+   mixing_beta = 0.4
+   electron_maxstep = 200
+   !
+ /
+ &IONS
+   ion_dynamics    = 'bfgs'
+ /
+K_POINTS (automatic)
+ 1 1 1 0 0 0
+ATOMIC_SPECIES
+ H   1  H.pbe-rrkjus.UPF
+ O  16  O.pbe-rrkjus.UPF
+ATOMIC_POSITIONS (bohr)
+O   11.79  12.05  11.50
+H   13.45  11.22  11.50
+H   10.56  10.66  11.50
