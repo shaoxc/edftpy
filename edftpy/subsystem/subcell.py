@@ -5,7 +5,7 @@ from dftpy.math_utils import ecut2nr, bestFFTsize
 from edftpy.functional import LocalPP, Ewald
 from edftpy.utils.common import Field, Grid, Ions
 from edftpy.utils.math import gaussian
-from edftpy.density import get_3d_value_recipe
+from edftpy.density import get_3d_value_recipe, gen_gaussian_density
 from edftpy.mpi import sprint
 
 class SubCell(object):
@@ -13,7 +13,7 @@ class SubCell(object):
         self._grid = None
         self._ions = None
         self._density = None
-        self._ions_index = None
+        self._ions_index = index
         self.nspin = nspin
 
         self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, full = full, nr = nr, **kwargs)
@@ -79,7 +79,7 @@ class SubCell(object):
 
         origin = grid_sub.shift / grid.nrR
         pos_cry -= origin
-        pos_cry %= 1.0
+        # pos_cry %= 1.0
         pos = ions.cell.cartesian_positions(pos_cry)
 
         ions_sub = Ions(numbers = ions.numbers[index].copy(), positions = pos, cell = grid_sub.lattice, charges = ions.charges[index].copy())
@@ -176,50 +176,7 @@ class SubCell(object):
         return grid_sub
 
     def _gen_gaussian_density(self, options={}):
-        """
-        FWHM : 2*np.sqrt(2.0*np.log(2)) = 2.354820
-        """
-        fwhm = 2.354820
-        nr = self.grid.nrR
-        dnr = (1.0/nr).reshape((3, 1))
-        gaps = self.grid.spacings
-        # latp = self.grid.latparas
-        self._gaussian_density = Field(self.grid)
-        ncharge = 0.0
-        sigma_min = np.max(gaps) * 2 / fwhm
-        scaled_positions = self.ions.get_scaled_positions()
-        for key, option in options.items() :
-            rcut = option.get('rcut', 5.0)
-            sigma = option.get('sigma', 0.3)
-            scale = option.get('scale', 0.0)
-            if scale is None or abs(scale) < 1E-10 :
-                continue
-            # print('sigma', np.max(gaps), fwhm * sigma, sigma_min)
-            sigma = max(sigma, sigma_min)
-            border = (rcut / gaps).astype(np.int32) + 1
-            border = np.minimum(border, nr//2)
-            ixyzA = np.mgrid[-border[0]:border[0]+1, -border[1]:border[1]+1, -border[2]:border[2]+1].reshape((3, -1))
-            prho = np.zeros((2 * border[0]+1, 2 * border[1]+1, 2 * border[2]+1))
-            for i in range(self.ions.nat):
-                if self.ions.symbols[i] != key:
-                    continue
-                prho[:] = 0.0
-                atomp = nr * scaled_positions[i]
-                atomp = atomp.reshape((3, 1))
-                ipoint = np.floor(atomp + 1E-8)
-                # ipoint = np.floor(atomp)
-                px = atomp - ipoint
-                l123A = np.mod(ipoint.astype(np.int32) - ixyzA, nr[:, None])
-                positions = (ixyzA + px) * dnr
-                positions = np.einsum("j...,kj->k...", positions, self.grid.lattice)
-                dists = LA.norm(positions, axis = 0).reshape(prho.shape)
-                index = dists < rcut
-                prho[index] = gaussian(dists[index], sigma) * scale
-                # prho[index] = gaussian(dists[index], sigma, dim = 0) * scale
-                mask = self.get_array_mask(l123A)
-                self._gaussian_density[l123A[0][mask], l123A[1][mask], l123A[2][mask]] += prho.ravel()[mask]
-                ncharge += scale
-
+        self._gaussian_density, ncharge = gen_gaussian_density(self.ions, self.grid, options=options)
         nc = self._gaussian_density.integral()
         sprint(f'fake : {nc : >16.8E} deviation : {nc - ncharge: >16.8E}', comm=self.comm)
 
@@ -230,21 +187,6 @@ class SubCell(object):
         # self._gaussian_density *= factor
         # nc = self._gaussian_density.integral()
         # sprint('fake02', nc, comm=self.comm)
-
-    def get_array_mask(self, l123A):
-        if self.comm.size == 1 :
-            return slice(None)
-        offsets = self.grid.offsets.reshape((3, 1))
-        nr = self.grid.nr
-        #-----------------------------------------------------------------------
-        l123A -= offsets
-        mask = np.logical_and(l123A[0] > -1, l123A[0] < nr[0])
-        mask1 = np.logical_and(l123A[1] > -1, l123A[1] < nr[1])
-        np.logical_and(mask, mask1, out = mask)
-        np.logical_and(l123A[2] > -1, l123A[2] < nr[2], out = mask1)
-        np.logical_and(mask, mask1, out = mask)
-        #-----------------------------------------------------------------------
-        return mask
 
     def _gen_gaussian_density_recip(self, options={}):
         self._gaussian_density = Field(self.grid)
@@ -271,7 +213,7 @@ class SubCell(object):
 
 
 class GlobalCell(object):
-    def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, graphtopo = None, nspin = 1, **kwargs):
+    def __init__(self, ions, grid = None, ecut = 22, spacing = None, nr = None, full = False, optfft = True, graphtopo = None, nspin = 1, index = None, **kwargs):
         self.grid_kwargs = {
                 'ecut' : ecut,
                 'spacing' : spacing,
@@ -285,6 +227,7 @@ class GlobalCell(object):
         self.graphtopo = graphtopo
         self.comm = self.graphtopo.comm
         self.nspin = nspin
+        self._ions_index = index
 
         self.restart(grid=grid, ions=ions)
 
@@ -297,6 +240,12 @@ class GlobalCell(object):
         self._density = Field(grid=self.grid, rank=self.nspin, direct=True)
         self._gaussian_density = Field(grid=self.grid, rank=1, direct=True)
         self._core_density = Field(grid=self.grid, rank=1, direct=True)
+
+    @property
+    def ions_index(self):
+        if self._ions_index is None :
+            self._ions_index = slice(None)
+        return self._ions_index
 
     @property
     def grid(self):

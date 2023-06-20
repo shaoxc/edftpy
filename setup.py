@@ -33,16 +33,25 @@ extras_require = {
             ],
         }
 
+release = 1
+if release :
+    VERSION = {'version' : __version__}
+else :
+    VERSION = {
+            'use_scm_version': {'version_scheme': 'post-release'},
+            'setup_requires': [
+                'setuptools_scm',
+                'importlib-metadata>=0.12;python_version<"3.8"'],
+            }
+
 setup(name='edftpy',
       description=description,
       long_description=long_description,
       url='https://gitlab.com/pavanello-research-group/edftpy',
-      # version=__version__,
-      use_scm_version={'version_scheme': 'post-release'},
-      setup_requires=['setuptools_scm'],
       author=__author__,
       author_email=__contact__,
       license=__license__,
+      **VERSION,
       classifiers=[
           'Development Status :: 1 - Beta',
           'Intended Audience :: Science/Research',

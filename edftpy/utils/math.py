@@ -12,13 +12,19 @@ from dftpy.utils import grid_map_index, grid_map_data
 from .common import Field, Grid
 
 
-def gaussian(x, sigma = 0.4, mu = 0.0, dim = 3):
+def gaussian(x, sigma = 0.4, mu = 0.0, dim = 3, deriv = 0):
     if dim > 1 :
         y = 1.0/(np.sqrt(2.0 * np.pi) * sigma) ** dim * np.exp((x - mu) ** 2 /(-2.0 * sigma * sigma))
     elif dim == 1 :
         y = 1.0/(np.sqrt(2.0 * np.pi) * sigma) * np.exp(-0.5 * ((x - mu)/sigma) ** 2.0)
     else : # Just for debug
         y = 1.0/(np.sqrt(2.0 * np.pi * sigma)) ** 3 * np.exp((x - mu) ** 2 /(-2.0 * sigma))
+    if deriv == 0 :
+        pass
+    elif deriv == 1 :
+        y *= (mu-x)/sigma**2
+    else :
+        raise AttributeError(f"Sorry, the gaussian not support 'deriv' with {deriv}")
     return y
 
 def gaussian_g(x, sigma = 0.1, dim = 3, kind = 0):

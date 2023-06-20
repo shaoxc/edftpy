@@ -288,7 +288,6 @@ class TotalEvaluator(Evaluator):
         # self.static_potential = obj_global.potential
 
     def get_total_functional(self, rho, embed_keys = [], calcType = ['V'], **kwargs):
-        if not embed_keys : embed_keys = self.embed_keys
         remove_global = {}
         for key in self.funcdicts:
             if key in embed_keys:
@@ -308,8 +307,7 @@ class TotalEvaluator(Evaluator):
             obj = Functional(name = 'ZERO', potential = self.embed_potential)
             if 'E' in calcType :
                 obj.energy = np.sum(rho * self.embed_potential) * rho.grid.dV
-
-        if 'E' in calcType and gather:
-            obj.energy = rho.mp.vsum(obj.energy)
+            if gather:
+                obj.energy = rho.mp.vsum(obj.energy)
 
         return obj

@@ -162,7 +162,8 @@ def change_order_sub(args, config, struct):
     return struct[inds]
 
 def get_system(args):
-    iolist = ['snpy', 'xsf', 'pp', 'qepp']
+    system = None
+    iolist = ['snpy', 'xsf', 'pp', 'qepp', 'cube']
     for fname in (*args.cells, args.output) :
         prefix, ext = os.path.splitext(fname)
         if ext.lower()[1:] not in iolist :

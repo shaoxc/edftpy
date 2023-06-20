@@ -1,136 +1,183 @@
-import sys
-
+from typing import Any, Dict
 import pyec
-import pyec.setup_interface as environ_setup
-import pyec.control_interface as environ_control
-import pyec.calc_interface as environ_calc
-import pyec.output_interface as environ_output
+import pyec.environ_interface as environ
 
 import numpy as np
 
-from dftpy.constants import LEN_CONV
-
 from edftpy.engine.engine import Engine
+from edftpy.io import print2file
 
 try:
     __version__ = pyec.__version__
-except Exception :
+except Exception:
     __version__ = '0.0.1'
 
-class EngineEnviron(Engine):
-    """Engine for Environ
 
-    For now, just inherit the Engine, since the Environ driver
-    is reliant on the qepy module
-    """
-    def __init__(self, **kwargs):
-        """
-        this mirrors QE unit conversion, Environ has atomic internal units
-        """
-        unit_len = kwargs.get('length', 1.0)
-        unit_vol = unit_len ** 3
+class EngineEnviron(Engine):
+    """Engine for Environ."""
+    def __init__(self, **kwargs) -> None:
         units = kwargs.get('units', {})
         kwargs['units'] = units
+        unit_len = units.get('length', 1.0)
+        unit_ene = units.get('energy', 0.5)
+        unit_vol = unit_len**3
         kwargs['units']['volume'] = unit_vol
-        kwargs['units']['energy'] = 0.5
+        kwargs['units']['energy'] = unit_ene
+        kwargs['units']['order'] = 'F'
         super().__init__(**kwargs)
 
-        # initialize some persistent objects that Environ needs
-        # TODO this should be inferred through edftpy
-        self.nat = None
-        # this being persistent takes up memory, might want a better way of
-        # temporariliy storing and then cleaning this up
+        self.nat = 0
         self.potential = None
 
-    def get_forces(self, **kwargs):
-        """get Environ force contribution
-        """
+    @print2file()
+    def initial(self,
+                inputfile: str = 'environ.in',
+                comm=None,
+                **kwargs) -> None:
+        """Initialize the Environ module."""
+
+        # EXPECTED INPUT
+        kwargs = self.get_input(**kwargs)
+
+        inputs = dict.fromkeys([
+            'nelec', 'nat', 'ntyp', 'atom_label', 'ityp', 'zv',
+            'use_internal_pbc_corr', 'at', 'tau'
+        ])
+
+        # INPUT VALIDATION
+        for key in inputs.keys():
+            value = kwargs.get(key)
+            if value is None:
+                raise ValueError(f'`{key}` not set in initial function')
+            else:
+                inputs[key] = value
+
+        # PERSISTENT PARAMETERS
+        self.nat = inputs['nat']
+        self.comm = comm
+
+        # SET G-VECTOR CUTOFF
+        gcutm = kwargs.get('gcutm')
+        if not gcutm:
+            ecutrho = kwargs.get('ecutrho')
+            if value is None:
+                raise ValueError(f'`{key}` not set in initial function')
+            gcutm = ecutrho / (2 * np.pi)**2
+
+        # COMMUNICATOR
+        if hasattr(comm, 'py2f'):
+            commf = comm.py2f()
+            is_ionode = comm.rank == 0
+        else:
+            commf = None
+            is_ionode = True
+
+        # UPDATE INPUT
+        inputs.update({'comm': commf, 'gcutm': gcutm})
+        tau = inputs['tau']
+        del inputs['tau']
+
+        # INITIALIZE ENVIRON
+        environ.init_io(is_ionode, 0, commf, 6)
+        environ.read_input(inputfile)
+        environ.init_environ(**inputs)
+
+        # UPDATE IONS AND CELL
+        environ.update_ions(self.nat, tau)
+        environ.update_cell(inputs['at'])
+
+        self.nnt = environ.get_nnt()  # total number of FFT grid points
+        self.potential = np.zeros(self.nnt, order='F')
+
+    @print2file()
+    def update_ions(self, subcell=None, update: int = 0, **kwargs) -> None:
+        """Update ion positions."""
+        if not subcell:
+            raise ValueError("Missing subcell.")
+
+        tau = subcell.ions.pos.to_cart().T
+        environ.update_ions(self.nat, tau)
+
+    @print2file()
+    def scf(self, rho: np.ndarray, update: bool = True, **kwargs) -> None:
+        """Run a single electronic step for Environ."""
+        if self.potential is None:
+            raise ValueError("Potential not initialized.")
+
+        environ.update_electrons(rho, True)
+        environ.calc_potential(update, self.potential, lgather=True)
+
+    @print2file()
+    def get_forces(self, **kwargs) -> np.ndarray:
+        """Return Environ's contribution to the force."""
+        if not self.nat:
+            raise ValueError("Environ not yet initialized.")
+
         force = np.zeros((3, self.nat), dtype=float, order='F')
-        environ_calc.calc_force(force)
-        return force.T
+        environ.calc_force(force)
+
+        return force.T * self.units['energy']
+
+    def get_potential(self, **kwargs) -> np.ndarray:
+        """Return Environ's contribution to the potential."""
+        return self.potential * self.units['energy']
+
+    def get_nnt(self) -> int:
+        """Return total number of grid points in Environ."""
+        return self.nnt
+
+    def get_grid(self, nr: np.ndarray = None, **kwargs) -> np.ndarray:
+        """Return Environ's grid dimensions."""
+        if nr is None:
+            nr = np.zeros(3, dtype='int32')
+
+        for i in range(3):
+            nr[i] = environ.get_nrx(i)
+
+        return nr
+
+    @print2file()
+    def set_mbx_charges(self, rho: np.ndarray) -> None:
+        """Add MBX charges to Environ's charge density."""
+        environ.add_mbx_charges(rho, True)
 
     def calc_energy(self, **kwargs):
-        """get Environ energy contribution
-        """
-        # move these array options to pyec maybe
-        energy = environ_calc.calc_energy()
-        return energy
+        return self.get_energy(self, **kwargs)
 
-    def initial(self, inputfile= None, comm = None, **kwargs):
-        """initialize the Environ module
+    @print2file()
+    def get_energy(self, olevel=0, **kwargs) -> float:
+        """Compute Environ's contribution to the energy."""
+        if olevel == 0:
+            energy = environ.calc_energy()
+        else:
+            energy = 0.0
 
-        Args:
-            comm (uint, optional): communicator for MPI. Defaults to None.
-        """
-        # TODO verify units for values that get communicated to Environ from edftpy
-        # TODO handle any input value missing things better?
-        #-----------------------------------------------------------------------
-        kwargs = self.write_input(**kwargs)
-        #-----------------------------------------------------------------------
-        self.nat = kwargs.get('nat')
-        ntyp = kwargs.get('ntyp')
-        nelec = kwargs.get('nelec')
-        atom_label = kwargs.get('atom_label')
-        alat = kwargs.get('alat')
-        at = kwargs.get('at')
-        gcutm = kwargs.get('gcutm')
-        # if gcutm not supplied, we can infer its value with ecutrho
-        if gcutm is None:
-            ecutrho = kwargs.get('ecutrho')
-            alat = kwargs.get('alat')
-            _check_kwargs('ecutrho', ecutrho, 'initial')
-            gcutm = ecutrho / (2 * np.pi / alat) ** 2
-        ityp = kwargs.get('ityp')
-        zv = kwargs.get('zv')
-        tau = kwargs.get('tau')
-        do_comp_mt = kwargs.get('do_comp_mt')
-        # rho = kwargs.get('rho') # maybe make this a named argument to parallel the scf function
+        return energy * self.units['energy']
 
-        # raise Exceptions here if the keywords are not supplied
-        _check_kwargs('nat', self.nat, 'initial')
-        _check_kwargs('ntyp', ntyp, 'initial')
-        _check_kwargs('nelec', nelec, 'initial')
-        _check_kwargs('atom_label', atom_label, 'initial')
-        _check_kwargs('at', at, 'initial')
-        _check_kwargs('ityp', ityp, 'initial')
-        _check_kwargs('zv', zv, 'initial')
-        _check_kwargs('tau', tau, 'initial')
-        _check_kwargs('do_comp_mt', do_comp_mt, 'initial')
+    def print_energies(self) -> None:
+        """Print Environ's contribution to the energy."""
+        environ.print_energies()
 
-        self.comm = comm or self.comm
+    def print_potential_shift(self) -> None:
+        """Print potential shift due to the use of Gaussian-spread ions."""
+        environ.print_potential_shift()
 
-        if hasattr(comm, 'py2f') :
-            commf = comm.py2f()
-        else :
-            commf = None
-        # TODO program unit needs to be set externally perhaps
-        iounit = 6
-        environ_setup.init_io(comm.rank == 0, 0, commf, iounit)
-        environ_setup.read_input()
-        environ_setup.init_environ(
-                commf, nelec, self.nat, ntyp, atom_label[:, :ntyp], ityp, zv,
-                do_comp_mt, alat, at, gcutm)
-        environ_control.update_ions(self.nat, tau, alat)
-        environ_control.update_cell(at, alat)
-        nnr = environ_calc.get_nnt()
+    @print2file()
+    def stop_run(self, **kwargs) -> None:
+        """Destroy Environ objects."""
+        environ.clean_environ()
 
-        if comm is None or comm.rank == 0 :
-            self.potential = np.zeros((nnr,), dtype=float)
-        else :
-            self.potential = np.zeros((1,), dtype=float)
-
-        # TODO reconsider these steps
-        # if rho is not None:
-        #     environ_control.update_electrons(rho, lscatter=True)
-        #     environ_calc.calc_potential(False, self.potential, lgather=True) # might not be necessary?
-        # else:
-        #     # print("electrons not initialized until scf")
-        #     rho = np.zeros((environ_calc.get_nnt(), 1,), dtype=float, order='F')
-
-    def write_input(self, subcell = None, **kwargs):
+    def get_input(self, subcell=None, **kwargs) -> Dict[str, Any]:
+        """Build Environ input."""
         defaults = {
-                'ecutrho' : 300,
-                }
+            'ecutrho': 300,
+            'use_internal_pbc_corr': False,
+        }
+        defaults.update(kwargs)
+
+        if subcell is None: return defaults  # if running QEpy+PyE-C directly
+
+        # Update base on the subcell
         nat = subcell.ions.nat
         ntyp = len(subcell.ions.zval)
         alat = subcell.grid.latparas[0]
@@ -138,82 +185,71 @@ class EngineEnviron(Engine):
         tau = subcell.ions.positions().T / subcell.grid.latparas[0]
         labels = subcell.ions.get_chemical_symbols()
         zv = np.zeros(ntyp)
-        # atom_label = np.ones((3, ntyp), dtype = 'int32')*32
-        atom_label = np.zeros((3, ntyp), dtype = 'c')
+        atom_label = np.zeros((3, ntyp), dtype='c')
         atom_label[:] = ' '
-        ityp = np.ones(nat, dtype = 'int32')
+        ityp = np.ones(nat, dtype='int32')
+
         i = -1
         nelec = 0.0
+        # COLLECT ATOM LABELS, IONIC CHARGES, AND NUMBER OF ELECTRONS
         for key, v in subcell.ions.zval.items():
             i += 1
             zv[i] = v
             atom_label[:len(key), i] = key
             mask = labels == key
             ityp[mask] = i + 1
-            nelec += v*np.count_nonzero(mask)
+            nelec += v * np.count_nonzero(mask)
+
         subs = {
-                'at' : at,
-                'nat' : nat,
-                'ntyp' : ntyp,
-                'alat' : alat,
-                'tau' : tau,
-                'zv' : zv,
-                'atom_label' : atom_label,
-                'ityp' : ityp,
-                'nelec' : nelec,
-                }
-        defaults.update(kwargs)
+            'at': at,
+            'nat': nat,
+            'ntyp': ntyp,
+            'tau': tau,
+            'zv': zv,
+            'atom_label': atom_label,
+            'ityp': ityp,
+            'nelec': nelec,
+        }
+
         defaults.update(subs)
+
         return defaults
 
-    def scf(self, rho, update = True, **kwargs):
-        """A single electronic step for Environ
-
-        Args:
-            rho (np.ndarray): the density object
+    @staticmethod
+    def get_kwargs_from_qepy(qepy=None) -> Dict[str, Any]:
         """
-        environ_control.update_electrons(rho, lscatter=True)
-        if self.potential is None:
-            raise ValueError("`potential` not initialized, has `initial` been run?")
-        environ_calc.calc_potential(update, self.potential, lgather=True)
-
-    def get_potential(self, **kwargs):
-        """Returns the potential from Environ
+        For direct QEpy+PyE-C, return QEpy parameters necessary in Environ.
         """
-        return self.potential
+        if qepy is None: import qepy
 
-    def set_mbx_charges(self, rho):
-        """Supply Environ with MBX charges
-        """
-        environ_control.add_mbx_charges(rho, lscatter=True)
+        nat = qepy.ions_base.get_nat()  # number of atoms
+        ntyp = qepy.ions_base.get_nsp()  # number of species
+        nelec = qepy.klist.get_nelec()  # number of electrons
+        atom_label = qepy.ions_base.get_array_atm().view('c')  # atom labels
+        atom_label = atom_label[:, :ntyp]  # discard placeholders
+        at = qepy.cell_base.get_array_at()  # 3 x 3 lattice in atomic units
+        gcutm = qepy.gvect.get_gcutm()  # G-vector cutoff
+        ityp = qepy.ions_base.get_array_ityp()  # species indices
+        zv = qepy.ions_base.get_array_zv()  # ionic charges
+        tau = qepy.ions_base.get_array_tau()  # ion positions
 
-    def get_grid(self, nr, **kwargs):
-        nr[0] = environ_calc.get_nr1x()
-        nr[1] = environ_calc.get_nr2x()
-        nr[2] = environ_calc.get_nr3x()
-        return nr
+        # CONCERT TO ATOMIC UNITS
+        alat = qepy.cell_base.get_alat()  # lattice parameter
+        at = at * alat
+        tau = tau * alat
+        gcutm = gcutm / alat**2
 
-    def update_ions(self, subcell = None, update = 0, **kwargs):
-        environ_setup.clean_environ()
-        self.write_input(subcell = subcell, **kwargs)
-        self.initial(comm = self.comm)
+        kwargs = {
+            'nat': nat,
+            'ntyp': ntyp,
+            'nelec': nelec,
+            'atom_label': atom_label,
+            'ityp': ityp,
+            'at': at,
+            'gcutm': gcutm,
+            'zv': zv,
+            'tau': tau,
+            'use_internal_pbc_corr': False,
+        }
 
-    def end_scf(self, **kwargs):
-        pass
-
-    def stop_run(self, **kwargs):
-        environ_setup.clean_environ()
-
-def _check_kwargs(key, val, funlabel='\b'):
-    """check that a kwargs value is set
-
-    Args:
-        key (str): the key for printing the label
-        val (Any): only check for None
-        funlabel (str, optional): function name. Defaults to '\b'.
-
-    Raises:
-        ValueError: [description]
-    """
-    if val is None:
-        raise ValueError(f'`{key}` not set in {funlabel} function')
+        return kwargs

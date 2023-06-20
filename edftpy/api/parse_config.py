@@ -245,6 +245,82 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
 
     if optmix :
         opt = MixOptimization(optimizer = opt)
+
+    if opt.sdft == 'qmmm' :
+        indices = np.arange(gsystem.ions.nat)
+        subkeys = [key for key in config if key.startswith('SUB')]
+        index_mm = []
+        for key in subkeys :
+            if config[key]['technique'] == 'MM' :
+                ind = config[key]['cell']['index']
+                index_mm.extend(ind)
+        #MM part
+        ions_mm = ions[index_mm]
+        gsystem_mm = config2gsystem(config, ions = ions_mm, graphtopo=graphtopo, grid = gsystem.grid, index = index_mm, **kwargs)
+        total_evaluator_mm = config2total_evaluator(config, ions_mm, grid, pplist = pplist)
+        gsystem_mm.total_evaluator = total_evaluator_mm
+        #QM part
+        index_qm = np.delete(indices, index_mm)
+        ions_qm = ions[index_qm]
+        gsystem_qm = config2gsystem(config, ions = ions_qm, graphtopo=graphtopo, grid = gsystem.grid, index = index_qm, **kwargs)
+        total_evaluator_qm = config2total_evaluator(config, ions_qm, grid, pplist = pplist)
+        gsystem_qm.total_evaluator = total_evaluator_qm
+        #Swap QMMM and QM
+        opt.gsystem_qmmm = opt.gsystem
+        opt.gsystem = gsystem_qm
+        opt.gsystem_mm = gsystem_mm
+        #-----------------------------------------------------------------------
+        #! Only for one MM subsystem
+        ions_qmmm = ions.copy()
+        ions_mm = ions[index_mm]
+        rank_d = 0
+        pos_m, inds_m, inds_o = None, None, None
+        for driver in opt.drivers:
+            if driver is not None and driver.technique== 'MM' :
+                pos_m, inds_m, inds_o = driver.engine.get_m_sites()
+                if driver.comm.rank == 0 :
+                    rank_d = opt.gsystem.graphtopo.comm.rank
+        rank_d = opt.gsystem.graphtopo.comm.allreduce(rank_d)
+        pos_m  = opt.gsystem.graphtopo.comm.bcast(pos_m, root = rank_d)
+        inds_m = opt.gsystem.graphtopo.comm.bcast(inds_m, root = rank_d)
+        inds_o = opt.gsystem.graphtopo.comm.bcast(inds_o, root = rank_d)
+        # print('rank', opt.gsystem.graphtopo.comm.rank, rank_d, inds_m, pos_m)
+        if len(pos_m) > 0 :
+            ions_mm.pos[inds_o] = pos_m
+            index_mm = opt.gsystem_mm.ions_index
+            ions_qmmm.pos[index_mm] = ions_mm.pos
+
+        def update_evaluator_ions(evaluator, ions, grid = None, linearii = True):
+            pseudo = evaluator.funcdicts['PSEUDO']
+            if grid is None : grid = pseudo.grid
+            ewald = Ewald(ions=ions, grid = grid, PME=linearii)
+            evaluator.funcdicts['EWALD'] = ewald
+            pseudo.restart(grid=grid, ions=ions, full=False)
+            return evaluator
+
+        linearii = config["MATH"]["linearii"]
+        opt.gsystem_qmmm.total_evaluator = update_evaluator_ions(opt.gsystem_qmmm.total_evaluator, ions_qmmm, linearii = linearii)
+        opt.gsystem_mm.total_evaluator = update_evaluator_ions(opt.gsystem_mm.total_evaluator, ions_mm, linearii = linearii)
+        #-----------------------------------------------------------------------
+    # for driver in opt.drivers:
+        # if driver is not None and driver.technique== 'MM' :
+            #-----------------------------------------------------------------------test
+            # from edftpy.utils.common import Atoms, Field
+            # charges, positions_c = driver.engine.get_charges()
+            # charges = driver.engine.points_zval - charges
+            # # pot = driver.engine.get_potential(grid = driver.grid_driver)
+            # # pot = Field(grid = driver.grid_driver, data = pot)
+            # # pot.write('0_mm_pot.xsf', ions = driver.subcell.ions)
+            # # atomicd = AtomicDensity(pseudo = opt.gsystem_mm.total_evaluator.pseudo, comm = driver.comm)
+            # atomicd = AtomicDensity(pseudo = opt.gsystem.total_evaluator.pseudo, comm = driver.comm)
+            # atomicd._arho['O'] *= charges[3] / atomicd._arho['O'][0]
+            # atomicd._arho['H'] *= charges[1] / atomicd._arho['H'][0]
+            # ions = Atoms(['H', 'H', 'O'], zvals =driver.subcell.ions.Zval, pos=positions_c[1:], cell = driver.subcell.grid.lattice, basis = 'Cartesian')
+            # rho = atomicd.guess_rho(ions, driver.subcell.grid)
+
+            # # rho = atomicd.guess_rho(driver.subcell.ions, driver.subcell.grid)
+            # rho.write('0_atomic_mm.xsf', ions = driver.subcell.ions)
+            #-----------------------------------------------------------------------test
     return opt
 
 def config2ions(config, ions = None, keysys = 'GSYSTEM', **kwargs):
@@ -307,7 +383,7 @@ def config2total_embed(config, driver = None, optimizer = None, **kwargs):
         driver.total_embed = total_embed
     return driver
 
-def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell_change = None, **kwargs):
+def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell_change = None, grid = None, index = None, **kwargs):
     ############################## Gsystem ##############################
     keysys = "GSYSTEM"
 
@@ -329,7 +405,7 @@ def config2gsystem(config, ions = None, optimizer = None, graphtopo = None, cell
         mp_global = gsystem.grid.mp
     else :
         mp_global = MP(comm = graphtopo.comm, parallel = graphtopo.is_mpi, decomposition = graphtopo.decomposition)
-        gsystem = GlobalCell(ions, grid = None, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo, nspin = nspin)
+        gsystem = GlobalCell(ions, grid = grid, ecut = ecut, nr = nr, spacing = spacing, full = full, optfft = optfft, max_prime = max_prime, scale = grid_scale, mp = mp_global, graphtopo = graphtopo, nspin = nspin, index = index)
 
     if density_file : file2density(density_file, gsystem.density)
     return gsystem
@@ -514,6 +590,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
     prefix = config[keysys]["prefix"]
     kpoints = config[keysys]["kpoints"]
     exttype = config[keysys]["exttype"]
+    xc_options = config[keysys]["exc"].copy()
     opt_options = config[keysys]["opt"].copy()
     density_initial = config[keysys]["density"]["initial"]
     density_file = config[keysys]["density"]["file"]
@@ -586,6 +663,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
             'restart' : restart,
             'append' : append,
             'options' : opt_options,
+            'xc' : xc_options,
             'density_initial' : density_initial
             }
 
@@ -848,7 +926,7 @@ def get_environ_driver(pplist, gsystem_ecut = None, ecut = None, kpoints = {}, m
 
 def get_mbx_driver(pplist, margs = {}, **kwargs):
     from edftpy.engine.engine_mbx import EngineMBX
-    engine = EngineMBX()
+    engine = EngineMBX(xc = margs.get('xc'))
     driver = DriverMM(**margs, engine = engine)
     return driver
 
