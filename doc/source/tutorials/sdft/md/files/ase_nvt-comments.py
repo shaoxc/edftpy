@@ -64,7 +64,7 @@ dyn.max_steps = dyn.nsteps + nsteps
 for converged in Dynamics.irun(dyn):
     if os.path.isfile('edftpy_stopfile'): exit()
 
-atoms = ase.io.read(cell_file) 
+atoms = ase.io.read(cell_file)
 atoms = ase.io.read("md-1.traj")
 traj = Trajectory("md.traj", "w", atoms)
-traj = Trajectory("md.traj", "a", atoms) 
+traj = Trajectory("md.traj", "a", atoms)

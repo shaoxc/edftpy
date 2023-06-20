@@ -8,7 +8,7 @@ from edftpy.interface import conf2init
 from edftpy.mpi import graphtopo, sprint, pmi
 np.random.seed(8888)
 ############################## initial ##############################
-conf = read_conf('./input.ini')                                                 # Change if your eDFTpy input file has a different name                
+conf = read_conf('./input.ini')                                                 # Change if your eDFTpy input file has a different name
 conf2init(conf, pmi.size > 0)
 cell_file = conf["PATH"]["cell"] +os.sep+ conf['GSYSTEM']["cell"]["file"]
 #-----------------------------------------------------------------------
@@ -31,12 +31,12 @@ atoms.set_calculator(calc)
 
 trajfile = 'opt.traj'
 af = atoms
-opt = LBFGS(af, trajectory = trajfile, memory = 10, use_line_search = False)    #In this tutorial we use the limited memory version of the BFGS algorithm, check ASE wwebsite to use a different algorithm
+opt = LBFGS(af, trajectory = trajfile, memory = 10, use_line_search = False)    # In this tutorial we use the limited memory version of the BFGS algorithm, check ASE wwebsite to use a different algorithm
 # opt = SciPyFminCG(af, trajectory = trajfile)
 
 opt.run(fmax = 0.3)
 
 traj = Trajectory(trajfile)
-ase.io.write('opt.xyz', traj[-1])                                              
+ase.io.write('opt.xyz', traj[-1])
 
 atoms = ase.io.read("opt-1.traj")
