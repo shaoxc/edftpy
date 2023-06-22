@@ -1,10 +1,8 @@
 import numpy as np
-from numpy import linalg as LA
 from dftpy.math_utils import ecut2nr, bestFFTsize
 
 from edftpy.functional import LocalPP, Ewald
 from edftpy.utils.common import Field, Grid, Ions
-from edftpy.utils.math import gaussian
 from edftpy.density import get_3d_value_recipe, gen_gaussian_density
 from edftpy.mpi import sprint
 
@@ -94,8 +92,9 @@ class SubCell(object):
     def gen_grid_sub(ions, grid, index = None, cellcut = [0.0, 0.0, 0.0], cellsplit = None, optfft = True,
             full = False, grid_sub = None, max_prime = 5, scale = 1.0, nr = None, mp = None):
         tol = 1E-8
-        lattice = ions.cell.copy()
-        lattice_sub = lattice.copy()
+        cell = ions.cell
+        lattice_sub = cell.copy()
+        latp = cell.cellpar()[:3]
         if index is None : index = slice(None)
         if isinstance(cellcut, (int, float)) or len(cellcut) == 1 :
             cellcut = np.ones(3) * cellcut
@@ -123,19 +122,17 @@ class SubCell(object):
         if nr is None :
             nr = grid.nrR.copy()
             for i in range(3):
-                latp0 = np.linalg.norm(lattice[:, i])
-                latp = np.linalg.norm(lattice_sub[:, i])
                 if cellsplit is not None :
                     pbc[i] = False
                     if cellsplit[i] > (1.0-tol) :
                         origin[i] = 0.0
                         continue
-                    cell_size[i] = cellsplit[i] * latp0
+                    cell_size[i] = cellsplit[i] * latp[i]
                     origin[i] = 0.5
                 elif cellcut[i] > tol :
                     pbc[i] = False
                     cell_size[i] += cellcut[i] * 2.0
-                    if cell_size[i] > (latp0 - (max_prime + 1) * spacings[i]):
+                    if cell_size[i] > (latp[i] - (max_prime + 1) * spacings[i]):
                         origin[i] = 0.0
                         continue
                     origin[i] = 0.5
@@ -147,28 +144,26 @@ class SubCell(object):
                     if optfft :
                         nr[i] = bestFFTsize(nr[i], scale = scale, max_prime = max_prime)
                         nr[i] = min(nr[i], grid.nrR[i])
-                    lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
+                    lattice_sub[i] *= (nr[i] * spacings[i]) / latp
         else :
             for i in range(3):
                 if nr[i] < grid.nrR[i] :
-                    latp = np.linalg.norm(lattice_sub[:, i])
-                    lattice_sub[:, i] *= (nr[i] * spacings[i]) / latp
+                    lattice_sub[i] *= (nr[i] * spacings[i]) / latp[i]
                     origin[i] = 0.5
                 else :
                     nr[i] = grid.nrR[i]
                     origin[i] = 0.0
 
-        lattice_sub = ions.cell.__class__(lattice_sub)
         c1 = lattice_sub.cartesian_positions(origin)
 
         c0 = np.mean(pos, axis = 0)
-        center = lattice.scaled_positions(c0)
+        center = cell.scaled_positions(c0)
         center += cs
         center[origin < tol] = 0.0
-        c1 = lattice.cartesian_positions(origin)
+        c0 = cell.cartesian_positions(center)
 
         origin = np.array(c0) - np.array(c1)
-        shift[:] = np.array(lattice.scaled_positions(origin)) * grid.nrR
+        shift[:] = np.array(cell.scaled_positions(origin)) * grid.nrR
 
         if grid_sub is None :
             grid_sub = Grid(lattice=lattice_sub, nr=nr, full=full, direct = True, origin = origin, pbc = pbc, mp = mp)

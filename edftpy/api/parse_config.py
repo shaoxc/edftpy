@@ -13,7 +13,7 @@ from edftpy.functional import LocalPP, KEDF, Hartree, XC, Ewald
 from edftpy.optimizer import Optimization, MixOptimization
 from edftpy.tddft import TDDFT
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
-from edftpy.density import file2density, AtomicDensity
+from edftpy.density import file2density, DensityGenerator
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import Mixer
 from edftpy.mpi import GraphTopo, MP, sprint
@@ -311,8 +311,8 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
             # # pot = driver.engine.get_potential(grid = driver.grid_driver)
             # # pot = Field(grid = driver.grid_driver, data = pot)
             # # pot.write('0_mm_pot.xsf', ions = driver.subcell.ions)
-            # # atomicd = AtomicDensity(pseudo = opt.gsystem_mm.total_evaluator.pseudo, comm = driver.comm)
-            # atomicd = AtomicDensity(pseudo = opt.gsystem.total_evaluator.pseudo, comm = driver.comm)
+            # # atomicd = DensityGenerator(pseudo = opt.gsystem_mm.total_evaluator.pseudo, comm = driver.comm)
+            # atomicd = DensityGenerator(pseudo = opt.gsystem.total_evaluator.pseudo, comm = driver.comm)
             # atomicd._arho['O'] *= charges[3] / atomicd._arho['O'][0]
             # atomicd._arho['H'] *= charges[1] / atomicd._arho['H'][0]
             # ions = Atoms(['H', 'H', 'O'], zvals =driver.subcell.ions.Zval, pos=positions_c[1:], cell = driver.subcell.grid.lattice, basis = 'Cartesian')
@@ -811,10 +811,10 @@ def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = 
         if density_file : # initial='read'
             file2density(density_file, subcell.density)
         elif initial == 'atomic' :
-            atomicd = AtomicDensity(files = atomicfiles, pseudo = pseudo, comm = subcell.grid.mp.comm)
+            atomicd = DensityGenerator(files = atomicfiles, pseudo = pseudo, comm = subcell.grid.mp.comm)
             atomicd.guess_rho(subcell.ions, subcell.grid, rho = subcell.density)
         elif initial == 'heg' :
-            atomicd = AtomicDensity()
+            atomicd = DensityGenerator()
             atomicd.guess_rho(subcell.ions, subcell.grid, rho = subcell.density)
         elif technique == 'OF' : # ofdft
             from edftpy.engine.engine_dftpy import EngineDFTpy
@@ -822,7 +822,7 @@ def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = 
         else :
             pass
     #-----------------------------------------------------------------------
-    atomicd = AtomicDensity(pseudo = pseudo, comm = subcell.grid.mp.comm, is_core = True)
+    atomicd = DensityGenerator(pseudo = pseudo, comm = subcell.grid.mp.comm, is_core = True)
     atomicd.guess_rho(subcell.ions, subcell.grid, rho=subcell.core_density)
     #-----------------------------------------------------------------------
 

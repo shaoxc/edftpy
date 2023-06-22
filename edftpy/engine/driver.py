@@ -106,7 +106,7 @@ class DriverKS(Driver):
             if first :
                 self.engine.tddft_after_scf()
                 if restart :
-                    self.engine.wfc2rho()
+                    self.engine.tddft_restart()
                     # get new density
                     self.engine.get_rho(self.charge)
                     self.density[:] = self._format_field_invert()

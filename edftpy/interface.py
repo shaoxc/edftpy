@@ -1,8 +1,7 @@
 import numpy as np
 import os
-import contextlib
 
-from dftpy.constants import LEN_CONV, ENERGY_CONV, FORCE_CONV, STRESS_CONV, ZERO
+from dftpy.constants import ENERGY_CONV
 from edftpy.io import write, print2file
 from edftpy.properties import get_electrostatic_potential
 

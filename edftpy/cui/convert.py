@@ -162,7 +162,6 @@ def change_order_sub(args, config, struct):
     return struct[inds]
 
 def get_system(args):
-    system = None
     iolist = ['snpy', 'xsf', 'pp', 'qepp', 'cube']
     for fname in (*args.cells, args.output) :
         prefix, ext = os.path.splitext(fname)
@@ -245,10 +244,8 @@ def get_system_json(args):
     return (ions, field)
 
 def get_qepy_system(args):
-    from edftpy.engine.engine_qe import EngineQE
     import ase.io.espresso as ase_io_qe
-    import qepy
-    inputobj = qepy.qepy_common.input_base()
+    from qepy.driver import Driver
     #-----------------------------------------------------------------------
     if len(args.cells)>1 :
         raise AttributeError("Sorry, each time only can convert one file by QEpy.")
@@ -276,21 +273,14 @@ def get_qepy_system(args):
             oldxml = True
         else :
             raise AttributeError(f"Can not find the 'xml' file in any tmp_dir({tmp_dir0} or {tmp_dir}).")
-    inputobj.prefix = prefix
-    inputobj.tmp_dir= tmp_dir
     #-----------------------------------------------------------------------
-    qepy.qepy_initial(inputobj)
-    if oldxml :
-        if not hasattr(qepy, 'oldxml_read_file'):
-            raise AttributeError("Please reinstall the QEpy with 'oldxml=yes'.")
-        qepy.oldxml_read_file()
-    else :
-        qepy.read_file()
-    ions = EngineQE.get_ions_from_pw()
-    rho = EngineQE.get_density_from_pw(ions)
-
-    qepy.qepy_stop_run(0, what = 'no')
-    return(ions, rho)
+    if oldxml : pass
+    driver = Driver(prefix = prefix, outdir = tmp_dir, task = 'nscf')
+    ions = driver.get_dftpy_ions()
+    rhof = driver.get_density()
+    rho = driver.data2field(rhof)
+    driver.stop()
+    return (ions, rho)
 
 def run(args):
     if len(args.cells) == 0 :

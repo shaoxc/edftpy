@@ -108,9 +108,6 @@ class EngineCastep(Engine):
         energy *= self.units['energy']
         return energy
 
-    def clean_saved(self, *args, **kwargs):
-        pass
-
     def get_grid(self, nr = None, **kwargs):
         current_basis = caspytep.basis.get_current_basis()
         nx = current_basis.ngx
@@ -172,9 +169,6 @@ class EngineCastep(Engine):
     def set_rho(self, rho, **kwargs):
         pass
 
-    def set_stdout(self, outfile, append = False, **kwargs):
-        pass
-
     def stop_scf(self, status = 0, save = ['D'], **kwargs):
         pass
 
@@ -194,12 +188,6 @@ class EngineCastep(Engine):
         pass
 
     def update_ions(self, subcell, update = 0, **kwargs):
-        pass
-
-    def wfc2rho(self, *args, **kwargs):
-        pass
-
-    def write_stdout(self, line, **kwargs):
         pass
 
     def get_dnorm(self, **kwargs):

@@ -1,6 +1,6 @@
 from edftpy.utils.common import Functional
 from .pseudopotential import LocalPP, ReadPseudo
-from .xc import XC, XCStress, get_libxc_names, get_short_xc_name, xcformats
+from .xc import XC, get_libxc_names, get_short_xc_name
 from .hartree import Hartree, hartree_energy
 from .kedf import KEDF
 from dftpy.ewald import ewald

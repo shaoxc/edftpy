@@ -43,10 +43,10 @@
 		}
 	},
 	"PP": {
-		"comment": "Control of the running job.",
-		"example": "Al = Al_lda.oe01.recpot",
+		"comment": "Pseudopotential files for each atomic species",
 		"type": "cdict",
-		"default": {}
+		"default": {},
+		"example": "Al = Al_lda.oe01.recpot"
 	},
 	"OUTPUT": {
 		"comment": {
@@ -280,10 +280,6 @@
 				"type": "str",
 				"default": "exc"
 			},
-			"xc": {
-				"type": "str",
-				"default": null
-			},
 			"dftd4": {
 				"comment": "The method of dftd4_. If use it, the dftd4_ should be installed. See `dftd4's available methods <https://github.com/dftd4/dftd4/blob/main/assets/parameters.toml>`_.",
 				"options": "",
@@ -305,7 +301,7 @@
 			},
 			"kedf": {
 				"type": "str",
-				"default": "GGA"
+				"default": "GGA_REVAPBEK"
 			},
 			"interp": {
 				"type": "str",
@@ -318,10 +314,6 @@
 			"kdd": {
 				"type": "int",
 				"default": 1
-			},
-			"k_str": {
-				"type": "str",
-				"default": "revAPBEK"
 			}
 		},
 		"mix": {
@@ -329,60 +321,15 @@
 				"type": "str",
 				"default": "Control the charge density mixing."
 			},
+			"dftpy": {
+				"type": "str",
+				"default": "mix"
+			},
 			"scheme": {
 				"type": "str",
 				"default": null,
-				"comment": "Density mixing scheme, default is with driver's own scheme.",
+				"comment": "Density mixing scheme.",
 				"options": "Pulay, Linear"
-			},
-			"predtype": {
-				"type": "str",
-				"comment": "The preconditioning method.",
-				"options": "kerker, inverse_kerker, resta",
-				"default": "kerker"
-			},
-			"predcoef": {
-				"type": "floatlist",
-				"comment": "The parameters for preconditioning.",
-				"options": "",
-				"default": "1.0 1.0 1.0"
-			},
-			"predecut": {
-				"type": "float",
-				"comment": "The preconditioning energy cutoff.",
-				"options": "",
-				"unit": "eV",
-				"default": null
-			},
-			"maxm": {
-				"type": "int",
-				"comment": "Maximum of iterations used for mixing.",
-				"options": "",
-				"default": 7
-			},
-			"coef": {
-				"type": "float",
-				"comment": "",
-				"options": "The mixing parameter.",
-				"default": "0.7"
-			},
-			"delay": {
-				"type": "int",
-				"comment": "Delay several step to mixing the density.",
-				"options": "",
-				"default": "2"
-			},
-			"restarted": {
-				"type": "bool",
-				"comment": "Restart the mixer after several step.",
-				"options": "True, False",
-				"default": false
-			},
-			"kf": {
-				"type": "str",
-				"comment": "Similar as predcoef, not use now.",
-				"options": "",
-				"default": "auto"
 			}
 		},
 		"decompose": {
@@ -609,60 +556,15 @@
 				"type": "str",
 				"default": "Control the charge density mixing."
 			},
+			"dftpy": {
+				"type": "str",
+				"default": "mix"
+			},
 			"scheme": {
 				"type": "str",
 				"default": null,
 				"comment": "Density mixing scheme, default is with driver's own scheme.",
 				"options": "Pulay, Linear"
-			},
-			"predtype": {
-				"type": "str",
-				"comment": "The preconditioning method.",
-				"options": "kerker, inverse_kerker, resta",
-				"default": "kerker"
-			},
-			"predcoef": {
-				"type": "floatlist",
-				"comment": "The parameters for preconditioning.",
-				"options": "",
-				"default": "1.0 1.0 1.0"
-			},
-			"predecut": {
-				"type": "float",
-				"comment": "The preconditioning energy cutoff.",
-				"options": "",
-				"unit": "eV",
-				"default": null
-			},
-			"maxm": {
-				"type": "int",
-				"comment": "Maximum of iterations used for mixing.",
-				"options": "",
-				"default": 7
-			},
-			"coef": {
-				"type": "float",
-				"comment": "",
-				"options": "The mixing parameter.",
-				"default": "0.7"
-			},
-			"delay": {
-				"type": "int",
-				"comment": "Delay several step to mixing the density.",
-				"options": "",
-				"default": "2"
-			},
-			"restarted": {
-				"type": "bool",
-				"comment": "Restart the mixer after several step.",
-				"options": "True, False",
-				"default": false
-			},
-			"kf": {
-				"type": "str",
-				"comment": "Similar as predcoef, not use now.",
-				"options": "",
-				"default": "auto"
 			}
 		},
 		"opt": {

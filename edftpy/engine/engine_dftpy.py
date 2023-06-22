@@ -392,7 +392,7 @@ class EngineDFTpy(Driver):
     def dftpy_opt(ions, rho, pplist, xc_kwargs = None, ke_kwargs = None, stdout = None, options = {}, pseudo = None):
         from edftpy.functional import LocalPP, KEDF, Hartree, XC
         from edftpy.evaluator import Evaluator
-        from edftpy.density.init_density import AtomicDensity
+        from edftpy.density import DensityGenerator
         #-----------------------------------------------------------------------
         save = environ['STDOUT']
         if stdout is not None :
@@ -411,7 +411,7 @@ class EngineDFTpy(Driver):
         funcdicts = {'KE' :ke, 'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
         evaluator_of = Evaluator(**funcdicts)
         evaluator = partial(evaluator_of.compute, gather = True)
-        atomicd = AtomicDensity()
+        atomicd = DensityGenerator()
         rho = atomicd.guess_rho(ions, rho = rho)
         #-----------------------------------------------------------------------
         optimization_options = {'econv' : 1e-6 * ions.nat, 'maxfun' : 50, 'maxiter' : 100}

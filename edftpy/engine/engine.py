@@ -60,7 +60,7 @@ class Driver(ABC):
         self._grid = None
         self._grid_sub = None
         self.atmp = np.zeros(self.nspin)
-        self.atmp2 = np.zeros(self.nspin*2)
+        self.atmp2 = np.zeros((2, self.nspin))
         self.mix_coef = None
         self.outfile = self.prefix + '.out'
         self.set_stdout(self.outfile, append = append)
@@ -150,10 +150,13 @@ class Driver(ABC):
         return self._filter
 
     def set_stdout(self, outfile, append = False, **kwargs):
-        if append :
-            self.fileobj = open(outfile, 'a', buffering = 1)
+        if outfile is None :
+            self.fileobj = None
         else :
-            self.fileobj = open(outfile, 'w', buffering = 1)
+            if append :
+                self.fileobj = open(outfile, 'a', buffering = 1)
+            else :
+                self.fileobj = open(outfile, 'w', buffering = 1)
 
     def write_stdout(self, line, **kwargs):
         sprint(line, comm = self.comm, fileobj = self.fileobj, **kwargs)
@@ -187,9 +190,6 @@ class Engine(ABC):
     def get_forces(self, icalc = 0, **kwargs):
         force = None
         return force
-
-    def clean_saved(self, *args, **kwargs):
-        pass
 
     def forces(self, icalc = 0, **kwargs):
         pass
@@ -250,12 +250,12 @@ class Engine(ABC):
     def tddft_initial(self, inputfile = None, comm = None, **kwargs):
         pass
 
+    def tddft_restart(self, **kwargs):
+        pass
+
     def update_ions(self, subcell, update = 0, **kwargs):
         # update = 0  all
         # update = 1  atomic configuration dependent information
-        pass
-
-    def wfc2rho(self, *args, **kwargs):
         pass
 
     def get_potential(self, **kwargs):

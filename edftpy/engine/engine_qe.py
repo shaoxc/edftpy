@@ -1,4 +1,5 @@
 import qepy
+from qepy.driver import Driver
 import numpy as np
 import os
 import ase.io.espresso as ase_io_driver
@@ -9,7 +10,6 @@ from dftpy.constants import LEN_CONV
 
 from edftpy.io import ions2ase
 from edftpy.engine.engine import Engine
-from edftpy.utils.common import Grid, Field, Ions
 
 try:
     __version__ = qepy.__version__
@@ -27,11 +27,10 @@ class EngineQE(Engine):
         super().__init__(**kwargs)
         self.embed = None
         self.nscf = nscf
+        self.driver = Driver
 
     def get_forces(self, icalc = 3, **kwargs):
-        qepy.qepy_forces(icalc)
-        forces = qepy.force_mod.get_array_force().T
-        return forces
+        return self.driver.get_forces(icalc=icalc, **kwargs)
 
     def embed_base(self, exttype = 0, diag_conv = 1E-1, lewald = False, iterative = True, **kwargs):
         embed = qepy.qepy_common.embed_base()
@@ -48,34 +47,23 @@ class EngineQE(Engine):
         return self.get_energy(self, **kwargs)
 
     def get_energy(self, olevel = 0, **kwargs):
-        if olevel == 0 :
-            qepy.qepy_calc_energies(self.embed)
+        if olevel == 0 : self.driver.calc_energy(**kwargs)
         return self.embed.etotal
 
-    def clean_saved(self, *args, **kwargs):
-        qepy.qepy_clean_saved()
-
     def get_grid(self, **kwargs):
-        nr = qepy.qepy_mod.qepy_get_grid()
-        return nr
+        return self.driver.get_number_of_grid_points()
 
     def get_rho(self, rho, **kwargs):
-        qepy.qepy_mod.qepy_get_rho(rho)
+        return self.driver.get_density(out=rho)
 
     def get_rho_core(self, rho, **kwargs):
-        qepy.qepy_mod.qepy_get_rho_core(rho)
+        return self.driver.get_core_density(out=rho)
 
     def get_ef(self, **kwargs):
-        return qepy.ener.get_ef()
+        return self.driver.get_fermi_level()
 
     def _initial_files(self, inputfile = None, comm = None, **kwargs):
-        if hasattr(comm, 'py2f') :
-            commf = comm.py2f()
-        else :
-            commf = None
-
         self.comm = comm or self.comm
-        self.commf = commf
 
         if inputfile is None :
             prefix = kwargs.get('prefix', 'sub_qe')
@@ -85,112 +73,85 @@ class EngineQE(Engine):
             if self.comm.size > 1 : self.comm.Barrier()
         self.inputfile = inputfile
 
-    def initial(self, inputfile = None, comm = None, **kwargs):
+    def initial(self, inputfile = None, comm = None, task = 'scf', **kwargs):
         self._initial_files(inputfile = inputfile, comm = comm, **kwargs)
-        qepy.qepy_pwscf(self.inputfile, self.commf)
         self.embed = self.embed_base(**kwargs)
+        self.driver = Driver(inputfile = self.inputfile, comm = self.comm, task = task,
+                embed = self.embed, iterative = self.embed.iterative, **kwargs)
 
-    def tddft_initial(self, inputfile = None, comm = None, **kwargs):
-        self._initial_files(inputfile = inputfile, comm = comm, **kwargs)
-        qepy.qepy_tddft_main_initial(self.inputfile, self.commf)
-        qepy.read_file()
-        self.embed = self.embed_base(**kwargs)
+    def tddft_initial(self, inputfile = None, comm = None, task = 'optical', **kwargs):
+        self.initial(inputfile=inputfile, comm=comm, task=task, **kwargs)
 
     def save(self, save = ['D'], **kwargs):
         if 'W' in save :
             what = 'all'
         else :
             what = 'config-nowf'
-        qepy.punch(what)
-        qepy.close_files(False)
+        self.driver.save(what = what, **kwargs)
 
     def scf(self, sum_band = True, **kwargs):
-        self.embed.mix_coef = -1.0
+        self.driver.diagonalize(nscf = self.nscf, **kwargs)
         if self.nscf :
-            qepy.qepy_electrons_nscf(0, 0, self.embed)
             if sum_band : self.sum_band()
-        else :
-            qepy.qepy_electrons_scf(0, 0, self.embed)
 
     def sum_band(self, occupations= None, **kwargs):
-        if occupations is None :
-            update = True
-        else :
-            wg = qepy.wvfct.get_array_wg()
-            nk = wg.shape[1]
+        if occupations is not None :
+            nbnd = self.driver.get_number_of_bands()
+            nk = self.driver.get_number_of_k_points()
+            wg = np.zeros((nbnd, nk))
             occupations = occupations.ravel().reshape((-1, nk), order='F')
             nbands = min(wg.shape[0], occupations.shape[0])
             wg[:nbands] = occupations[:nbands]
-            wg[nbands:] = 0.0
-            qepy.wvfct.set_array_wg(wg)
-            update = False
-        qepy.qepy_sum_band(update_occupations=update)
+            occupations = wg
+        self.driver.sum_band(occupations = occupations)
 
     def get_band_energies(self, **kwargs):
-        et = qepy.wvfct.get_array_et()
-        return et.T
+        return self.driver.get_eigenvalues(kpt=slice(None))
 
     def get_band_weights(self, **kwargs):
-        nks = qepy.klist.get_nkstot()
-        wk = qepy.klist.get_array_wk()[:nks]
-        nbands = qepy.wvfct.get_nbnd()
+        wk = self.driver.get_k_point_weights()
+        nbands = self.driver.get_number_of_bands()
         weights = np.repeat(wk, nbands).reshape((-1, nbands))
         return weights
 
     def scf_mix(self, coef = 0.7, **kwargs):
-        self.embed.mix_coef = coef
-        qepy.qepy_electrons_scf(2, 0, self.embed)
+        self.driver.mix(mix_coef = coef, **kwargs)
 
     def set_extpot(self, extpot, **kwargs):
-        qepy.qepy_mod.qepy_set_extpot(self.embed, extpot)
+        self.driver.set_external_potential(extpot)
 
     def set_rho(self, rho, **kwargs):
-        qepy.qepy_mod.qepy_set_rho(rho)
+        self.driver.set_density(rho, **kwargs)
 
     def stop_scf(self, status = 0, save = ['D'], **kwargs):
         if 'W' in save :
             what = 'all'
         else :
             what = 'config-nowf'
-        qepy.qepy_stop_run(status, what = what)
-        qepy.qepy_mod.qepy_close_stdout('')
-        qepy.qepy_clean_saved()
+        self.driver.stop(exit_status = status, what = what, **kwargs)
 
     def stop_tddft(self, status = 0, save = ['D'], **kwargs):
-        qepy.qepy_stop_tddft(status)
-        qepy.qepy_mod.qepy_close_stdout('')
-        qepy.qepy_clean_saved()
+        self.stop(status, save, **kwargs)
 
     def end_scf(self, **kwargs):
-        if self.embed.iterative :
-            self.embed.finish = True
-            if self.nscf :
-                qepy.qepy_electrons_nscf(0, 0, self.embed)
-            else :
-                qepy.qepy_electrons_scf(0, 0, self.embed)
+        self.driver.end_scf(**kwargs)
 
     def end_tddft(self, **kwargs):
-        if self.embed.tddft.iterative :
-            self.embed.tddft.finish = True
-            qepy.qepy_molecule_optical_absorption(self.embed)
+        self.end_scf(**kwargs)
 
     def tddft(self, **kwargs):
-        qepy.qepy_molecule_optical_absorption(self.embed)
+        self.driver.diagonalize(**kwargs)
 
     def tddft_after_scf(self, inputfile = None, **kwargs):
         inputfile = inputfile or self.inputfile
-        qepy.qepy_tddft_readin(inputfile)
-        qepy.qepy_tddft_main_setup(self.embed)
+        self.driver = Driver(inputfile = inputfile, comm = self.comm, task = 'optical',
+                embed = self.embed, iterative = self.embed.iterative, progress = True, **kwargs)
+
+    def tddft_restart(self, istep=None, **kwargs):
+        self.driver.tddft_restart(istep=istep, **kwargs)
 
     def update_ions(self, subcell, update = 0, **kwargs):
-        pos = subcell.ions.positions.T
-        if hasattr(qepy, 'qepy_api'):
-            qepy.qepy_api.qepy_update_ions(self.embed, pos, update)
-        else : # old version
-            qepy.qepy_mod.qepy_update_ions(self.embed, pos, update)
-
-    def wfc2rho(self, *args, **kwargs):
-        qepy.qepy_tddft_mod.qepy_cetddft_wfc2rho()
+        self.driver.update_ions(positions = subcell.ions.positions, update = 0, **kwargs)
 
     def get_dnorm(self, **kwargs):
         return self.embed.dnorm
@@ -199,7 +160,7 @@ class EngineQE(Engine):
         self.embed.dnorm = dnorm
 
     def check_convergence(self, **kwargs):
-        return qepy.control_flags.get_conv_elec()
+        return self.driver.check_convergence(**kwargs)
 
     def write_input(self, filename = 'sub_driver.in', subcell = None, params = {}, cell_params = {}, base_in_file = None, **kwargs):
         prefix = os.path.splitext(filename)[0]
@@ -380,53 +341,6 @@ class EngineQE(Engine):
             fstrl.append('/\n\n')
         fd.write(''.join(fstrl))
         return
-
-    @staticmethod
-    def get_ions_from_pw():
-        alat = qepy.cell_base.get_alat()
-        lattice = qepy.cell_base.get_array_at() * alat
-        pos = qepy.ions_base.get_array_tau().T * alat
-        atm = qepy.ions_base.get_array_atm()
-        ityp = qepy.ions_base.get_array_ityp()
-        nat = qepy.ions_base.get_nat()
-        symbols = [1]
-        labels = []
-        for i in range(atm.shape[-1]):
-            s = atm[:,i].view('S3')[0].strip().decode("utf-8")
-            symbols.append(s)
-
-        for i in range(nat):
-            labels.append(symbols[ityp[i]])
-
-        ions = Ions(symbols=labels, positions=pos, cell=lattice)
-        return ions
-
-    @staticmethod
-    def get_density_from_pw(ions, comm = None):
-        nr = np.zeros(3, dtype = 'int32')
-        qepy.qepy_mod.qepy_get_grid(nr)
-        nspin = qepy.lsda_mod.get_nspin()
-
-        if comm is None or comm.rank == 0 :
-            rho = np.zeros((np.prod(nr), nspin), order = 'F')
-        else :
-            rho = np.zeros((3, nspin), order = 'F')
-
-        qepy.qepy_mod.qepy_get_rho(rho)
-
-        if comm is None or comm.rank == 0 :
-            grid = Grid(ions.cell, nr)
-            density = Field(grid=grid, direct=True, data = rho, rank = nspin, order = 'F')
-        else :
-            density = np.zeros(1)
-
-        return density
-
-    def set_stdout(self, outfile, append = False, **kwargs):
-        qepy.qepy_mod.qepy_set_stdout(outfile, append = append)
-
-    def write_stdout(self, line, **kwargs):
-        qepy.qepy_mod.qepy_write_stdout(line)
 
     @staticmethod
     def merge_inputs(*args, atoms = None, pseudopotentials = None, **kwargs):
