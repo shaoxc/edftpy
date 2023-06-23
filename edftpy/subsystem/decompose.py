@@ -28,7 +28,7 @@ def decompose_sub(ions, method = 'distance', rcut = 3, **kwargs):
         cutoff = rcut
     else :
         keys = list(radius.keys())
-        if not set(keys) >= set(list(ions.nsymbols)) :
+        if not set(keys) >= set(ions.symbols_uniq) :
             raise AttributeError("The radius should contains all the elements")
         cutoff = {}
         for i, k in enumerate(keys):
