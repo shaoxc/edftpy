@@ -2,15 +2,22 @@ import numpy as np
 import os
 import unittest
 
-from dftpy.formats import io
+from dftpy.ions import Ions
+from ase.build import bulk
 
 from edftpy.functional import LocalPP, KEDF, Hartree, XC, Ewald
 from edftpy.optimizer import Optimization
 from edftpy.evaluator import EmbedEvaluator, EvaluatorOF, TotalEvaluator
-from edftpy.density import AtomicDensity
+from edftpy.density import DensityGenerator
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import PulayMixer
 from edftpy.mpi import GraphTopo, MP
+
+data_path = os.environ.get('EDFTPY_DATA_PATH')
+if not data_path : data_path = 'DATA/'
+if not os.path.exists(data_path) : data_path = '../DATA/'
+pp_al = data_path + '/Al_OEPP_lda.recpot'
+ions = Ions.from_ase(bulk('Al', 'fcc', a=4.05, cubic=True))
 
 class Test(unittest.TestCase):
     def setUp(self):
@@ -75,21 +82,10 @@ class Test(unittest.TestCase):
         self.assertTrue(np.isclose(energy, ref_energy, rtol = 1E-3))
 
     def get_optimizer(self, ke_kwargs, xc_kwargs = {}, method = 'full', sdft = 'sdft'):
-        data_path = os.environ.get('EDFTPY_DATA_PATH')
-        if not data_path : data_path = 'DATA/'
-        if not os.path.exists(data_path) : data_path = '../DATA/'
-        data_path += '/'
-        path_pp = data_path
-        path_pos = data_path
-
-        pp_al ='Al_OEPP_lda.recpot'
-        posfile='fcc.vasp'
-
-        ions = io.read(path_pos+posfile, names=['Al'])
         gsystem = GlobalCell(ions, grid = None, ecut = 22.05, full = False, optfft = True)
         grid = gsystem.grid
         ############################## Functionals  ##############################
-        pplist = {'Al': path_pp+pp_al}
+        pplist = {'Al': pp_al}
         pseudo = LocalPP(grid = grid, ions=ions,PP_list=pplist,PME=True)
         hartree = Hartree()
         xc = XC(**xc_kwargs)
@@ -107,7 +103,7 @@ class Test(unittest.TestCase):
         gsystem.graphtopo = graphtopo
         #-----------------------------------------------------------------------
         index_a = None
-        atomicd = AtomicDensity()
+        atomicd = DensityGenerator()
         driver_a = self.gen_sub_of(ions, grid, pplist, index_a, atomicd, xc_kwargs, ke_kwargs, emb_ke_kwargs = emb_ke_kwargs, gsystem = gsystem, method = method, mp = mp)
         drivers = [driver_a]
         graphtopo.build_region(grid=gsystem.grid, drivers=drivers)
@@ -124,7 +120,7 @@ class Test(unittest.TestCase):
 
     def gen_sub_of(self, ions, grid, pplist = None, index = None, atomicd = None, xc_kwargs = {}, ke_kwargs = {}, emb_ke_kwargs = {}, gsystem = None, method = 'part', mp = None, **kwargs):
         if atomicd is None :
-            atomicd = AtomicDensity()
+            atomicd = DensityGenerator()
         mixer = PulayMixer(predtype = 'kerker', predcoef = [0.8, 1.0], maxm = 7, coef = 0.8, predecut = 0, delay = 1)
         #-----------------------------------------------------------------------
         if ke_kwargs is None or len(ke_kwargs) == 0 :
