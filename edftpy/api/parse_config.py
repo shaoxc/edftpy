@@ -66,6 +66,7 @@ def config_correct(config):
             }
     subkeys = [key for key in config if key.startswith('SUB')]
     for key in subkeys :
+        if config[key]['calculator'] in ['pwscf', 'qepy'] : config[key]['calculator'] = 'qe'
         config[key]['technique'] = tech_keys.get(config[key]['calculator'], 'KS')
         if not config[key]["prefix"] :
             config[key]["prefix"] = key.lower()
@@ -678,7 +679,7 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
     else :
         if calculator == 'dftpy' :
             driver = get_dftpy_driver(config, keysys, ions, grid, pplist = pplist, optimizer = optimizer, cell_change = cell_change, margs = margs)
-        elif calculator == 'pwscf' or calculator == 'qe' or calculator == 'qepy' :
+        elif calculator == 'qe' :
             driver = get_pwscf_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
         elif calculator == 'castep' :
             driver = get_castep_driver(pplist, gsystem_ecut = gsystem_ecut, ecut = ecut, kpoints = kpoints, margs = margs)
@@ -822,8 +823,9 @@ def config2subcell(config, keysys, ions, grid, pplist = None, total_evaluator = 
         else :
             pass
     #-----------------------------------------------------------------------
-    atomicd = DensityGenerator(pseudo = pseudo, comm = subcell.grid.mp.comm, is_core = True)
-    atomicd.guess_rho(subcell.ions, subcell.grid, rho=subcell.core_density)
+    if calculator not in ['qe'] :
+        atomicd = DensityGenerator(pseudo = pseudo, comm = subcell.grid.mp.comm, is_core = True)
+        atomicd.guess_rho(subcell.ions, subcell.grid, rho=subcell.core_density)
     #-----------------------------------------------------------------------
 
     return subcell

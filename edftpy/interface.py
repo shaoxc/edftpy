@@ -2,7 +2,7 @@ import numpy as np
 import os
 
 from dftpy.constants import ENERGY_CONV
-from edftpy.io import write, print2file
+from edftpy.io import write
 from edftpy.properties import get_electrostatic_potential
 
 from edftpy.api.parse_config import config2optimizer, config2total_embed
@@ -11,7 +11,6 @@ from edftpy.mpi import graphtopo, sprint
 import edftpy
 import dftpy
 
-@print2file(fileobj = '/dev/null')
 def import_drivers(calcs = {}):
     """
     Import the engine of different drivers
@@ -32,27 +31,23 @@ def import_drivers(calcs = {}):
     #
     try:
         from edftpy.engine import engine_qe
-        if 'pwscf' in calcs or 'qe' in calcs or 'qepy' in calcs :
+        if 'qe' in calcs or 'pwscf' in calcs or 'qepy' in calcs :
             info += fs.format('QEpy', engine_qe.__version__)
     except Exception as e:
-        if 'pwscf' in calcs or 'qe' in calcs or 'qepy' in calcs :
-            raise AttributeError(e+"\nPlease install 'QEpy' firstly.")
+        if 'qe' in calcs or 'pwscf' in calcs or 'qepy' in calcs : raise e
     try:
         from edftpy.engine import engine_castep
         if 'castep' in calcs :
             info += fs.format('Caspytep', engine_castep.__version__)
     except Exception as e:
-        if 'castep' in calcs :
-            raise AttributeError(e+"\nPlease install 'caspytep' firstly.")
+        if 'castep' in calcs : raise e
     try:
         # Because Environ use same parallel technique as QE, need import after QEpy.
         from edftpy.engine import engine_environ
         if 'environ' in calcs :
             info += fs.format('Environ', engine_environ.__version__)
     except Exception as e:
-        if 'environ' in calcs :
-            raise AttributeError(e+"\nPlease install 'environ' firstly.")
-    return info
+        if 'environ' in calcs : return e
 
 def conf2init(conf, parallel = False, **kwargs):
     info = import_drivers(conf)

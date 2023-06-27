@@ -602,3 +602,24 @@ class GraphTopo:
 
             self.comm.Barrier()
         return data
+
+    def error(self, *args, stop = True, **kwargs):
+        from edftpy.mpi import sprint
+        sprint(*args, comm = self.comm, **kwargs)
+        if stop :
+            self.raise_error(SystemError())
+
+    def raise_error(self, arg, **kwargs):
+        if self.is_root :
+            raise arg
+        else :
+            exit(1)
+
+    def assert_check(self, expression = None, expression2 = None, **kwargs):
+        if __debug__ :
+            expression = self.comm.bcast(expression)
+            if not expression :
+                if expression2 is None :
+                    self.raise_error(AssertionError, **kwargs)
+                else :
+                    self.raise_error(AssertionError(expression2), **kwargs)
