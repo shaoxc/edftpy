@@ -1,0 +1,7 @@
+&SYSTEM
+   ecutwfc          = 40
+   ecutrho          = 400
+/
+&ELECTRONS
+   mixing_beta      = 0.7
+/

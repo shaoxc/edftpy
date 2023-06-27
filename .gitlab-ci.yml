@@ -1,15 +1,16 @@
-image: registry.gitlab.com/pavanello-research-group/dftpy:latest
+image: registry.gitlab.com/shaoxc/qepy:qepy-6.5g-dev
 
 Test:
   before_script:
     - home=$( pwd )
     #- git clone -b mpi2 https://gitlab.com/pavanello-research-group/dftpy.git
-    #- git clone https://gitlab.com/pavanello-research-group/dftpy.git
     #- cd dftpy
     #- python setup.py install --user
     #- cd ..
   script:
    - python -m pip install .
-   #- cd examples
-   #- EDFTPY_DATA_PATH='./DATA/' pytest --cov-report term-missing --cov=./ ./test/
+   - cd examples
+   - pytest --cov-report term-missing --cov=./ ./test/
+   - export MPIRUN="mpirun --allow-run-as-root --oversubscribe"
+   - for d in $(find ./mpitest/ -maxdepth 1 -mindepth 1 -type d); do cd $d; ./run.sh ; cd ..; done
   coverage: '/TOTAL\s+\d+\s+\d+\s+(\d+\%)/'
