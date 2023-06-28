@@ -21,12 +21,15 @@ def get_charge_vector(density, ions):
         r0 += np.sum(ions.positions[ions.symbols == item], axis = 0)*ions.zval[item]
     r0 /= ncharge
     rp = density.grid.r - np.expand_dims(r0, axis = (1, 2, 3))
+    #
     rp = np.moveaxis(rp, 0, -1)
-    # rp = r2s(rp, grid)
-    rp = ions.cell.scaled_positions(rp)
+    bg = np.linalg.inv(ions.cell)
+    rp = rp @ bg
+    # works for orthogonal cell
     rp -= np.rint(rp)
-    rp = ions.cell.cartesian_positions(rp)
+    rp = rp @ ions.cell
     rp = np.moveaxis(rp, -1, 0)
+    #
     return rp
 
 def get_total_energies(gsystem = None, drivers = None, density = None, total_energy= None, update = True,

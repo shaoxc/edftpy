@@ -1,8 +1,5 @@
 import numpy as np
 import time
-import os
-
-from dftpy.constants import ENERGY_CONV
 
 from edftpy.mpi import sprint
 from edftpy.properties import get_dipole
@@ -30,6 +27,7 @@ class MoleculeOpticalAbsorption(Optimization):
             self.options.update(options)
         self.optimizer = optimizer
         self.iter = 0
+        self.dipole = np.zeros(3)
 
     def initialization(self, restart = None):
         restart = restart or self.options.get('restart', 'initial')
@@ -39,7 +37,7 @@ class MoleculeOpticalAbsorption(Optimization):
                 if driver is not None :
                     driver.save(save = ['W', 'D'])
                     driver.task = 'optical'
-                    driver.update_workspace(first = True)
+                    driver.update_workspace(first = True, progress = True)
 
     def update_density(self, initial = False, **kwargs):
         self.gsystem.density[:] = 0.0
@@ -99,10 +97,10 @@ class MoleculeOpticalAbsorption(Optimization):
             #-----------------------------------------------------------------------
             # use new density to calculate the energy is very important, otherwise the restart will not correct.
             self.energy = self.get_energy(density = self.density, update = self.update, olevel =self.options['olevel'])
-            self.dip = get_dipole(self.density_prev, self.gsystem.ions)
+            self.dipole = get_dipole(self.density_prev, self.gsystem.ions)
             #-----------------------------------------------------------------------
             fmt = "{:>10s}{:<8d}{:<24.12E}{:<14.6E}{:<14.6E}{:<14.6E}{:<16.6E}".format(
-                    "Tddft: ", self.iter, self.energy, *self.dip, time.time()- self.time_begin)
+                    "Tddft: ", self.iter, self.energy, *self.dipole, time.time()- self.time_begin)
             sprint(seq +'\n' + fmt +'\n' + seq)
             if self.check_stop(): break
         else :

@@ -131,7 +131,7 @@ class EngineQE(Engine):
         self.driver.stop(exit_status = status, what = what, **kwargs)
 
     def stop_tddft(self, status = 0, save = ['D'], **kwargs):
-        self.stop(status, save, **kwargs)
+        self.stop_scf(status, save, **kwargs)
 
     def end_scf(self, **kwargs):
         self.driver.end_scf(**kwargs)

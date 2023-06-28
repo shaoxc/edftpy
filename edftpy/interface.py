@@ -48,6 +48,7 @@ def import_drivers(calcs = {}):
             info += fs.format('Environ', engine_environ.__version__)
     except Exception as e:
         if 'environ' in calcs : return e
+    return info
 
 def conf2init(conf, parallel = False, **kwargs):
     info = import_drivers(conf)

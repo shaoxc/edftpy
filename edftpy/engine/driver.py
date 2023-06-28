@@ -77,7 +77,7 @@ class DriverKS(Driver):
         self.update_workspace(first = True, restart = self.restart)
 
     @print2file()
-    def update_workspace(self, subcell = None, first = False, update = 0, restart = False, **kwargs):
+    def update_workspace(self, subcell = None, first = False, update = 0, restart = False, progress = False, **kwargs):
         """
         Notes:
             clean workspace
@@ -104,7 +104,8 @@ class DriverKS(Driver):
                 self.density[:] = self._format_field_invert()
         if self.task == 'optical' :
             if first :
-                self.engine.tddft_after_scf()
+                if progress :
+                    self.engine.tddft_after_scf()
                 if restart :
                     self.engine.tddft_restart()
                     # get new density
