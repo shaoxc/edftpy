@@ -12,5 +12,5 @@ Test:
    - cd examples
    - pytest --cov-report term-missing --cov=./ ./test/
    - export MPIRUN="mpirun --allow-run-as-root --oversubscribe"
-   - for d in $(find ./mpitest/ -maxdepth 1 -mindepth 1 -type d); do cd $d; ./run.sh ; cd ..; done
+   - for d in $(find ./mpitest/ -maxdepth 1 -mindepth 1 -type d); do cd $d; ./run.sh ; cd ../..; done
   coverage: '/TOTAL\s+\d+\s+\d+\s+(\d+\%)/'
