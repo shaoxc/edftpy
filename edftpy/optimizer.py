@@ -163,7 +163,7 @@ class Optimization(object):
                 if driver.comm.rank == 0 : root = self.gsystem.comm.rank
             root = self.gsystem.grid.mp.amax(root)
             technique = self._get_driver_technique(driver)
-            if technique in ['EX', 'MM'] :
+            if technique in ['MM'] :
                 extpots = self.gsystem.total_evaluator.external_potential
                 pot = extpots.get(technique, None)
                 if pot is None :
@@ -309,12 +309,7 @@ class Optimization(object):
 
             if self.update[isub] :
                 self.gsystem.density[:] = self.density
-                # if driver.technique in ['EX', 'MM'] :
-                if driver.technique in ['EX'] :
-                    calcType = ['V']
-                else :
-                    calcType = ['O']
-                driver(gsystem = self.gsystem, calcType = calcType, olevel = self.options['olevel'], sdft = self.sdft)
+                driver(gsystem = self.gsystem, calcType = ['O'], olevel = self.options['olevel'], sdft = self.sdft)
         self.iter += 1
 
     def attach(self, function, interval=1, *args, **kwargs):
@@ -361,7 +356,7 @@ class Optimization(object):
                 gaussian_density = driver.gaussian_density
                 core_density = driver.core_density
             technique = self._get_driver_technique(driver)
-            if technique not in ['EX', 'MM'] :
+            if technique not in ['MM'] :
                 self.gsystem.update_density(density, isub = i)
                 self.gsystem.update_density(gaussian_density, isub = i, fake = True)
                 self.gsystem.update_density(core_density, isub = i, core = True)
@@ -777,7 +772,6 @@ class Optimization(object):
             root = 0
             if driver is None :
                 global_potential = None
-                global_density = None
             else :
                 if driver.evaluator.global_potential is None :
                     driver.evaluator.global_potential = np.zeros_like(driver.density)
@@ -786,21 +780,9 @@ class Optimization(object):
             root = self.gsystem.grid.mp.amax(root)
 
             technique = self._get_driver_technique(driver)
-            if technique == 'EX' :
-                pot = self.gsystem.total_evaluator.external_potential.get('MM', None)
-                if pot is not None :
-                    # self.gsystem.sub_value(pot, global_potential, isub = isub)
-                    pot.gather(out = global_potential, root = root)
-                if driver is not None :
-                    if driver.density is None :
-                        driver.density = np.zeros_like(driver.density)
-                    global_density = driver.density
-                self.gsystem.density.gather(out = global_density, root = root)
-            elif technique == 'MM' :
+            if technique == 'MM' :
                 pot = self.gsystem.total_evaluator.external_potential['QM']
                 if pot is None : continue
-                pot_en = self.gsystem.total_evaluator.external_potential.get('EX', None)
-                if pot_en is not None : pot = pot + pot_en
                 self.gsystem.sub_value(pot, global_potential, isub = isub)
                 # # pot.gather(out = global_potential, root = root)
             else : # if technique in ['OF', 'KS']:
@@ -817,7 +799,7 @@ class Optimization(object):
         return
 
     def _get_driver_technique(self, driver):
-        techs = {'OF' :0, 'KS' :1, 'EX' :2, 'MM' :3}
+        techs = {'OF' :0, 'KS' :1, 'MM' :2}
         itech = 0
         if driver is not None :
             itech = techs.get(driver.technique, 0)

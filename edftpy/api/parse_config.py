@@ -453,6 +453,7 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
     linearii = config["MATH"]["linearii"]
     xc_kwargs = config[keysys]["exc"].copy()
     ke_kwargs = config[keysys]["kedf"].copy()
+    environ_kwargs = config[keysys].get('environ', {})
     #---------------------------Functional----------------------------------
     if pseudo is not None :
         pseudo.restart(grid=grid, ions=ions, full=False)
@@ -482,6 +483,11 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
         from edftpy.api.dftd4 import VDWDFTD4
         vdw = VDWDFTD4(ions = ions, mp = grid.mp, **xc_kwargs)
         total_evaluator.funcdicts['VDW'] = vdw
+    #-----------------------------------------------------------------------
+    if environ_kwargs.get('file', None):
+        from edftpy.functional import Environ
+        environ = Environ(grid=grid, ions=ions, **environ_kwargs)
+        total_evaluator.funcdicts['ENVIRON'] = environ
     #-----------------------------------------------------------------------
     return total_evaluator
 

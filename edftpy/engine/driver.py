@@ -786,3 +786,68 @@ class DriverOF:
 
     def __call__(self, *args, **kwargs):
         self.engine(*args, **kwargs)
+
+class DriverGS(Driver):
+    """description"""
+    def __init__(self, grid = None, **kwargs):
+        # kwargs["technique"] = kwargs.get("technique", 'OF')
+        kwargs["technique"] = 'OF'
+        super().__init__(**kwargs)
+
+        self.grid = grid
+        self.charge = self.subcell.density
+
+        self.density = self.subcell.density*0.0
+
+        if self.comm.rank != 0 : self.fileobj = None
+        self.update_workspace(first = True)
+
+    def update_workspace(self, subcell = None, first = False, **kwargs):
+        """
+        Notes:
+            clean workspace
+        """
+        pass
+        return
+
+    @property
+    def grid(self):
+        return self.subcell.grid
+
+    @print2file()
+    def get_density(self, **kwargs):
+        self._iter += 1
+        self.engine.scf(self.charge, **kwargs)
+        return self.density
+
+    def get_energy(self, density = None, olevel=1, **kwargs):
+        if density is None :
+            density = self.density
+        energy = self.engine.get_energy(olevel=olevel, **kwargs) * self.engine.units['energy']
+        return energy
+
+    def get_energy_potential(self, density, calcType = ['E', 'V'], olevel = 1, sdft = 'sdft', **kwargs):
+        func = Functional(name = 'GS', energy=0.0, potential=None)
+        if 'E' in calcType :
+            energy = self.engine.get_energy(olevel = olevel) * self.engine.units['energy']
+            func.energy = energy
+            fstr = f'sub_energy({self.prefix}): {self._iter}  {func.energy}'
+            sprint(fstr, comm=self.comm)
+        if 'V' in calcType :
+            pot = self.engine.get_potential(**kwargs) * self.engine.units['energy']
+            func.potential = pot
+        return func
+
+    @print2file()
+    def update_density(self, **kwargs):
+        pass
+
+    @print2file()
+    def get_forces(self, sdft = 'sdft', **kwargs):
+        pass
+
+    def get_stress(self, **kwargs):
+        pass
+
+    def stop_run(self, **kwargs):
+        pass
