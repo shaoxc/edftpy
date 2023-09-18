@@ -1,0 +1,36 @@
+control:
+  debug: False
+  restart: False
+  verbosity: 0
+  threshold: 1e-1
+  need_electrostatic: False
+
+environment:
+  type: input
+  surface_tension: 0
+  pressure: 10
+  confine: 0
+  static_permittivity: 1
+  optical_permittivity: 1
+
+system:
+  ntyp: 0
+  dim: 0
+  axis: 2
+  pos: [0.]
+
+ions:
+  atomicspread: [0.8]
+  corespread: [0.5]
+
+solvent:
+  mode: electronic
+  stype: 2
+  rhomax: 0.005
+  rhomin: 0.0001
+#  mode: ionic
+#  radius_mode: uff
+#  alpha: 1.0
+#  softness: 0.5
+  deriv_method: default
+  deriv_core: fft

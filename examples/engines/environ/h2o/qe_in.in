@@ -1,0 +1,11 @@
+&SYSTEM
+   ecutrho = 150
+   ecutwfc = 30
+/
+
+&ELECTRONS
+   conv_thr = 1e-10
+   diagonalization = 'cg'
+   mixing_beta = 0.4
+   electron_maxstep = 200
+/
