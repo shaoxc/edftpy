@@ -367,6 +367,18 @@
 				"comment": "The tolerance of distance for adaptive simulation.",
 				"unit": "Angstrom"
 			}
+		},
+		"environ": {
+			"comment": {
+				"type": "str",
+				"default": "Control the ENVIRON."
+			},
+			"file": {
+				"type": "str",
+				"options": "",
+				"comment": "The input file for ENVIRON.",
+				"default": null
+			}
 		}
 	},
 	"SUB": {

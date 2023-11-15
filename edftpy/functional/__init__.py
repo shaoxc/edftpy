@@ -3,6 +3,7 @@ from .pseudopotential import LocalPP, ReadPseudo
 from .xc import XC, get_libxc_names, get_short_xc_name
 from .hartree import Hartree, hartree_energy
 from .kedf import KEDF
+from .continuum import Environ
 from dftpy.ewald import ewald
 
 class Ewald(ewald):
