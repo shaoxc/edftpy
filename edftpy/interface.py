@@ -124,7 +124,7 @@ def optimize_embed(config, optimizer, lprint = False, **kwargs):
                     potential = driver.total_embed(driver.density_global, calcType = ['V']).potential
                     index = optimizer.gsystem.graphtopo.graph.get_sub_index(i, in_global = True)
                     potential = driver.evaluator.global_potential - potential[index]
-                    write(outfile, potential, ions = driver.subcell.ions, data_type = 'potential')
+                    write(outfile, potential, driver.subcell.ions, data_type = 'potential')
                     driver.total_embed.update_functional(add = removed_sub)
 
     return
@@ -134,20 +134,20 @@ def conf2output(config, optimizer):
     if config["GSYSTEM"]["density"]['output']:
         sprint("Write Density...")
         outfile = config["GSYSTEM"]["density"]['output']
-        write(outfile, optimizer.density, ions = optimizer.gsystem.ions)
+        write(outfile, optimizer.density, optimizer.gsystem.ions)
 
     if config["OUTPUT"]["electrostatic_potential"]:
         sprint("Write electrostatic potential...")
         outfile = config["OUTPUT"]["electrostatic_potential"]
         v = get_electrostatic_potential(optimizer.gsystem)
-        write(outfile, v, ions = optimizer.gsystem.ions)
+        write(outfile, v, optimizer.gsystem.ions)
 
     for i, driver in enumerate(optimizer.drivers):
         if driver is None : continue
         outfile = config[driver.key]["density"]['output']
         if outfile :
             if driver.technique == 'OF' or driver.comm.rank == 0 or graphtopo.isub is None:
-                write(outfile, driver.density, ions = driver.subcell.ions)
+                write(outfile, driver.density, driver.subcell.ions)
 
     if "Force" in config["JOB"]["calctype"]:
         sprint("Calculate Force...")
