@@ -350,8 +350,8 @@ class DriverKS(Driver):
             else :
                 extpot = self.get_extpot(mapping = False)
             # Use Harris-Foulkes energy
-            energy = self.engine.get_energy(olevel = 1) * self.engine.units['energy']
-            energy -= self._get_extene(extpot)
+            energy = self.engine.get_energy(olevel = olevel) * self.engine.units['energy']
+            # energy -= self._get_extene(extpot) # engine not include the extene
         elif olevel == -1 :
             # Here, we directly use saved density
             if sdft == 'pdft' :
