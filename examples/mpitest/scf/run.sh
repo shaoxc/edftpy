@@ -1,6 +1,6 @@
 if [ -z "$MPIRUN" ]
 then
-	mpirun=mpirun
+	mpirun="mpirun -n 4"
 else
 	mpirun=$MPIRUN
 fi
@@ -30,20 +30,20 @@ esac
 echo $ptest, $one, $two, $qe, $clean
 
 if test "$ptest" = true; then
-	$mpirun -n 4 python test_scf.py | tee log.0
+	$mpirun python test_scf.py | tee log.0
 fi
 
 if test "$one" = true; then
-	$mpirun -n 4 python -m edftpy edftpy_1.ini | tee log.1
+	$mpirun python -m edftpy edftpy_1.ini | tee log.1
 fi
 
 if test "$qe" = true; then
 	sed -i '/conv_thr/d' sub_ho.in
-	$mpirun -n 4 python -m qepy --pw.x -i sub_ho.in | tee log.qe
+	$mpirun python -m qepy --pw.x -i sub_ho.in | tee log.qe
 fi
 
 if test "$two" = true; then
-	$mpirun -n 4 python -m edftpy edftpy_2.ini | tee log.2
+	$mpirun python -m edftpy edftpy_2.ini | tee log.2
 fi
 
 if test "$clean" = true; then
