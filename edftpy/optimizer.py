@@ -7,7 +7,7 @@ import os
 from dftpy.constants import ENERGY_CONV
 
 from edftpy.mpi import sprint
-from edftpy.properties import get_total_forces, get_total_stress, get_total_energies
+from edftpy.properties import get_total_forces, get_total_stress, get_total_energies, get_total_forces_qmmm
 from edftpy.functional import hartree_energy
 from edftpy.utils.common import Grid, Field, Functional
 from edftpy.io import write
@@ -412,6 +412,7 @@ class Optimization(object):
             if olevel == 0 and self.check_converge_energy(energy_history):
                 sprint("#### Subsystem Density Optimization Converged (Energy) In {} Iterations ####".format(it+1))
                 self.converged = True
+                # Update density to get correct description of total energy
                 break
             if self.check_stop(): break
         else :
@@ -619,11 +620,15 @@ class Optimization(object):
         # self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.density, gaussian_density = self.gsystem.gaussian_density, with_global = True, calcType = ('V'))
         #-----------------------------------------------------------------------
         embed_keys = ['XC', 'KE']
+        #1. XC,KE from [O+H sites + QM part]
         self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.gaussian_density, embed_keys = embed_keys,
                 gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = ('V'))
+        #2. Hartree+Pseudo from [M+H sites + QM part]
         pot_qmmm = self.gsystem_qmmm.total_evaluator.get_total_functional(self.gsystem_qmmm.density, calcType = ('V'), embed_keys = embed_keys).potential
+        #3. Total
         self.gsystem_qmmm.total_evaluator.embed_potential[:] += pot_qmmm
         #-----------------------------------------------------------------------
+        #4. Give potentials above to QM part.
         self.gsystem.total_evaluator.embed_potential = self.gsystem_qmmm.total_evaluator.embed_potential
         #-----------------------------------------------------------------------
         for isub in range(self.nsub):
@@ -635,12 +640,37 @@ class Optimization(object):
             else :
                 if driver.evaluator.global_potential is None :
                     driver.evaluator.global_potential = np.zeros_like(driver.density)
+                # What is global potential ? Feeled by 1 subsystem
                 global_potential = driver.evaluator.global_potential
-
+            # What is the sub_value again?  from                    V global                      V sub
             self.gsystem_qmmm.sub_value(self.gsystem_qmmm.total_evaluator.embed_potential, global_potential, isub = isub)
 
         embed_keys = ['XC', 'KE']
-        pot_qm  = self.gsystem.total_evaluator.get_total_functional(self.density, calcType = ('V'), embed_keys = embed_keys).potential
+        #5. What is the self.density,is it QM density? Calculate QM Hartree+Pseudo potential. 
+        pot_qm_ele = self.gsystem.total_evaluator.get_total_functional(self.density, calcType = ('V'), embed_keys = embed_keys).potential
+        # electrostatistic potential. 
+         
+        # Xin Chen added
+        self.gsystem.total_evaluator.get_embed_potential(self.gsystem.gaussian_density, embed_keys = embed_keys,
+                with_global = False, calcType = ('V'))
+
+        self.gsystem.total_evaluator.get_embed_potential(self.gsystem_qmmm.gaussian_density, embed_keys = embed_keys,
+                                                              with_global = False, calcType = ('V'))
+
+
+        # Xin Chen add. Compute the NAD potential from QM to MM:  V_{tot}^{NAD} - V_{MM^{NAD}
+        self.gsystem_mm.total_evaluator.get_embed_potential(self.gsystem_mm.gaussian_density, embed_keys = embed_keys, with_global = False, calcType = ('V'))
+
+        self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_qmmm.gaussian_density, embed_keys = embed_keys,
+                gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = ('V'))
+        
+        NADpotMM     = self.gsystem_mm.total_evaluator.embed_potential 
+        NADpotTOT    = self.gsystem_qmmm.total_evaluator.embed_potential 
+        subPOT       = NADpotTOT - NADpotMM 
+
+        #pot_qm = self.gsystem.total_evaluator.embed_potential + pot_qm_ele
+        #pot_qm = subPOT + pot_qm_ele
+        pot_qm = subPOT[:] 
 
         for isub in range(self.nsub):
             driver = self.drivers[isub]
@@ -649,22 +679,48 @@ class Optimization(object):
             else :
                 if driver.evaluator.global_potential is None :
                     driver.evaluator.global_potential = np.zeros_like(driver.density)
+
+                if driver.evaluator.global_potential_ele is None :
+                    driver.evaluator.global_potential_ele = np.zeros_like(driver.density)
+
                 global_potential = driver.evaluator.global_potential
+                global_potential_ele = driver.evaluator.global_potential_ele
 
             technique = self._get_driver_technique(driver)
 
             if technique == 'MM' :
-                self.gsystem.sub_value(pot_qm, global_potential, isub = isub)
+                #6. Give potential to QM ????
+                if(not driver is None):
+                    print("opt part:", isub,pot_qm.shape, driver.comm.rank)
+
+                self.gsystem.sub_value(pot_qm, global_potential    , isub = isub)     # potential for energy calc.
+                self.gsystem.sub_value(pot_qm_ele, global_potential_ele, isub = isub) # potential for induce MM dipole.
+                #print(driver.evaluator.global_potential_ele)
                 # if driver is not None :
                     # global_potential.write('0_mm_pot.xsf', ions = self.gsystem_qmmm.ions)
                     # extfield = global_potential.gradient()
                     # extfield.write('0_mm_field.xsf', ions = self.gsystem_qmmm.ions)
-        # self.gsystem_qmmm.density.write('0_qmmm.xsf', ions = self.gsystem_qmmm.ions)
-        # self.gsystem.density.write('0_qm.xsf', ions = self.gsystem.ions)
-        # self.gsystem_mm.density.write('0_mm.xsf', ions = self.gsystem_mm.ions)
-        # self.gsystem_qmmm.total_evaluator.embed_potential.write('0_pot.xsf', ions = self.gsystem_qmmm.ions)
-        # pot_qm.write('0_1_pot.xsf', ions = self.gsystem_qmmm.ions)
-        # exit()
+        #self.gsystem_qmmm.density.write('0_qmmm.xsf', ions = self.gsystem_qmmm.ions)
+        #self.gsystem.density.write('0_qm.xsf', ions = self.gsystem.ions)
+        #self.gsystem_mm.density.write('0_mm.xsf', ions = self.gsystem_mm.ions)
+        #self.gsystem_qmmm.total_evaluator.embed_potential.write('0_pot.xsf', ions = self.gsystem_qmmm.ions)
+        #pot_qm.write('0_1_pot.xsf', ions = self.gsystem_qmmm.ions)
+        #pot_qm_ele.write('0_2_pot.xsf', ions = self.gsystem_qmmm.ions)
+        #self.gsystem_qmmm.total_evaluator.embed_potential[:] = 0.0
+
+        #embed_keys = ['XC','KE']
+        #self.gsystem_qmmm.total_evaluator.get_embed_potential(self.gsystem_mm.gaussian_density, embed_keys = embed_keys,
+        #        gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = ('V'))
+        #self.gsystem_qmmm.total_evaluator.embed_potential.write('0_6_mmd.xsf', ions = self.gsystem_qmmm.ions)
+
+
+        self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, embed_keys = embed_keys,
+                gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = ('V'))
+        self.gsystem.total_evaluator.embed_potential.write('0_qmNADpot.xsf', ions = self.gsystem_qmmm.ions)
+
+
+        #subPOT.write('0_substract2.xsf', ions = self.gsystem_qmmm.ions)
+        #exit()
 
         # if self.iter > 0 :
             # self.gsystem_mm.density.write('0_mm.xsf', ions = self.gsystem_mm.ions)
@@ -703,8 +759,10 @@ class Optimization(object):
                 core_density = None if not hasattr(driver, 'core_density') else driver.core_density
                 density_charge = None if not hasattr(driver, 'density_charge') else driver.density_charge
                 density_charge_mo = None if not hasattr(driver, 'density_charge_mo') else driver.density_charge_mo
+                density_charge_wall = None if not hasattr(driver, 'density_charge_wall') else driver.density_charge_wall
                 if density is not None :
-                    if density_charge_mo is not None : density_charge_mo = density_charge_mo + density
+                    if density_charge_mo is not None : density_charge_mo = density_charge_mo + density  #! update NAD density
+                    #if density_charge_mo is not None : density_charge_mo = density_charge_mo   #! Don't update density 
                     if density_charge is not None : density_charge = density_charge + density
                 technique = self._get_driver_technique(driver)
                 if technique in ['MM'] :
@@ -713,15 +771,26 @@ class Optimization(object):
                     # Only works for one MM subsystem, and only need once.
                     self.gsystem_mm.update_density(core_density, isub = i, core = True)
                     # Only works for one MM subsystem, and use gaussian_density to save the O-site density
-                    self.gsystem_mm.update_density(density_charge_mo, isub = i, fake = True)
+
+                    # Converged, Just calculate the energy
+                    if(self.converged ):
+                        self.gsystem_mm.update_density(density_charge_mo, isub = i, fake = True)
+                    # During the SCF
+                    else:
+                        if(density_charge_mo is None):
+                            self.gsystem_mm.update_density(density_charge_mo, isub = i, fake = True)
+                        else:
+                            self.gsystem_mm.update_density(density_charge_wall+density_charge_mo, isub = i, fake = True)
                     #-----------------------------------------------------------------------
             #
-            self.gsystem_qmmm.density[:] = self.gsystem.density + self.gsystem_mm.density
+            #self.gsystem_qmmm.density[:] = np.abs(self.gsystem.density + self.gsystem_mm.density)
+            self.gsystem_qmmm.density[:] = self.gsystem.density + self.gsystem_mm.density 
             # Only need once, but for simple
             self.gsystem_qmmm.core_density[:] = self.gsystem.core_density + self.gsystem_mm.core_density
             # For nonadditive terms
             # self.gsystem_mm.gaussian_density[:] = self.gsystem_mm.density
-            self.gsystem_qmmm.gaussian_density[:] = self.gsystem.density + self.gsystem_mm.gaussian_density
+            #self.gsystem_qmmm.gaussian_density[:] = np.abs(self.gsystem.density + self.gsystem_mm.gaussian_density)
+            self.gsystem_qmmm.gaussian_density[:] = self.gsystem.density + self.gsystem_mm.gaussian_density 
             # self.gsystem_qmmm.gaussian_density[:] = self.gsystem_qmmm.density
             #
             if 'XC' in self.gsystem_qmmm.total_evaluator.funcdicts :
@@ -911,7 +980,25 @@ class Optimization(object):
         return diff_res
 
     def get_forces(self, **kwargs):
-        forces = get_total_forces(drivers = self.drivers, gsystem = self.gsystem, **kwargs)
+        """
+        Sep. 12, 2023: Xin Chen Modification
+        Add the force of QM/MM to here. 
+
+        """
+
+
+
+        if(self.sdft == 'qmmm'):
+            # Xin Chen modified. Branch for QMMM force calculation
+        #   for isub in range(self.nsub):
+        #       driver = self.drivers[isub]
+        #       technique = self._get_driver_technique(driver)
+        #       if technique == 'MM' : sub_mm_i = isub
+            sub_mm_i = 1
+            gsystems = [self.gsystem_qmmm, self.gsystem, self.gsystem_mm]
+            forces = get_total_forces_qmmm(drivers = self.drivers, gsystems = gsystems, **kwargs)
+        else:    
+            forces = get_total_forces(drivers = self.drivers, gsystem = self.gsystem, **kwargs)
         return forces
 
     def get_forces_qmmm_eint(self, **kwargs):
@@ -996,6 +1083,8 @@ class Optimization(object):
         return ep_w
 
     def end_scf(self):
+        # Update density to get correct description of total energy
+        self.update_qmmm_density()
         for i, driver in enumerate(self.drivers):
             if driver is not None :
                 driver.end_scf()

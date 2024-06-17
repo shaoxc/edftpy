@@ -75,8 +75,11 @@ class EmbedEvaluator(Evaluator):
         super().__init__(**kwargs)
 
         self._ke_evaluator = ke_evaluator
-        self.embed_potential = None
-        self.global_potential = None
+        self.embed_potential      = None
+        self.global_potential     = None
+        # Xin Chen modify
+        self.global_potential_ele = None
+        # 
 
     def get_embed_potential(self, rho, gaussian_density = None, with_ke = False, gather = False, with_global = True, **kwargs):
         self.embed_potential = None

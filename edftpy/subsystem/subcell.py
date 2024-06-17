@@ -351,6 +351,7 @@ class GlobalCell(object):
                 f = value.forces
                 if hasattr(f, '__call__'):
                     f = f(self.density)
+                if f is None : continue
                 forces += f
         return forces
 

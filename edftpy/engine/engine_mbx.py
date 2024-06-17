@@ -54,17 +54,23 @@ class EngineMBX(Engine):
         kwargs['units'] = units
         super().__init__(**kwargs)
         self.xc = xc
+        self.e2 = 0 # Electric potential energy of MM dipole in QM field
         if isinstance(self.xc, dict):
             self.xc = self.xc.get('xc', 'mbx') or 'mbx'
 
     def get_forces(self, **kwargs):
         force = None
+        energy_g,grad = mbx.get_energy_pbc_grad(self.positions, len(self.labels), self.box, units = 'au')
+        force = grad
         return force
 
     def get_energy(self, olevel = 0, **kwargs) -> float:
         if olevel == 0 :
             energy = mbx.get_energy_pbc_nograd(self.positions, len(self.labels), self.box, units = 'au')
-            e2 = mbx.get_external_field_contribution_to_energy(units = 'au')
+            # e2 in MBX have bug, I have to used edftpy
+            e_mbx2 = mbx.get_external_field_contribution_to_energy(units = 'au')
+            e2 = self.e2
+            print("e2_mbx",e_mbx2, self.e2, e_mbx2-self.e2)
             sprint('mbx -> energies', energy, e2, energy - e2, comm = self.comm)
             energy = energy - e2
         else :
@@ -178,19 +184,77 @@ class EngineMBX(Engine):
         pot, potfield = mbx.get_potential_and_electric_field_on_points(grid_points, grid_points.size//3, units = 'au')
         return pot.reshape(grid.nrR)
 
-    def set_extpot(self, extpot = None, **kwargs):
+    def set_extpot(self, nadfield=None, extpot = None, **kwargs):
         if self.comm.rank > 0 : return
         pot = self.get_value_at_points(extpot, self.points_mm).ravel()
-        #extfield = extpot.gradient()
+        # extfield = extpot.gradient()
         # extfield = extpot.gradient(flag = 'standard')
-        extfield = extpot.gradient(flag = 'supersmooth',sigma=0.3)
+        extfield = extpot.gradient(flag = 'supersmooth',sigma=0.30)
         potfield = self.get_value_at_points(extfield, self.points_mm).ravel()
         # potfield = []
         # for i in range(3):
             # p = self.get_value_at_points(extfield[i], self.points_mm)
             # potfield.append(p)
         # potfield= np.asarray(potfield).T.ravel()
-        mbx.set_potential_and_electric_field_on_sites(-pot, potfield, units = 'au')
+        #nadfield = nadfield.reshape(nadfield.shape[0]*nadfield.shape[1])
+
+        ###############
+        #print('NAD:',nadfield)
+        nadfield = nadfield * -0.1
+    
+        #print("original potE:",potfield.shape)
+
+        alpha  = 7.0e+1
+        beta1 = 1.0 #H
+        beta2 = 0.4 #O
+
+        M = potfield.shape[0]
+        N = int(M/3)
+        if np.remainder(M,3)!=0:
+            raise Exception("Incorrect shape in e-field")
+
+        potfield_p   = potfield.reshape(N,3)
+        #print("shaped field [1]:\n", potfield_p) 
+        #print("reshaped potE:",potfield_p.shape)
+
+        potfield_mag = np.sqrt( np.einsum('ji->j', potfield_p**2))
+        #print("length:",potfield_mag.shape)
+
+        Scale        = np.exp(-alpha*potfield_mag)*beta1 + (1.0-beta1)
+        Scale[::4] = np.exp(-alpha*potfield_mag[::4])*beta2 + (1.0-beta2)
+        #print("Sc,:",Scale)
+
+        potfield_p2  = np.einsum('mi,m->mi',potfield_p,Scale)
+        #print(potfield_p2)
+
+        potfield_new  = potfield_p2.reshape(M) 
+        #potfield = potfield_new
+        
+        #######################
+
+        #maxE = np.max(np.abs(potfield))
+        #screen = 1/np.exp(maxE)
+
+        #potfield = potfield*screen
+        #print("Max ele:", np.max(potfield), np.min(potfield))
+        mbx.set_potential_and_electric_field_on_sites(-pot, potfield+nadfield, units = 'au')
+
+        dipoles = mbx.get_induced_dipoles(self.npoints, units = 'au')
+        charges = mbx.get_charges(self.npoints, units = 'au')
+        #print("[Dipole]",dipoles)
+        #print("[POT]",pot)
+        #print("[POT]",potfield)
+        E_ind = -np.sum(potfield*dipoles)*1.889723794595576*166.0320   # dipole*field (kcal/mol)
+        E_perm = -np.sum(pot*charges)*1.889723794595576*166.0320       # charge*pot (kcal/mol)
+        self.e2 =(E_ind+E_perm)/627.50947
+
+    def set_extpot_NAD(self, extpot = None, MMden=None, **kwargs):
+        if self.comm.rank > 0 : return
+        Grad_den = MMden.gradient(flag = 'supersmooth',sigma=0.30) # Check no super, regular, sigma=0
+        dx = np.sum(Grad_den[0]*extpot)
+        dy = np.sum(Grad_den[1]*extpot)
+        dz = np.sum(Grad_den[2]*extpot)
+        return([dx,dy,dz])
 
     def get_value_at_points(self, data, points):
         if data.ndim > 3 :
@@ -199,7 +263,9 @@ class EngineMBX(Engine):
             values = np.empty(points.shape[0])
         for i, p in enumerate(points):
             ip = (np.rint(p*data.grid.nrR/data.grid.latparas[0:3])).astype('int32')
+            ip = np.mod(ip, data.grid.nrR)
             if data.ndim > 3 :
+                sprint(i,p)
                 values[i] = data[:, ip[0], ip[1], ip[2]]
             else :
                 values[i] = data[ip[0], ip[1], ip[2]]
