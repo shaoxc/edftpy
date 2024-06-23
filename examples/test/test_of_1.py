@@ -17,12 +17,19 @@ data_path = os.environ.get('EDFTPY_DATA_PATH')
 if not data_path : data_path = 'DATA/'
 if not os.path.exists(data_path) : data_path = '../DATA/'
 pp_al = data_path + '/Al_OEPP_lda.recpot'
-ions = Ions.from_ase(bulk('Al', 'fcc', a=4.05, cubic=True))
+#Build FCC Al, first atom shift 0.1 for force calculation
+atoms = bulk('Al', 'fcc', a=4.05, cubic=True)
+pos = atoms.get_positions()
+pos[0] = pos[0]+0.1
+atoms.set_positions(pos)
+ions = Ions.from_ase(atoms)
 
 class Test(unittest.TestCase):
     def setUp(self):
-        self.energy = {'tfvw' :-8.281114354275829,
-                'vw' : -11.394097752526489}
+        self.energy = {'tfvw' :-8.27532783058605,
+                'vw' : -11.392500261918915}
+        self.force  = {'vw':-0.00577952 ,
+                        'tfvw': -0.0205018}   
         self.kwargs = {}
 
     def test_full_sdft_tfvw(self):
@@ -76,11 +83,14 @@ class Test(unittest.TestCase):
         xc_kwargs = {"xc":'lda', 'libxc' :False}
         # xc_kwargs = {"libxc":['lda_x', 'lda_c_pz']}
         opt = self.get_optimizer(ke_kwargs, xc_kwargs = xc_kwargs, method = method, sdft = sdft)
-        energy = self.get_energy(opt)
+        energy,force = self.get_energy_force(opt)
+    
         ref_energy = self.energy[kedf]
+        ref_force1 = self.force[kedf]      # ref. Force for 1st atom should be 1 
         print("method = '{}', kedf = '{}', energy = {}, ref = {}".format(method, kedf, energy, ref_energy))
-        self.assertTrue(np.isclose(energy, ref_energy, rtol = 1E-3))
 
+        self.assertTrue(np.isclose(energy, ref_energy, rtol = 1E-3))
+        self.assertTrue(np.isclose(force[0][0], ref_force1, atol = 1E-3))
     def get_optimizer(self, ke_kwargs, xc_kwargs = {}, method = 'full', sdft = 'sdft'):
         gsystem = GlobalCell(ions, grid = None, ecut = 22.05, full = False, optfft = True)
         grid = gsystem.grid
@@ -112,11 +122,13 @@ class Test(unittest.TestCase):
         opt = Optimization(gsystem = gsystem, drivers = drivers, options = optimization_options)
         return opt
 
-    def get_energy(self, opt):
+    def get_energy_force(self, opt):
         opt.optimize()
         energy = opt.energy
+        force = opt.get_forces()
+
         opt.stop_run()
-        return energy
+        return energy, force
 
     def gen_sub_of(self, ions, grid, pplist = None, index = None, atomicd = None, xc_kwargs = {}, ke_kwargs = {}, emb_ke_kwargs = {}, gsystem = None, method = 'part', mp = None, **kwargs):
         if atomicd is None :
@@ -160,3 +172,4 @@ class Test(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
