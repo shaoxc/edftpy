@@ -1,3 +1,4 @@
 dftpy>=2.0.3
 mpi4py>=3.0.2
 mpi4py-fft>=2.0.3
+ase<3.23.0

@@ -8,4 +8,5 @@ class LocalPP(LocalPseudo):
 
     def forces(self, density):
         f = self.force(density)
+        f = super().forces(density)
         return f
