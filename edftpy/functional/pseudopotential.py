@@ -7,5 +7,5 @@ class LocalPP(LocalPseudo):
         return obj
 
     def forces(self, density):
-        f = self.force(density)
+        f = super().forces(density)
         return f
