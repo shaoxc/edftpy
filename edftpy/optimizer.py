@@ -676,6 +676,7 @@ class Optimization(object):
             driver = self.drivers[isub]
             if driver is None :
                 global_potential = None
+                global_potential_ele = None
             else :
                 if driver.evaluator.global_potential is None :
                     driver.evaluator.global_potential = np.zeros_like(driver.density)
@@ -716,7 +717,7 @@ class Optimization(object):
 
         self.gsystem.total_evaluator.get_embed_potential(self.gsystem.density, embed_keys = embed_keys,
                 gaussian_density = self.gsystem.gaussian_density, with_global = False, calcType = ('V'))
-        self.gsystem.total_evaluator.embed_potential.write('0_qmNADpot.xsf', ions = self.gsystem_qmmm.ions)
+        #self.gsystem.total_evaluator.embed_potential.write('0_qmNADpot.xsf', ions = self.gsystem_qmmm.ions)
 
 
         #subPOT.write('0_substract2.xsf', ions = self.gsystem_qmmm.ions)

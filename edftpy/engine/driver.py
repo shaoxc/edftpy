@@ -828,8 +828,9 @@ class DriverMM(DriverKS):
         self.MMpenalty_energy = np.sum(Dp_length)/627.51 #### Here
         sprint("MM distorsion energy (Hartree):",self.MMpenalty_energy,comm = self.comm)
         #-----------------------------------------------------------------------
-
+        self.qm_induced_dm = Field(grid = self.grid_sub, rank=self.nspin)
         self.density_sub[:] = 0.0
+        self.qm_induced_dm[:] = 0.0
         for charge, c, c0, p in zip(charges, dipoles, self.MM_dp0, positions_d):
             if charge <0.01 :
                 sigma = sigmaO  # 0.93
@@ -839,9 +840,11 @@ class DriverMM(DriverKS):
             self.density_sub   = build_pseudo_density(p, self.grid_sub, scale  = c, sigma = sigma, rcut =sigma*4,
                     density = self.density_sub, add = True, deriv = 1)
             # For QM induced dipoles. 
-          # self.qm_induced_dm = build_pseudo_density(p, self.grid_sub, scale = c-c0, sigma = sigma, rcut = sigma*4,
-          #         density = self.density_sub, add = True, deriv = 1)
+            #self.qm_induced_dm = build_pseudo_density(p, self.grid_sub, scale = c0, sigma = sigma, rcut = sigma*4,
+            #        density = self.qm_induced_dm, add = True, deriv = 1)
         time4 = time.time()
+       #self.qm_induced_dm   = build_pseudo_density(p, self.grid_sub, scale  = c0, sigma = sigma, rcut =sigma*4,
+       #        density = self.density_sub, add = True, deriv = 1)
 
         # Get response energy.
         #E_NAD = np.sum( (self.evaluator.global_potential/self.engine.units['energy'])     * self.qm_induced_dm)
@@ -854,7 +857,8 @@ class DriverMM(DriverKS):
 
         #print("NAD coulp.: ",E_NAD)
         #print("ELE coulp.: ",E_ELE)
-        #self.qm_induced_dm.write('dp_qm.xsf', ions = self.subcell.ions)
+        #self.qm_induced_dm.write('dp_mm0.xsf', ions = self.subcell.ions)
+        #self.density_sub.write('dp_mm.xsf', ions = self.subcell.ions)
         # To remove dipole
         self.density_sub.gather(out = self.density, root = 0)
         #self.density.write('sub_ks_full.xsf', ions = self.subcell.ions)

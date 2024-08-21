@@ -92,11 +92,13 @@ class EngineMBX(Engine):
         #-----------------------------------------------------------------------
         monomer_names = self.monomer_names.copy()
         for i in range(len(monomer_names)):
+            print(self.xc)
             if self.xc == 'pbe' :
                 if monomer_names[i] == 'h2o' :
                     monomer_names[i] = 'mbpbe'
             elif self.xc == 'mbx' :
-                pass
+                monomer_names[i] = 'mbpbe'
+                #pass
             else :
                 raise AttributeError(f"Sorry, MBX only support 'MBX' and 'PBE' xc, not {self.xc}.")
         mbx.initialize_system(self.positions, self.monomer_natoms, self.labels, monomer_names, self.inputfile, units = 'au')
