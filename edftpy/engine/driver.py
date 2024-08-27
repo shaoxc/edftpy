@@ -564,10 +564,12 @@ class DriverMM(DriverKS):
             clean workspace
         """
         self.fermi = None
-        self._iter = 0
         self.energy = 0.0
         self.residual_norm = 0.0
         self.dp_norm = 0.0
+        self._iter = 0
+        self.field_NAD     = None
+        self.qm_induced_dm = None
 
         if not first :
             self.engine.update_ions(self.subcell, update = update)
@@ -581,6 +583,14 @@ class DriverMM(DriverKS):
 
     @print2file()
     def init_density(self, rho_ini = None, density_initial = None, sigma = 0.6, rcut = 10.0, **kwargs):
+        parain = open('para.inp','r').readlines()[0].split()
+
+        parain1 = float(parain[0])
+        parain2 = float(parain[1])
+        parain3 = float(parain[2])
+        parain4 = float(parain[3])
+        print(parain)
+
         if self.grid_driver is not None :
             grid = self.grid_driver
         else :
@@ -616,16 +626,19 @@ class DriverMM(DriverKS):
         self.density_charge_sub[:] = 0.0
         for c, p in zip(charges, positions_c):
             if c > 1 :
-                #sigma2 = 1.4 *sigma
-                sigma2 = 0.84
+                sigma2 = parain1 
             else :
-                #sigma2 = sigma
-                sigma2 = 0.84
+                sigma2 = parain2
             self.density_charge_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma2, rcut = rcut,
                     density = self.density_charge_sub, add = True, deriv = 0)
         #Double density---------------------------------------------------------
         self.density_charge_mo_sub = Field(grid = self.grid_sub, rank=self.nspin)
         self.density_charge_mo_sub[:] = 0.0
+
+
+        #wall density for push the QM electron density out
+        self.density_charge_wall_sub = Field(grid = self.grid_sub, rank=self.nspin)
+        self.density_charge_wall_sub[:] = 0.0
         pos_m, inds_m, inds_o = self.engine.get_m_sites()
         if self.comm.size > 1 :
             pos_m = self.comm.bcast(pos_m, root = 0)
@@ -645,18 +658,24 @@ class DriverMM(DriverKS):
             #
             for c, p in zip(charges, positions_c):
                 if c > 1 :
-                    #sigma2 = 1.4 *sigma
-                    sigma2 = 0.90
+                    sigma2 = parain3  # 0.93
                 else :
-                    #sigma2 = sigma
-                    sigma2 = 0.96
+                    sigma2 = parain4  # 0.92
                 self.density_charge_mo_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma2, rcut = rcut,
                         density = self.density_charge_mo_sub, add = True, deriv = 0)
+                if(c<0.01):
+                    self.density_charge_wall_sub = build_pseudo_density(p, self.grid_sub, scale = 5.0 , sigma = 0.7, rcut = rcut,
+                        density = self.density_charge_wall_sub, add = True, deriv = 0)
+                else:
+                    # 0.5, 0.1
+                    self.density_charge_wall_sub = build_pseudo_density(p, self.grid_sub, scale = 1.0, sigma = 0.2, rcut = rcut,
+                        density = self.density_charge_wall_sub, add = True, deriv = 0)
+
         else :
             self.density_charge_mo_sub = self.density_charge_sub
         #-----------------------------------------------------------------------
         if len(inds_m) > 0 :
-            self.subcell.ions.pos[inds_o] = pos_m
+            self.subcell.ions.positions[inds_o] = pos_m
         #-----------------------------------------------------------------------
         sprint('charges :\n', charges, comm = self.comm)
         # self.density_charge_sub.write('1_pseudo_density_charge.xsf', ions = self.subcell.ions)
@@ -666,11 +685,30 @@ class DriverMM(DriverKS):
         self.core_density = self.core_density_sub.gather(grid = self.grid)
         self.density_charge = self.density_charge_sub.gather(grid = self.grid)
         self.density_charge_mo = self.density_charge_mo_sub.gather(grid = self.grid)
+        self.density_charge_wall = self.density_charge_wall_sub.gather(grid = self.grid)
+        # self.density_charge_wall[:] = 0.0
         # self.density_charge_sub.write('sub_c_1.xsf', ions = self.subcell.ions)
-        # self.density_charge_mo_sub.write('sub_c_1_2.xsf', ions = self.subcell.ions)
+        #self.density_charge_mo_sub.write('sub_c_1_2.xsf', ions = self.subcell.ions)
 
     @print2file()
     def get_energy(self, olevel = 0, **kwargs):
+        '''
+            def get_energy(self, olevel = 0, sdft = 'sdft', **kwargs):
+                if olevel == 0 :
+                    # Here, we directly use saved density
+                    if sdft == 'pdft' :
+                        extpot = self.evaluator.embed_potential
+                        extpot = self.get_extpot(extpot, mapping = True)
+                    else :
+                        extpot = self.get_extpot()
+                    self.engine.set_extpot(extpot)
+                    energy = self.engine.get_energy(olevel = olevel) * self.engine.units['energy']
+                else :
+                    energy = 0.0
+                return energy
+
+
+        '''
         if olevel == 0 :
             energy = self.engine.get_energy(olevel = olevel) * self.engine.units['energy']
         else :
@@ -685,7 +723,8 @@ class DriverMM(DriverKS):
     def get_energy_potential(self, density = None, calcType = ['E', 'V'], olevel = 1, **kwargs):
         func = Functional(name = 'ZERO', energy=0.0, potential=None)
         if olevel == 0 :
-            self.engine.set_extpot(self.evaluator.global_potential / self.engine.units['energy'], **kwargs)
+            # XIn Chen modified, only electrostatic potential
+            self.engine.set_extpot(nadfield=self.field_NAD,extpot=self.evaluator.global_potential_ele / self.engine.units['energy'], **kwargs)
         # if 'V' in calcType :
             # pot = self.engine.get_potential(grid = self.grid_driver, **kwargs) * self.engine.units['energy']
             # func.potential = self._format_field_invert(pot)
@@ -701,7 +740,7 @@ class DriverMM(DriverKS):
         return func
 
     @print2file()
-    def get_density(self, rcut = 10, sigma = 1.7, **kwargs):
+    def get_density(self, rcut = 10, sigma = 1.4, **kwargs):
         #
         #-----------------------------------------------------------------------
         # if self.comm.rank == 0 :
@@ -710,12 +749,57 @@ class DriverMM(DriverKS):
             # self.density_charge[:] = self.density
         # return self.density
         #-----------------------------------------------------------------------
-        self.engine.set_extpot(self.evaluator.global_potential / self.engine.units['energy'], **kwargs)
-        #
+        import time
+        start_time = time.time()
+
+        parain = open('para.inp','r').readlines()[0].split()
+        sigmaO  = float(parain[4]) # O
+        sigmaH  = float(parain[5]) # H
+        DP_pen_O  = float(parain[6]) # O 18
+        DP_pen_H  = float(parain[7]) # H 36
+        print('param',sigmaO,sigmaH)
+        #sigma = parain
+        # Xin chen modified. only electrostatic potential to MM part
+        #self.evaluator.global_potential.write('0_substract3.xsf', ions = self.subcell.ions)
+
+        # def set_extpot_NAD(self, extpot = None, MMden, **kwargs):
+        charges, positions_c = self.engine.get_charges()
+        sub_dens = Field(grid = self.grid_sub, rank=self.nspin)
+
+        time1 = time.time()
+        totgenTime = 0
+        field_NADt = []
+
+        '''
+        for c, p in zip(charges, positions_c):
+            sub_dens[:] = 0.0
+            sigma2 = 0.3
+            sub_dens = build_pseudo_density(p, self.grid_sub, scale = 1, sigma = sigma2, rcut = sigma2*4,
+                    density = sub_dens, add = True, deriv = 0)
+            time110 = time.time()
+            fieldt = self.engine.set_extpot_NAD(extpot = self.evaluator.global_potential/self.engine.units['energy'], MMden = sub_dens, **kwargs)
+            time111 = time.time()
+            #print(time111-time110)
+            totgenTime = totgenTime + time111-time110
+            field_NADt.append(fieldt)
+        '''
+        #print("totgenTime:", totgenTime)
+
+        time11 = time.time()
+        #field_NADt = np.array(field_NADt)
+        #self.field_NAD= field_NADt
+        self.field_NAD=0
+        #self.evaluator.global_potential_ele =  self.evaluator.global_potential_ele*0
+        self.engine.set_extpot(nadfield=self.field_NAD, extpot=self.evaluator.global_potential_ele / self.engine.units['energy'], **kwargs)
         dipoles, positions_d = self.engine.get_dipoles()
-        sprint('dipoles0 :\n', dipoles, comm = self.comm)
+        charges, positions_c = self.engine.get_charges()
+        charges = self.engine.get_points_zval() - charges
+
+        #sprint('dipoles0 :\n', dipoles, comm = self.comm)
         positions_d = positions_d*self.engine.units['length']
         dipoles = dipoles*self.engine.units['length']
+
+        time2 = time.time()
         #-----------------------------------------------------------------------
         if self.comm.size > 1 :
             dipoles = self.comm.bcast(dipoles, root = 0)
@@ -723,25 +807,79 @@ class DriverMM(DriverKS):
         # dip = np.loadtxt('edftpy_mm_dipole.txt').reshape((-1,3))
         # dipoles[:3] = dip[:3]
         # dipoles[:] = 0.0
-        sprint('dipoles :\n', dipoles, comm = self.comm)
-
+        #sprint('dipoles :\n', dipoles, comm = self.comm)
         # Get updated dipole (induced by QM and MM part)
         self.QMMM_dp =dipoles
+        #self.QMMM_dp = self.MM_dp0
 
-        Dp_length =(self.QMMM_dp[:,0]-self.MM_dp0[:,0])**2 +\
-                   (self.QMMM_dp[:,1]-self.MM_dp0[:,1])**2 +\
-                   (self.QMMM_dp[:,2]-self.MM_dp0[:,2])**2
+        sprint('dipolesd :\n', dipoles-self.MM_dp0, comm = self.comm)
+
+       #Dp_length =(self.QMMM_dp[:,0] - self.MM_dp0[:,0])**2*DP_pen_O +\
+       #           (self.QMMM_dp[:,1] - self.MM_dp0[:,1])**2*DP_pen_H +\
+       #           (self.QMMM_dp[:,2] - self.MM_dp0[:,2])**2*DP_pen_H
+
+        Dp_length1 = (self.QMMM_dp[:,0] - self.MM_dp0[:,0])**2+\
+                     (self.QMMM_dp[:,1] - self.MM_dp0[:,1])**2+\
+                     (self.QMMM_dp[:,2] - self.MM_dp0[:,2])**2
+        sprint('O dipoles_length :\n', Dp_length1, comm = self.comm)
+
+        Dp_length = Dp_length1*0.0
+
+        Dp_length[::4]  = Dp_length1[::4]*DP_pen_O
+        Dp_length[1::4] = Dp_length1[1::4]*DP_pen_H
+        Dp_length[2::4] = Dp_length1[2::4]*DP_pen_H
+
+        DP_len_O = Dp_length1[::4]
+        DP_len_H = Dp_length1[1::4] + Dp_length1[2::4]
+
+        sprint('Total DP O:  ', np.sum(DP_len_O)/627.51, comm = self.comm)
+        sprint('Total DP H:  ', np.sum(DP_len_H)/627.51, comm = self.comm)
+        
+
+        sprint('weighted dipoles :\n', Dp_length, comm = self.comm)
+
+        time3 = time.time()
         # sqrt is ignored. 
-        self.MMpenalty_energy = np.sum(Dp_length)*12/627.51
+        self.MMpenalty_energy = np.sum(Dp_length)/627.51 #### Here
         sprint("MM distorsion energy (Hartree):",self.MMpenalty_energy,comm = self.comm)
         #-----------------------------------------------------------------------
+        self.qm_induced_dm = Field(grid = self.grid_sub, rank=self.nspin)
         self.density_sub[:] = 0.0
-        # self.density_sub[:] = self.density_charge_sub
-        for c, p in zip(dipoles, positions_d):
-            self.density_sub = build_pseudo_density(p, self.grid_sub, scale = c, sigma = sigma, rcut = rcut,
+        self.qm_induced_dm[:] = 0.0
+        for charge, c, c0, p in zip(charges, dipoles, self.MM_dp0, positions_d):
+            if charge <0.01 :
+                sigma = sigmaO  # 0.93
+            else :
+                sigma = sigmaH  # 0.92
+            #sprint("sigma,charge",sigma,charge,c ,comm = self.comm)
+            self.density_sub   = build_pseudo_density(p, self.grid_sub, scale  = c, sigma = sigma, rcut =sigma*4,
                     density = self.density_sub, add = True, deriv = 1)
+            # For QM induced dipoles. 
+            #self.qm_induced_dm = build_pseudo_density(p, self.grid_sub, scale = c0, sigma = sigma, rcut = sigma*4,
+            #        density = self.qm_induced_dm, add = True, deriv = 1)
+        time4 = time.time()
+       #self.qm_induced_dm   = build_pseudo_density(p, self.grid_sub, scale  = c0, sigma = sigma, rcut =sigma*4,
+       #        density = self.density_sub, add = True, deriv = 1)
+
+        # Get response energy.
+        #E_NAD = np.sum( (self.evaluator.global_potential/self.engine.units['energy'])     * self.qm_induced_dm)
+        #E_ELE = np.sum( (self.evaluator.global_potential_ele/self.engine.units['energy']) * self.qm_induced_dm)
+       
+        #print("time1   :", time1 - start_time )
+        #print("time2   :", time2 - time1      )
+        #print("time3   :", time3 - time2      )
+        #print("time-tot:", time4 - time3      )
+
+        #print("NAD coulp.: ",E_NAD)
+        #print("ELE coulp.: ",E_ELE)
+        #self.qm_induced_dm.write('dp_mm0.xsf', ions = self.subcell.ions)
+        #self.density_sub.write('dp_mm.xsf', ions = self.subcell.ions)
+        # To remove dipole
         self.density_sub.gather(out = self.density, root = 0)
-        # self.density_sub.write('1_density_charge.xsf', ions = self.subcell.ions)
+        #self.density.write('sub_ks_full.xsf', ions = self.subcell.ions)
+
+        time5 = time.time()
+
         return self.density
 
     @print2file()
@@ -757,7 +895,7 @@ class DriverMM(DriverKS):
         self.density[:] = 0.0
         for c, p in zip(charges, positions_c):
             if c > 1 :
-                sigma2 = 1.4 *sigma
+                sigma2 = 1.2 *sigma
             else :
                 sigma2 = sigma
             self.density = build_pseudo_density(p, self.grid, scale = c, sigma = sigma2, rcut = rcut,

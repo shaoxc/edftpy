@@ -287,9 +287,9 @@ def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, ps
         inds_o = opt.gsystem.graphtopo.comm.bcast(inds_o, root = rank_d)
         # print('rank', opt.gsystem.graphtopo.comm.rank, rank_d, inds_m, pos_m)
         if len(pos_m) > 0 :
-            ions_mm.pos[inds_o] = pos_m
+            ions_mm.positions[inds_o] = pos_m
             index_mm = opt.gsystem_mm.ions_index
-            ions_qmmm.pos[index_mm] = ions_mm.pos
+            ions_qmmm.positions[index_mm] = ions_mm.positions
 
         def update_evaluator_ions(evaluator, ions, grid = None, linearii = True):
             pseudo = evaluator.funcdicts['PSEUDO']
