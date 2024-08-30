@@ -97,8 +97,8 @@ class EngineMBX(Engine):
                 if monomer_names[i] == 'h2o' :
                     monomer_names[i] = 'mbpbe'
             elif self.xc == 'mbx' :
-                monomer_names[i] = 'h2o'
-                #monomer_names[i] = 'mbpbe'
+                #monomer_names[i] = 'h2o'
+                monomer_names[i] = 'mbpbe'
                 #pass
             else :
                 raise AttributeError(f"Sorry, MBX only support 'MBX' and 'PBE' xc, not {self.xc}.")
@@ -303,7 +303,7 @@ class EngineMBX(Engine):
         """
         if subcell is None : return kwargs
 
-        if len(monomers) < 1 :
+      print(inputs['box']) print(inputs['positions']) if len(monomers) < 1 :
             monomers = MBX_MONOMERS
         monomers = sorted(monomers.items(), key=lambda d : len(d[1]), reverse=True)
 

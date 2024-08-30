@@ -1,0 +1,57 @@
+********************************************************************************
+Parallel version (MPI) on       16 processors
+              eDFTpy Version : 0.0.1rc0
+               DFTpy Version : 2.1.0
+                QEpy Version : 7.2.0rc0
+********************************************************************************
+Begin on : 2024-08-30 16:43:32
+################################################################################
+GlobalCell grid [176 176 176]
+Communicators recreated :  16
+Number of subsystems :  2
+Number of processors for each subsystem : 
+  [15  1]
+Used of processors and remainder : 16 0
+Subsystem : SUB_KS1 KS [0, 1, 2]
+Subsystem : SUB_MM MM [3, 4, 5]
+setting key: O -> .//o_pbe_v1.2.uspp.F.UPF
+setting key: H -> .//h_pbe_v1.4.uspp.F.UPF
+Guess density (Real):  0.12721270332613865
+['O', 'H', 'H']
+[18.78884767 15.11780901 15.11780901 19.37838553 14.17889858 13.68433836
+ 19.37838553 14.17889858 16.55127966]
+[37.79452252  0.          0.          0.         37.79452252  0.
+  0.          0.         37.79452252]
+mbx
+<mbx.c_double_Array_9 object at 0x7ef561b9dd40> <mbx.c_int_Array_1 object at 0x7ef561b9dec0> <mbx.c_char_p_Array_3 object at 0x7ef561b9df40> <mbx.c_char_p_Array_1 object at 0x7ef561b3e040> <cparam 'P' (0x7ef561b3e110)> c_char_p(139592371743584)
+Grid : SUB_KS1 [0 0 0] [176 176 176] [243 243 243]
+Grid : SUB_MM [0 0 0] [176 176 176] [18 18 18]
+
+setting key: O -> .//o_pbe_v1.2.uspp.F.UPF
+setting key: H -> .//h_pbe_v1.4.uspp.F.UPF
+setting key: O -> .//o_pbe_v1.2.uspp.F.UPF
+setting key: H -> .//h_pbe_v1.4.uspp.F.UPF
+Begin optimize
+Optimization options :
+{'delay': 2,
+ 'econv': 6.000000000000001e-09,
+ 'maxiter': 200,
+ 'maxtime': 0,
+ 'method': 'Normal',
+ 'ncheck': 2,
+ 'olevel': 2,
+ 'pconv': 6.000000000000001e-11,
+ 'pconv_sub': array([6.e-11, 6.e-11]),
+ 'sdft': 'qmmm',
+ 'voltage': None}
+Update density : 8.000000000000004
+          Step    Energy(a.u.)            dE              dP        dC        Time(s)         
+opt part: 1 (44, 44, 176) 0
+Norm of reidual density : 
+[15.  0.]
+Energy of reidual density : 
+[15.  0.]
+----------------------------------------------------------------------------------------------------
+   Embed: 1       1.144733378561E+01      1.144733E+01    1.50E+01  1.50E+01  1.523140E+01    
+----------------------------------------------------------------------------------------------------
+opt part: 1 (44, 44, 176) 0

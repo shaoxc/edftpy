@@ -1,0 +1,5 @@
+&SYSTEM
+   ecutwfc          = 70
+   ecutrho          = 400
+   nosym            = T
+/
