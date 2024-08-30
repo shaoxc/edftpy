@@ -92,7 +92,6 @@ class EngineMBX(Engine):
         #-----------------------------------------------------------------------
         monomer_names = self.monomer_names.copy()
         for i in range(len(monomer_names)):
-            print(self.xc)
             if self.xc == 'pbe' :
                 if monomer_names[i] == 'h2o' :
                     monomer_names[i] = 'mbpbe'
@@ -310,7 +309,6 @@ class EngineMBX(Engine):
         
         #labels = subcell.ions.symbols.tolist()
         labels = subcell.ions.get_chemical_symbols()
-        print(labels)
         natoms = len(labels)
 
         monomer_names = []
@@ -332,14 +330,12 @@ class EngineMBX(Engine):
         inputs['labels'] = labels
         #inputs['positions'] = subcell.ions.pos.to_cart().ravel()/self.units['length']
         inputs['positions'] = subcell.ions.positions.ravel()/self.units['length']
-        print(inputs['positions'])
         inputs['monomer_names'] = monomer_names
         inputs['monomer_natoms'] = monomer_natoms
         inputs['zval'] = subcell.ions.zval
         if inputs.get('box', None) is None :
             #inputs['box'] = subcell.ions.pos.cell.lattice.ravel()/self.units['length']
             inputs['box'] = subcell.ions.cell.ravel()/self.units['length']
-            print(inputs['box'])
 
         self.subcell = subcell
 
