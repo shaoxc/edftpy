@@ -1,5 +1,5 @@
 6
-Lattice="10.0 00.0 0.0 0.0 10.0 0.0 0.0 0.0 10.0" Properties=species:S:1:pos:R:3 pbc="T T T"
+Lattice="5.0 00.0 0.0 0.0 5.0 0.0 0.0 0.0 5.0" Properties=species:S:1:pos:R:3 pbc="T T T"
 O    7.04367    7.87936   8.00000
 H    6.69246    8.76970   8.00000
 H    8.00000    8.00000   8.00000

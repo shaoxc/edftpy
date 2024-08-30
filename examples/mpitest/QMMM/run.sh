@@ -30,8 +30,7 @@ esac
 echo $ptest, $one, $two, $qe, $clean
 
 if test "$ptest" = true; then
-	#$mpirun python test_scf.py | tee log.0
-    $mpirun python -m edftpy --run qmmm.in --mpi4py | tee log.0
+    $mpirun python test_QMMM.py | tee log.0
 fi
 
 if test "$clean" = true; then
