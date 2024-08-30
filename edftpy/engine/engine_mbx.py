@@ -303,7 +303,7 @@ class EngineMBX(Engine):
         """
         if subcell is None : return kwargs
 
-      print(inputs['box']) print(inputs['positions']) if len(monomers) < 1 :
+        if len(monomers) < 1 :
             monomers = MBX_MONOMERS
         monomers = sorted(monomers.items(), key=lambda d : len(d[1]), reverse=True)
 
