@@ -7,7 +7,7 @@ import os
 from dftpy.constants import ENERGY_CONV
 
 from edftpy.mpi import sprint
-from edftpy.properties import get_total_forces, get_total_stress, get_total_energies
+from edftpy.properties import get_total_forces, get_total_stress, get_total_energies, get_total_forces_qmmm
 from edftpy.functional import hartree_energy
 from edftpy.utils.common import Functional
 from edftpy.io import write
