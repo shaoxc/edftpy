@@ -255,7 +255,7 @@ class EngineMBX(Engine):
 
     def set_extpot_NAD(self, extpot = None, MMden=None, **kwargs):
         if self.comm.rank > 0 : return
-        Grad_den = MMden.gradient(flag = 'supersmooth',sigma=0.30) # Check no super, regular, sigma=0
+        Grad_den = MMden.gradient(flag = 'supersmooth',sigma=0.15) # Check no super, regular, sigma=0
         dx = np.sum(Grad_den[0]*extpot)
         dy = np.sum(Grad_den[1]*extpot)
         dz = np.sum(Grad_den[2]*extpot)
