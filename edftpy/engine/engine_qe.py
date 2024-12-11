@@ -3,7 +3,6 @@ from qepy.driver import Driver
 import numpy as np
 import os
 import ase.io.espresso as ase_io_driver
-from ase.calculators.espresso import Espresso as ase_calc_driver
 from collections import OrderedDict
 
 from dftpy.constants import LEN_CONV
@@ -230,8 +229,6 @@ class EngineQE(Engine):
             if len(base_in_file) == 1 :
                 with open(base_in_file[0], 'r') as fh:
                     _, card_lines = ase_io_driver.read_fortran_namelist(fh)
-
-        ase_atoms.set_calculator(ase_calc_driver())
 
         if params :
             in_params = self._fix_params(in_params, prefix = prefix)
