@@ -468,7 +468,23 @@ class DriverKS(Driver):
 
     @print2file()
     def get_stress(self, **kwargs):
-        pass
+        icalc = 1
+        if self.exttype & 1 : icalc += 2
+        if self.exttype & 2 : icalc += 4
+        if self.exttype & 4 : icalc += 8
+        stress = self.engine.get_stress(icalc = icalc, volume = self.subcell.cell_global.volume, **kwargs)
+        stress *= self.engine.units['energy']/self.engine.units['length']**3
+        if self.comm.rank > 0 : stress *= 0.0
+        #
+        self.grid_sub.scatter(self.density, out = self.density_sub)
+        for k, value in self.evaluator.funcdicts.items():
+            if hasattr(value, 'stress'):
+                f = value.stress
+                if hasattr(f, '__call__'):
+                    f = f(self.density_sub)
+                stress += f
+        stress /= self.subcell.cell_global.volume / self.density_sub.grid.volume
+        return stress
 
     @print2file()
     def end_scf(self, **kwargs):
