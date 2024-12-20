@@ -22,7 +22,8 @@ def get_total_forces(drivers = None, gsystem = None, linearii=True, shift = True
         sprint('Forces shift :', forces_shift)
         forces -= forces_shift
     #-----------------------------------------------------------------------
-    sprint('Total forces : \n', forces)
+    sprint('Total forces :')
+    sprint(forces)
     return forces
 
 def get_total_stress(drivers = None, gsystem = None, **kwargs):
@@ -34,6 +35,9 @@ def get_total_stress(drivers = None, gsystem = None, **kwargs):
         # sprint('fs', fs, flush=True, comm=driver.comm)
         stress += fs
     stress = gsystem.grid.mp.vsum(stress)
-    sprint('Total stress : \n', stress)
+    for i in range(2):
+        for j in range(i+1, 3):
+            stress[j,i] = stress[i,j]
+    sprint('Total stress :')
+    sprint(stress)
     return stress
-

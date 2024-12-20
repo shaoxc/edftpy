@@ -467,8 +467,7 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
         if pseudo is None :
             pseudo = LocalPP(grid = grid, ions=ions, PP_list=pplist, PME=pme)
         hartree = Hartree()
-        xc = XC(**xc_kwargs)
-        # xc = XC(pseudo = pseudo, **xc_kwargs)
+        xc = XC(pseudo = pseudo, **xc_kwargs)
         funcdicts = {'XC' :xc, 'HARTREE' :hartree, 'PSEUDO' :pseudo}
         if ke_kwargs['kedf'] is None or ke_kwargs['kedf'].lower().startswith('no'):
             pass
@@ -491,7 +490,7 @@ def config2total_evaluator(config, ions, grid, pplist = None, total_evaluator= N
     #-----------------------------------------------------------------------
     return total_evaluator
 
-def config2embed_evaluator(config, keysys, ions, grid, pplist = None, cell_change = None):
+def config2embed_evaluator(config, keysys, ions, grid, pplist = None, cell_change = None, readpp=None):
     emb_ke_kwargs = config['GSYSTEM']["kedf"].copy()
     emb_xc_kwargs = config['GSYSTEM']["exc"].copy()
     pme = config["MATH"]["linearie"]
@@ -518,18 +517,22 @@ def config2embed_evaluator(config, keysys, ions, grid, pplist = None, cell_chang
             ke_emb = KEDF(**emb_ke_kwargs)
             emb_funcdicts['KE'] = ke_emb
     exttype = 7
+    if 'PSEUDO' in embed :
+        pseudo = LocalPP(grid = grid, ions=ions,PP_list=pplist,PME=pme, readpp=readpp)
+        emb_funcdicts['PSEUDO'] = pseudo
+        exttype -= 1
+    else:
+        pseudo = None
     if 'XC' in embed :
-        xc_emb = XC(**emb_xc_kwargs)
+        if 'PSEUDO' not in embed:
+            pseudo = LocalPP(grid = grid, ions=ions,PP_list=pplist,PME=pme, readpp=readpp)
+        xc_emb = XC(pseudo=pseudo, **emb_xc_kwargs)
         emb_funcdicts['XC'] = xc_emb
         exttype -= 4
     if 'HARTREE' in embed :
         hartree = Hartree()
         emb_funcdicts['HARTREE'] = hartree
         exttype -= 2
-    if 'PSEUDO' in embed :
-        pseudo = LocalPP(grid = grid, ions=ions,PP_list=pplist,PME=pme)
-        emb_funcdicts['PSEUDO'] = pseudo
-        exttype -= 1
 
     if calculator == 'dftpy' and opt_options['opt_method'] == 'full' :
         # Remove the vW part from the KE
@@ -613,7 +616,11 @@ def config2driver(config, keysys, ions, grid, pplist = None, total_evaluator = N
     mixer = Mixer(**mix_kwargs)
     if mixer is None : mixer = mix_kwargs.get('coef', 0.7)
     #-----------------------------------------------------------------------
-    embed_evaluator, exttype = config2embed_evaluator(config, keysys, subcell.ions, subcell.grid, pplist = pplist, cell_change = cell_change)
+    if total_evaluator is not None:
+        readpp = total_evaluator.funcdicts['PSEUDO'].readpp
+    else:
+        readpp = None
+    embed_evaluator, exttype = config2embed_evaluator(config, keysys, subcell.ions, subcell.grid, pplist = pplist, cell_change = cell_change, readpp=readpp)
     if config[keysys]["exttype"] and config[keysys]["exttype"] < 0 :
         exttype = config[keysys]["exttype"]
     #-----------------------------------------------------------------------

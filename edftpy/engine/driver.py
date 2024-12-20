@@ -482,7 +482,7 @@ class DriverKS(Driver):
                 f = value.stress
                 if hasattr(f, '__call__'):
                     f = f(self.density_sub)
-                stress += f
+                stress -= f
         stress /= self.subcell.cell_global.volume / self.density_sub.grid.volume
         return stress
 

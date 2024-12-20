@@ -32,7 +32,8 @@ class EngineQE(Engine):
         return self.driver.get_forces(icalc=icalc, **kwargs)
 
     def get_stress(self, icalc = 3, **kwargs):
-        return self.driver.get_stress(icalc=icalc, **kwargs)
+        stress = self.driver.get_stress(icalc=icalc, **kwargs)
+        return -1.0 * stress
 
     def embed_base(self, exttype = 0, diag_conv = 1E-1, lewald = False, iterative = True, **kwargs):
         embed = qepy.qepy_common.embed_base()
