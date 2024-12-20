@@ -1098,6 +1098,7 @@ class Optimization(object):
                 self.gsystem.sub_value(self.gsystem.density, global_potential, isub = isub)
                 rhomax = 0.0
                 if driver is not None :
+                    global_potential[global_potential<1E-4] = 1E-4
                     mask = np.abs(driver.density/global_potential - 0.5) < thr_ratio
                     ns = np.count_nonzero(mask)
                     if ns > 0 :
