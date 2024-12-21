@@ -4,6 +4,7 @@ import numpy as np
 import os
 import ase.io.espresso as ase_io_driver
 from collections import OrderedDict
+import copy
 
 from dftpy.constants import LEN_CONV
 
@@ -14,6 +15,24 @@ try:
     __version__ = qepy.__version__
 except Exception :
     __version__ = '0.0.1'
+
+QE_DEFAULT_PARAMS = OrderedDict({
+        'control' : {
+            'calculation' : 'scf',
+            },
+        'system' :
+        {
+            'ibrav' : 0,
+            'nosym' : True,
+            },
+        'electrons' : {
+            'diago_david_ndim' : 4,
+            'conv_thr' : 0.0,
+            },
+        'ions' : {},
+        'cell' : {}
+        })
+
 
 class EngineQE(Engine):
     def __init__(self, nscf = False, **kwargs):
@@ -172,19 +191,6 @@ class EngineQE(Engine):
         self._write_params(filename, ase_atoms, params = in_params, cell_params = cell_params, cards = cards, **kwargs)
 
     def _fix_params(self, params = None, prefix = 'sub_'):
-        default_params = OrderedDict({
-                'control' : {
-                    'calculation' : 'scf',
-                    },
-                'system' :
-                {
-                    'ibrav' : 0,
-                    'nosym' : True,
-                    },
-                'electrons' : {},
-                'ions' : {},
-                'cell' : {}
-                })
         fix_params = {
                 'control' :
                 {
@@ -197,7 +203,7 @@ class EngineQE(Engine):
                     },
                 }
         if not params :
-            params = default_params.copy()
+            params = copy.deepcopy(QE_DEFAULT_PARAMS)
 
         for k1, v1 in fix_params.items() :
             if k1 not in params :
@@ -351,19 +357,7 @@ class EngineQE(Engine):
             Please check the results carefully.
         """
         import re
-        inputs = OrderedDict({
-                'control' : {
-                    'calculation' : 'scf',
-                    },
-                'system' :
-                {
-                    'ibrav' : 0,
-                    'nosym' : True,
-                    },
-                'electrons' : {},
-                'ions' : {},
-                'cell' : {}
-                })
+        inputs = copy.deepcopy(QE_DEFAULT_PARAMS)
         qe_kws_dims = {'system' :[
                 'starting_charge',
                 'starting_magnetization',
