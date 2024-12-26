@@ -115,7 +115,7 @@ def gen_list_table(dicts, parent = None, top = False, add = False, ncol = 4):
                 fstr += '\t\t  -\n'
     return fstr + '\n'
 
-def gen_config_sub(item):
+def gen_config_sub(item, itemg=None):
     if item.comment:
         lines = str(item.comment)
         lines = lines.replace('\\\\n', '\n')
@@ -126,7 +126,11 @@ def gen_config_sub(item):
         fstr = ""
     fstr += '\n'
     fstr += "\t- *Options* : {0}\n\n".format(item.options)
-    fstr += "\t- *Default* : {0}\n\n".format(item.default)
+    if itemg is None:
+        fstr += "\t- *Default* : {0}\n\n".format(item.default)
+    else:
+        fstr += "\t- *Default* : {0} (:ref:`GSYSTEM<gsystem>`)\n\n".format(itemg.default)
+        fstr += "\t- *Default* : {0} (:ref:`SUB<sub>`)\n\n".format(item.default)
     if item.unit :
         fstr += "\t- *Unit* : {0}\n\n".format(item.unit)
     if item.example :
@@ -199,7 +203,11 @@ def gen_config_rst():
                         parent = key.lower()
                         fstr = "\n.. _{0}-{1}:\n\n".format(parent, key2)
                         fstr += "**{0}**\n".format(key + '-' + key2)
-                        fstr += gen_config_sub(item2)
+                        itemg = None
+                        if key in gsystem:
+                            if key2 in gsystem[key]:
+                                itemg = gsystem[key][key2]
+                        fstr += gen_config_sub(item2, itemg)
                         f.write(fstr)
 
                 else :
