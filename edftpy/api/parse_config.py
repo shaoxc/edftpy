@@ -17,11 +17,11 @@ from edftpy.density import file2density, DensityGenerator
 from edftpy.subsystem.subcell import SubCell, GlobalCell
 from edftpy.mixer import Mixer
 from edftpy.mpi import GraphTopo, MP, sprint
-from edftpy.utils.math import get_hash, get_formal_charge
+from edftpy.utils.math import get_hash, get_formal_charge, grid_map_data
 from edftpy.subsystem.decompose import decompose_sub
 from edftpy.engine.driver import DriverKS, DriverEX, DriverMM, DriverOF
 from edftpy.utils.common import Grid, Ions
-from edftpy.utils.math import grid_map_data
+from edftpy.utils import timer
 
 
 def import_drivers_conf(config):
@@ -86,6 +86,7 @@ def config_correct(config):
     #-----------------------------------------------------------------------
     return config
 
+@timer('init_optimizer')
 def config2optimizer(config, ions = None, optimizer = None, graphtopo = None, pseudo = None, cell_change = None, append = False, **kwargs):
     if isinstance(config, dict):
         pass

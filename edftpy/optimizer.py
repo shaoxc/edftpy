@@ -12,7 +12,7 @@ from edftpy.functional import hartree_energy
 from edftpy.utils.common import Functional
 from edftpy.io import write
 from edftpy.engine.driver import DriverConstraint
-from edftpy.utils import get_mem_info, clean_variables
+from edftpy.utils import get_mem_info, clean_variables, timer
 from edftpy.utils.occupations import Occupations
 
 
@@ -293,6 +293,7 @@ class Optimization(object):
             if driver is None : continue
             driver.get_density(occupations = occs[i], sdft = self.sdft, sum_band = True)
 
+    @timer()
     def step(self, **kwargs):
         # Update the rhomax for NLKEDF, first step without NL will be better for scf not for tddft.
         self.set_kedf_params()
@@ -315,6 +316,7 @@ class Optimization(object):
     def attach(self, function, interval=1, *args, **kwargs):
         self.observers.append((function, interval, args, kwargs))
 
+    @timer()
     def call_observers(self, istep = 0):
         for function, interval, args, kwargs in self.observers:
             call = False
@@ -324,6 +326,7 @@ class Optimization(object):
                 call = True
             if call: function(*args, **kwargs)
 
+    @timer()
     def optimize(self, **kwargs):
         converged = self.run(**kwargs)
         if not converged :
@@ -915,6 +918,7 @@ class Optimization(object):
                 diff_res.append(res_norm)
         return diff_res
 
+    @timer()
     def get_forces(self, **kwargs):
         forces = get_total_forces(drivers = self.drivers, gsystem = self.gsystem, **kwargs)
         return forces
@@ -951,6 +955,7 @@ class Optimization(object):
         forces_qmmm[index_mm] -= forces_mm
         return forces_qmmm
 
+    @timer()
     def get_stress(self, **kwargs):
         stress = get_total_stress(drivers = self.drivers, gsystem = self.gsystem, **kwargs)
         return stress

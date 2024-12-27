@@ -35,12 +35,12 @@ def run(args):
         optimizer = optimize_density_conf(config, graphtopo = graphtopo)
 
         graphtopo.timer.End("TOTAL")
-        if graphtopo.rank == 0 :
-            graphtopo.timer.output(config)
-        sprint("-" * 80)
         #-----------------------------------------------------------------------
         conf2output(config, optimizer)
         #-----------------------------------------------------------------------
+        if graphtopo.rank == 0 :
+            graphtopo.timer.output(config)
+        sprint("-" * 80)
     sprint("#" * 80)
     sprint("Finished on : {}".format(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
