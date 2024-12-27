@@ -54,9 +54,9 @@ eDFTpy is a set of python modules. However,you can run it using the `edftpy` exe
     `PP`_ is a mandatory input (i.e., no default is avaliable for it).
 
 .. note::
-    Defaults work well for most arguments.
-
-    When *Options* is empty, it can accept any value.
+    + Defaults work well for most arguments.
+    + When *Options* is empty, it can accept any value.
+    + When *Options* are separated by spaces, it can accept multiple values, with each value separated by a space.
 
 .. _pylibxc: https://tddft.org/programs/libxc/
 .. _dftd4: https://www.chemie.uni-bonn.de/pctc/mulliken-center/software/dftd4

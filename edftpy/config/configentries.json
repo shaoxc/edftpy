@@ -14,7 +14,7 @@
 			"type": "cstrlist",
 			"default": "Energy",
 			"comment": "The property to be calculated.",
-			"options": "Energy, Potential, Force, Stress"
+			"options": "Energy Potential Force Stress"
 		}
 	},
 	"PATH": {
@@ -410,7 +410,7 @@
 			},
 			"index": {
 				"type": "intlist",
-				"default": null,
+				"default": ":",
 				"comment": "The indices of the atoms, support integer and slice.",
 				"note": "If not only a slice, you should given the stop for the slice."
 			}
@@ -665,9 +665,9 @@
 		},
 		"embed": {
 			"type": "strlist",
-			"default": "KE  XC",
+			"default": "KE",
 			"comment": "The embedding potential.",
-			"options": "KE, XC"
+			"options": "KE XC HARTREE PSEUDO"
 		},
 		"embedpot": {
 			"type": "str",
@@ -678,7 +678,7 @@
 		"exttype": {
 			"type": "int",
 			"options": "0, 1,..., 7",
-			"comment": "The embeded potential type, which is same as `embed`.",
+			"comment": "The embeded potential type, which is same as :ref:`embed<SUB--embed>`, but is given in a numerical way, where : \\\\n\\\\n\\\\t 0(KE), 1(XC), 2(HARTREE), 4(PSEUDO)\\\\n\\\\n\\\\t e.g: `exttype = 1` will be same as `embed = KE XC`, because 1=0(KE)+1(XC)",
 			"level": "devel",
 			"default": null
 		},
