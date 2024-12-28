@@ -84,7 +84,7 @@ class SubCell(object):
 
         origin = grid_sub.shift / grid.nrR
         pos_cry -= origin
-        # pos_cry %= 1.0
+        pos_cry[grid_sub.nrR < grid.nrR] %= 1.0
         pos = ions.cell.cartesian_positions(pos_cry)
 
         ions_sub = Ions(numbers = ions.numbers[index].copy(), positions = pos, cell = grid_sub.lattice, charges = ions.charges[index].copy())
