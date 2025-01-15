@@ -1,4 +1,4 @@
-image: registry.gitlab.com/shaoxc/qepy:qepy-6.5g-dev
+image: registry.gitlab.com/shaoxc/qepy:qepy-7.2g-dev
 
 Test:
   before_script:
