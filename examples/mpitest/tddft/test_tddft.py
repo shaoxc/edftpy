@@ -12,8 +12,8 @@ def test_tddft_0():
     optimizer = config2optimizer(config, graphtopo = graphtopo)
 
     assert len(optimizer.drivers) == 2
-    graphtopo.assert_check(np.alltrue(graphtopo.graph.sub_shift[0]<0)) # Grid : SUB_HO_0 [-11 -14 -13] [48 56 50] [ 90 108  96]
-    graphtopo.assert_check(np.alltrue(graphtopo.graph.sub_shift[1]>1)) # Grid : SUB_HO_1 [14 11 12] [48 56 50] [ 90 108  96]
+    graphtopo.assert_check(np.all(graphtopo.graph.sub_shift[0]<0)) # Grid : SUB_HO_0 [-11 -14 -13] [48 56 50] [ 90 108  96]
+    graphtopo.assert_check(np.all(graphtopo.graph.sub_shift[1]>1)) # Grid : SUB_HO_1 [14 11 12] [48 56 50] [ 90 108  96]
 
     optimizer.optimize()
     graphtopo.assert_check(np.isclose(optimizer.dipole[0], 0.017, atol=1E-3))
