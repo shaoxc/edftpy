@@ -20,6 +20,15 @@ def test_scf():
     graphtopo.assert_check(np.isclose(optimizer.energy_all['SUB_0'], -0.249, atol = 1E-3))
     graphtopo.assert_check(np.isclose(optimizer.energy_all['SUB_1'], -0.249, atol = 1E-3))
 
+    ions = optimizer.gsystem.ions
+    ions.arrays['positions'][:3,:] += 7.0
+    optimizer = config2optimizer(config, ions=ions, graphtopo = graphtopo, optimizer=optimizer)
+    assert len(optimizer.drivers) == 1
+
+    optimizer.optimize()
+
+    graphtopo.assert_check(np.isclose(optimizer.energy, -26.326, atol = 1E-3))
+
 
 if __name__ == "__main__":
     test_scf()
