@@ -7,6 +7,7 @@ build/
 .pytest_cache/
 edftpy.egg-info
 examples/debug
+edftpy/version.py
 doc/build/
 .ipynb_checkpoints/
 bak/
