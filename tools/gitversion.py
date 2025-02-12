@@ -46,6 +46,7 @@ def git_version(version):
                 .replace('"', '')
                 .split('T')[0]
                 .replace('-', '')
+                .replace('%', '')
                 .split()
             )
 
