@@ -70,7 +70,10 @@ class eDFTpyCalculator(object):
         if self.check_restart(atoms):
             self.update_optimizer(atoms)
         if self._stress is None :
-            self._stress = self.optimizer.get_stress()
+            if(self.sdft == 'qmmm'):
+              self._stress = np.zeros((3,3))
+            else:    
+              self._stress = self.optimizer.get_stress()
         stress_voigt = np.zeros(6)
         for i in range(3):
             stress_voigt[i] = self._stress[i, i]
