@@ -12,6 +12,7 @@ class SubCell(object):
         self._ions = None
         self._density = None
         self._ions_index = index
+        self._cell_global = None
         self.nspin = nspin
 
         self._gen_cell(ions, grid, index = index, cellcut = cellcut, optfft = optfft, full = full, nr = nr, **kwargs)
@@ -29,6 +30,12 @@ class SubCell(object):
         if self._grid is None:
             raise AttributeError("Must generate subcell firstly")
         return self._grid
+
+    @property
+    def cell_global(self):
+        if self._cell_global is None:
+            raise AttributeError("Must generate subcell firstly")
+        return self._cell_global
 
     @property
     def ions(self):
@@ -77,13 +84,14 @@ class SubCell(object):
 
         origin = grid_sub.shift / grid.nrR
         pos_cry -= origin
-        # pos_cry %= 1.0
+        pos_cry[:,grid_sub.nrR < grid.nrR] %= 1.0
         pos = ions.cell.cartesian_positions(pos_cry)
 
         ions_sub = Ions(numbers = ions.numbers[index].copy(), positions = pos, cell = grid_sub.lattice, charges = ions.charges[index].copy())
         self._grid = grid_sub
         self._ions = ions_sub
         self._ions_index = index
+        self._cell_global = grid.cell
         self.comm = self._grid.mp.comm
         # sprint('subcell grid', self._grid.nrR, self._grid.nr, comm=self.comm)
         # sprint('subcell shift', self._grid.shift, comm=self.comm)

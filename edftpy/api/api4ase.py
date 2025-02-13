@@ -69,7 +69,14 @@ class eDFTpyCalculator(object):
     def get_stress(self, atoms):
         if self.check_restart(atoms):
             self.update_optimizer(atoms)
+        if self._stress is None :
+            self._stress = self.optimizer.get_stress()
         stress_voigt = np.zeros(6)
+        for i in range(3):
+            stress_voigt[i] = self._stress[i, i]
+        stress_voigt[3] = self._stress[1, 2]  # yz
+        stress_voigt[4] = self._stress[0, 2]  # xz
+        stress_voigt[5] = self._stress[0, 1]  # xy
         return stress_voigt * STRESS_CONV["Ha/Bohr3"]["eV/A3"]
 
     def output_density(self, **kwargs):

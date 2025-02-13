@@ -1,6 +1,6 @@
 import numpy as np
 from dftpy.mpi import SerialComm
-from dftpy.time_data import TimeObj, TimeData
+from dftpy.time_data import TimeObj, TimeData, timer
 from edftpy.utils.math import copy_array
 
 class Graph :

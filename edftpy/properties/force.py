@@ -22,11 +22,25 @@ def get_total_forces(drivers = None, gsystem = None, linearii=True, shift = True
         sprint('Forces shift :', forces_shift)
         forces -= forces_shift
     #-----------------------------------------------------------------------
-    sprint('Total forces : \n', forces)
+    sprint('Total forces :')
+    sprint(forces)
     return forces
 
-def get_total_stress(drivers = None, gsystem = None, linearii=True, **kwargs):
-    pass
+def get_total_stress(drivers = None, gsystem = None, **kwargs):
+    stress = gsystem.get_stress()
+    for i, driver in enumerate(drivers):
+        if driver is None : continue
+        fs = driver.get_stress()
+        # if driver.comm.rank > 0 : fs = 0.0
+        # sprint('fs', fs, flush=True, comm=driver.comm)
+        stress += fs
+    stress = gsystem.grid.mp.vsum(stress)
+    for i in range(2):
+        for j in range(i+1, 3):
+            stress[j,i] = stress[i,j]
+    sprint('Total stress :')
+    sprint(stress)
+    return stress
 
 def get_total_forces_qmmm(drivers = None, gsystems = None, linearii=True, shift = True):
     '''
@@ -164,5 +178,3 @@ def get_total_forces_qmmm(drivers = None, gsystems = None, linearii=True, shift 
     #-----------------------------------------------------------------------
     sprint('Total forces : \n', forces)
     return forces
-
-

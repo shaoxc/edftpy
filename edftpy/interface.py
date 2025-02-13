@@ -1,7 +1,7 @@
 import numpy as np
 import os
 
-from dftpy.constants import ENERGY_CONV
+from dftpy.constants import ENERGY_CONV, STRESS_CONV
 from edftpy.io import write
 from edftpy.properties import get_electrostatic_potential
 
@@ -67,7 +67,7 @@ def init_graphtopo(parallel = False, info = None, **kwargs):
             raise e
     else :
         header += 'Serial version on {0:>8d} processor\n'.format(1)
-    if graphtopo.rank == 0 :
+    if graphtopo.is_root:
         #-----------------------------------------------------------------------
         # remove the stopfile
         if os.path.isfile('edftpy_stopfile'): os.remove('edftpy_stopfile')
@@ -153,7 +153,7 @@ def conf2output(config, optimizer):
         sprint("Calculate Force...")
         forces = optimizer.get_forces()
         ############################## Output Force ##############################
-        if optimizer.gsystem.grid.mp.rank == 0 :
+        if optimizer.gsystem.graphtopo.is_root:
             sprint("-" * 80)
             fabs = np.abs(forces)
             fmax, fmin, fave = fabs.max(axis = 0), fabs.min(axis = 0), fabs.mean(axis = 0)
@@ -163,6 +163,18 @@ def conf2output(config, optimizer):
             sprint(fstr_f.format("Min force (a.u.)", *fmin))
             sprint(fstr_f.format("Ave force (a.u.)", *fave))
             sprint(fstr_f.format("MSD force (a.u.)", *fmsd))
+            sprint("-" * 80)
+        optimizer.gsystem.grid.mp.comm.Barrier()
+
+    if "Stress" in config["JOB"]["calctype"]:
+        sprint("Calculate Stress...")
+        stress = optimizer.get_stress()
+        ############################## Output Stress ##############################
+        if optimizer.gsystem.graphtopo.is_root:
+            sprint("-" * 80)
+            sprint("Total stress (GPa):")
+            stress_gpa = stress * STRESS_CONV["Ha/Bohr3"]["GPa"]
+            sprint(stress_gpa)
             sprint("-" * 80)
         optimizer.gsystem.grid.mp.comm.Barrier()
 
