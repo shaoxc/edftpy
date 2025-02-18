@@ -30,7 +30,8 @@ QE_DEFAULT_PARAMS = OrderedDict({
             'conv_thr' : 0.0,
             },
         'ions' : {},
-        'cell' : {}
+        'cell' : {},
+        'hubbard (ortho-atomic)' : {},
         })
 
 
@@ -265,7 +266,7 @@ class EngineQE(Engine):
             self._update_kpoints(cell_params, cards)
         kpts = cell_params.get('kpts', [0])
         if kpts[0] == 0 : cell_params['kpts'] = None
-        pw_items = ['control', 'system', 'electrons', 'ions', 'cell']
+        pw_items = ['control', 'system', 'electrons', 'ions', 'cell','hubbard (ortho-atomic)']
         pw_params = params.copy()
         for k in params :
             if k not in pw_items : del pw_params[k]
@@ -310,15 +311,21 @@ class EngineQE(Engine):
         if cards is None or len(cards) == 0 :
             return
         lines = iter(cards)
-        items = ['CONSTRAINTS', 'OCCUPATIONS', 'ATOMIC_FORCES']
+        items = ['CONSTRAINTS', 'OCCUPATIONS', 'ATOMIC_FORCES', 'HUBBARD']
         for line in lines :
             if line.split()[0] in items :
-                fd.write('\n' + line + '\n')
-                for line in lines :
-                    if not line[0] == '#' and line.split()[0].isupper():
-                        break
-                    else :
-                        fd.write(line + '\n')
+                if line.split()[0] == 'HUBBARD':
+                   fd.write(line + '\n')
+                   for line in lines :
+                       fd.write(line + '\n') 
+                   fd.write('\n')
+                else:
+                    fd.write('\n' + line + '\n')
+                    for line in lines :
+                        if not line[0] == '#' and line.split()[0].isupper():
+                            break
+                        else :
+                            fd.write(line + '\n')
         return
 
     def _write_params_others(self, fd, params = None, prefix = 'sub_', keys = ['inputtddft'], **kwargs):
@@ -445,6 +452,12 @@ class EngineQE(Engine):
                         'efield_cart(2)': [float, max],
                         'efield_cart(3)': [float, max],
                         }}
+        qe_kws_extra = {'hubbard (ortho-atomic)' :[
+                'U',
+                'JO',
+                'J',
+                'B',
+                ]}
         #-----------------------------------------------------------------------
         if atoms is None :
             for fname in args:
@@ -466,6 +479,7 @@ class EngineQE(Engine):
             #-----------------------------------------------------------------------
             atomic_species = []
             k_points = {}
+            hubbard = {}
             lines = iter(card_lines)
             for line in lines :
                 if line.split()[0].upper() == 'K_POINTS' :
@@ -484,6 +498,9 @@ class EngineQE(Engine):
                         symbol, _ , pp = line.split()[:3]
                         atomic_species.append(symbol.capitalize())
                         pps[atomic_species[-1]] = pp
+                elif line.split()[0].upper() == 'HUBBARD' :
+                     linesd = next(lines)
+                     hubbard = {'hubbard' + ' ' + line.split()[1]: linesd[0:1] +' ' + linesd[2:]} 
             in_params_all.append(in_params)
             atomic_species_all.append(atomic_species)
             k_points_all.append(k_points)
@@ -536,6 +553,14 @@ class EngineQE(Engine):
                     if key in in_params.get(section, {}):
                         l.append(item2[0](in_params[section][key]))
                 if len(l)>0 : inputs[section][key] = item2[1](l)
+
+        # update extra keys (Hubbard)
+        for section, item in qe_kws_extra.items() :
+            for key, item2 in hubbard.items():
+                type_ = item2.split()[0]
+                atom_orb = item2.split()[1]
+                num = item2.split()[2]
+                inputs[section][type_] = str(atom_orb) + ' ' + str(num)
 
         kpts = np.zeros(3, dtype = np.int64)
         koffset = np.zeros(3, dtype = np.int64)
